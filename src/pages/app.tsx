@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
@@ -168,16 +168,16 @@ export default function AppPage() {
     });
   }, [currentUserId, supabase]);
 
-  useEffect(() => {
+  const loadNotificationsBadge = useCallback(async () => {
     if (!currentUserId) return;
-    getUnreadCount(supabase, currentUserId).then(setNotificationsBadge);
-  }, [currentUserId, activeSection, supabase]);
+    setNotificationsBadge(await getUnreadCount(supabase, currentUserId));
+  }, [currentUserId, supabase]);
 
-  useEffect(() => {
-    if (activeSection !== 'inbox' || !currentUserId) return;
-    setNotificationsLoading(true);
-    getNotifications(supabase, currentUserId).then(({ data }) => {
-      const mapped: NotificationItem[] = (data ?? []).map((n: any) => ({
+  const loadNotifications = useCallback(async () => {
+    if (!currentUserId) return;
+    const { data } = await getNotifications(supabase, currentUserId);
+    setNotifications(
+      (data ?? []).map((n: any) => ({
         id: n.id,
         type: n.type,
         taskName: n.task?.name ?? 'a task',
@@ -187,11 +187,39 @@ export default function AppPage() {
         detail: n.detail ?? null,
         createdAt: n.created_at,
         readAt: n.read_at,
-      }));
-      setNotifications(mapped);
-      setNotificationsLoading(false);
-    });
-  }, [activeSection, currentUserId, supabase]);
+      }))
+    );
+  }, [currentUserId, supabase]);
+
+  useEffect(() => {
+    void loadNotificationsBadge();
+  }, [loadNotificationsBadge, activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== 'inbox') return;
+    setNotificationsLoading(true);
+    loadNotifications().finally(() => setNotificationsLoading(false));
+  }, [activeSection, loadNotifications]);
+
+  // Live push: Supabase Realtime on my notification rows. Any insert/update
+  // refreshes the badge and the list so it lands without navigating.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const channel = supabase
+      .channel(`notifications:${currentUserId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` },
+        () => {
+          void loadNotificationsBadge();
+          void loadNotifications();
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, supabase, loadNotifications, loadNotificationsBadge]);
 
   useEffect(() => {
     if (!selectedTaskId) {
