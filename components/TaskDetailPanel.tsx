@@ -71,8 +71,10 @@ export function TaskDetailPanel({
   onCommentEdit,
   onCommentDelete,
 }: TaskDetailPanelProps) {
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [title, setTitle] = useState(task.name);
+  // A task just created by the "Create" button opens ready to name.
+  const isFresh = task.name === 'Untitled task';
+  const [isEditingTitle, setIsEditingTitle] = useState(isFresh);
+  const [title, setTitle] = useState(isFresh ? '' : task.name);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [description, setDescription] = useState(task.description ?? '');
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
@@ -193,6 +195,7 @@ export function TaskDetailPanel({
           <input
             autoFocus
             type="text"
+            placeholder="Task name"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleSaveTitle}

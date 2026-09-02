@@ -9,7 +9,6 @@ import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar'
 import { TaskTable } from '@/components/TaskTable';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import { Inbox, type NotificationItem } from '@/components/Inbox';
-import { CreateTaskModal } from '@/components/CreateTaskModal';
 import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -94,7 +93,6 @@ export default function AppPage() {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
-  const [showCreateTask, setShowCreateTask] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsBadge, setNotificationsBadge] = useState(0);
@@ -319,11 +317,6 @@ export default function AppPage() {
     }
   };
 
-  const handleCreateTaskSubmit = async (task: { name: string; assignee_id: string | null; due_date: string | null; description: string | null; heading_id: string | null; follower_ids: string[] }) => {
-    await createTask(supabase, { project_id: activeProjectId, created_by: currentUserId, ...task });
-    await refreshTasks();
-  };
-
   const handleFollowerAdd = async (userId: string) => {
     if (!selectedTaskId) return;
     await addFollower(supabase, selectedTaskId, userId);
@@ -483,13 +476,23 @@ export default function AppPage() {
     }
   };
 
-  const handleCreateTaskClick = () => {
+  const handleCreateTaskClick = async () => {
     if (!activeProjectId) {
       window.alert('Create or open a project first, then add tasks to it.');
       return;
     }
-    setActiveSection('projects');
-    setShowCreateTask(true);
+    // Create a blank task in the current project and open it in the right-hand
+    // panel to fill out inline — no separate modal.
+    const { data } = await createTask(supabase, {
+      project_id: activeProjectId,
+      name: 'Untitled task',
+      created_by: currentUserId,
+    });
+    await refreshTasks();
+    if (data) {
+      setActiveSection('projects');
+      setSelectedTaskId(data.id);
+    }
   };
 
   const handleProjectUpdate = async (updates: { name?: string; color?: string; icon?: string }) => {
@@ -585,7 +588,7 @@ export default function AppPage() {
               />
 
               <Toolbar
-                onAddTask={() => setShowCreateTask(true)}
+                onAddTask={handleCreateTaskClick}
                 activeFilters={activeFilters}
                 onFilterChange={setActiveFilters}
                 onSortChange={setSortField}
@@ -654,22 +657,13 @@ export default function AppPage() {
                   </div>
                 )}
               </div>
-
-              {showCreateTask && (
-                <CreateTaskModal
-                  projectMembers={projectMembers}
-                  headings={headings}
-                  onCreate={handleCreateTaskSubmit}
-                  onClose={() => setShowCreateTask(false)}
-                />
-              )}
             </>
           )}
 
           {activeSection === 'my-tasks' && (
             <>
               <Toolbar
-                onAddTask={() => window.alert('Open a project to add tasks there.')}
+                onAddTask={handleCreateTaskClick}
                 activeFilters={activeFilters}
                 onFilterChange={setActiveFilters}
                 onSortChange={setSortField}
