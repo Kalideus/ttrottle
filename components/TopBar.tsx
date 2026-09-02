@@ -8,6 +8,8 @@ interface TopBarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   avatarInitials?: string;
+  avatarColor?: string;
+  onOpenProfile: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
 }
@@ -17,6 +19,8 @@ export function TopBar({
   searchQuery,
   onSearchChange,
   avatarInitials = '?',
+  avatarColor = 'var(--accent)',
+  onOpenProfile,
   onChangePassword,
   onLogout,
 }: TopBarProps) {
@@ -51,7 +55,7 @@ export function TopBar({
         <button className="topbar-help-btn" title="Help">
           <HelpCircle size={18} />
         </button>
-        <div className="topbar-avatar">{avatarInitials}</div>
+        <div className="topbar-avatar" style={{ background: avatarColor }}>{avatarInitials}</div>
         <div style={{ position: 'relative' }}>
           <button className="topbar-account-btn" onClick={() => setMenuOpen((o) => !o)}>
             <ChevronDown size={18} />
@@ -60,6 +64,14 @@ export function TopBar({
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setMenuOpen(false)} />
               <div className="topbar-account-menu">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenProfile();
+                  }}
+                >
+                  Profile
+                </button>
                 <button
                   onClick={() => {
                     setMenuOpen(false);

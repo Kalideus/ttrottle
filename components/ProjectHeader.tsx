@@ -143,7 +143,12 @@ export function ProjectHeader({
       <div className="project-header-right">
         <div className="project-members">
           {visibleMembers.map((member) => (
-            <div key={member.email} className="project-member-avatar" title={member.profile?.name ?? member.email}>
+            <div
+              key={member.email}
+              className="project-member-avatar"
+              title={member.profile?.name ?? member.email}
+              style={{ background: member.profile?.avatar_color || undefined }}
+            >
               {member.profile?.initials ?? member.email.slice(0, 2).toUpperCase()}
             </div>
           ))}

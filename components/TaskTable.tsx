@@ -392,7 +392,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                   width: 26,
                   height: 26,
                   borderRadius: '50%',
-                  background: 'var(--accent)',
+                  background: task.assignee.avatar_color || 'var(--accent)',
                   color: 'white',
                   display: 'flex',
                   alignItems: 'center',

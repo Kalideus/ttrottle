@@ -66,6 +66,7 @@ export type Profile = {
   email: string
   initials: string
   avatar_url: string | null
+  avatar_color: string | null
 }
 
 export type Notification = {
@@ -688,6 +689,14 @@ export async function getCurrentProfile(supabase: SupabaseClient) {
 
   const { data } = await supabase.from('profiles').select('*').eq('id', authUser.user.id).single()
   return data
+}
+
+export async function updateProfile(
+  supabase: SupabaseClient,
+  userId: string,
+  updates: { name?: string; initials?: string; avatar_color?: string }
+) {
+  return supabase.from('profiles').update(updates).eq('id', userId).select('*').single()
 }
 
 // "My tasks" badge = tasks assigned to me since this timestamp (my previous session).

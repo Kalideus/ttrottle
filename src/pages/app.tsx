@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
+import { ProfileModal } from '@/components/ProfileModal';
+import { avatarInitials } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
@@ -30,6 +32,7 @@ import {
   deleteHeading,
   getMyTasks,
   getCurrentProfile,
+  updateProfile,
   getLastSeen,
   touchLastSeen,
   getNotifications,
@@ -98,6 +101,7 @@ export default function AppPage() {
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   // Timestamp of my previous session; "My tasks" badges tasks assigned since then.
   const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -525,6 +529,12 @@ export default function AppPage() {
     setProjectMembers(memberRows ?? []);
   };
 
+  const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string }) => {
+    if (!currentUserId) return;
+    const { data } = await updateProfile(supabase, currentUserId, updates);
+    if (data) setCurrentProfile(data);
+  };
+
   const handleChangePassword = async () => {
     const next = window.prompt('New password (at least 6 characters):');
     if (!next) return;
@@ -587,10 +597,20 @@ export default function AppPage() {
         onHamburgerClick={() => {}}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        avatarInitials={currentProfile?.initials ?? currentProfile?.name?.slice(0, 2) ?? '?'}
+        avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
+        avatarColor={currentProfile?.avatar_color ?? 'var(--accent)'}
+        onOpenProfile={() => setShowProfile(true)}
         onChangePassword={handleChangePassword}
         onLogout={handleLogout}
       />
+
+      {showProfile && currentProfile && (
+        <ProfileModal
+          profile={currentProfile}
+          onSave={handleProfileSave}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
 
       <div className="app-main">
         <Sidebar
