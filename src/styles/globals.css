@@ -679,7 +679,7 @@ button { cursor: pointer; }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
   align-items: center;
   padding: 0 24px;
   gap: 0;
@@ -687,7 +687,7 @@ button { cursor: pointer; }
   position: sticky;
   top: 0;
   z-index: 10;
-  min-width: 520px;
+  min-width: 420px;
 }
 
 .table-header-cell {
@@ -707,7 +707,7 @@ button { cursor: pointer; }
 .table-body {
   flex: 1;
   overflow-y: auto;
-  min-width: 520px;
+  min-width: 420px;
 }
 
 .table-section {
@@ -718,7 +718,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   cursor: pointer;
@@ -760,7 +760,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -794,6 +794,7 @@ button { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .task-disclosure {
@@ -860,6 +861,7 @@ button { cursor: pointer; }
 
 .task-name {
   flex: 1;
+  min-width: 0;
   font-size: 15px;
   color: var(--text);
   white-space: nowrap;
@@ -986,7 +988,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
