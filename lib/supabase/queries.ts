@@ -406,7 +406,8 @@ export async function logActivity(
 export async function updateTask(
   supabase: SupabaseClient,
   id: string,
-  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'completed' | 'heading_id' | 'position'>>
+  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'completed' | 'heading_id' | 'position'>>,
+  detail?: string
 ) {
   const nextUpdates: Partial<Task & { completed_at: string | null }> = { ...updates }
 
@@ -437,9 +438,10 @@ export async function updateTask(
       const { data: followers } = await supabase.from('followers').select('user_id').eq('task_id', id).neq('user_id', actorId)
       if (followers?.length) {
         const type = updates.completed === true ? 'completed' : 'updated'
-        await supabase.from('notifications').insert(
-          followers.map((f) => ({ user_id: f.user_id, task_id: id, type, actor_id: actorId }))
+        const { error: notifyError } = await supabase.from('notifications').insert(
+          followers.map((f) => ({ user_id: f.user_id, task_id: id, type, actor_id: actorId, detail: detail ?? null }))
         )
+        if (notifyError) console.error('Failed to notify followers of task update:', notifyError)
       }
     }
   }
@@ -518,6 +520,8 @@ export async function createComment(
       .eq('task_id', task_id)
       .neq('user_id', author_id)
 
+    const snippet = body.length > 140 ? `${body.slice(0, 140)}…` : body
+
     if (followers?.length) {
       const notifications = followers.map((f) => ({
         user_id: f.user_id,
@@ -525,8 +529,10 @@ export async function createComment(
         type: 'comment',
         actor_id: author_id,
         comment_id: result.data.id,
+        detail: snippet,
       }))
-      await supabase.from('notifications').insert(notifications)
+      const { error: notifyError } = await supabase.from('notifications').insert(notifications)
+      if (notifyError) console.error('Failed to notify followers of comment:', notifyError)
     }
 
     const mentionUsers = (mentions ?? []).filter((uid) => uid !== author_id)
@@ -546,9 +552,11 @@ export async function createComment(
           type: 'mention',
           actor_id: author_id,
           comment_id: result.data.id,
+          detail: snippet,
         }))
 
-        await supabase.from('notifications').insert(notifyRows)
+        const { error: notifyError } = await supabase.from('notifications').insert(notifyRows)
+        if (notifyError) console.error('Failed to notify mentioned users:', notifyError)
       }
     }
   }

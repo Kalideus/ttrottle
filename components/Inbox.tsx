@@ -9,6 +9,7 @@ export interface NotificationItem {
   taskId?: string | null;
   projectId?: string | null;
   actorName: string;
+  detail?: string | null;
   createdAt: string;
   readAt: string | null;
 }
@@ -132,6 +133,18 @@ export function Inbox({ notifications, loading, onNotificationClick, onMarkAllRe
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
                   {notif.type === 'updated' && `${notif.actorName} updated "${notif.taskName}"`}
                 </p>
+                {notif.detail && (
+                  <p
+                    style={{
+                      margin: '0 0 4px 0',
+                      fontSize: '13px',
+                      color: 'var(--text)',
+                      opacity: 0.85,
+                    }}
+                  >
+                    {notif.type === 'updated' ? `${notif.actorName} ${notif.detail}` : `“${notif.detail}”`}
+                  </p>
+                )}
                 <p
                   style={{
                     margin: 0,

@@ -184,6 +184,7 @@ export default function AppPage() {
         taskId: n.task?.id ?? null,
         projectId: n.task?.project_id ?? null,
         actorName: n.actor?.name ?? 'Someone',
+        detail: n.detail ?? null,
         createdAt: n.created_at,
         readAt: n.read_at,
       }));
@@ -381,10 +382,11 @@ export default function AppPage() {
   };
 
   const handleTaskUpdate = async (taskId: string, updates: Record<string, unknown>) => {
-    await updateTask(supabase, taskId, updates as any);
+    const messages = buildActivityMessages(updates);
+    // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
+    await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined);
 
     if (currentUserId) {
-      const messages = buildActivityMessages(updates);
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);
