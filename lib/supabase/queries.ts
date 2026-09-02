@@ -595,8 +595,8 @@ export async function getTaskTags(supabase: SupabaseClient, taskId: string) {
 }
 
 export async function getNotifications(supabase: SupabaseClient, userId: string, { limit = 50 } = {}) {
-  // Slack-notifications behaviour: the feed only shows unread items; reading one
-  // (markNotificationRead) drops it from the list. History still lives in the table.
+  // Slack-style: the feed keeps read items as history; unread ones are highlighted
+  // and counted in the badge (getUnreadCount).
   const { data: notifications, error } = await supabase
     .from('notifications')
     .select(`
@@ -604,7 +604,6 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
       task:tasks!notifications_task_id_fkey(id, name, project_id)
     `)
     .eq('user_id', userId)
-    .is('read_at', null)
     .order('created_at', { ascending: false })
     .limit(limit)
 
@@ -689,6 +688,16 @@ export async function getCurrentProfile(supabase: SupabaseClient) {
 
   const { data } = await supabase.from('profiles').select('*').eq('id', authUser.user.id).single()
   return data
+}
+
+// "My tasks" badge = tasks assigned to me since this timestamp (my previous session).
+export async function getLastSeen(supabase: SupabaseClient, userId: string) {
+  const { data } = await supabase.from('profiles').select('last_seen_at').eq('id', userId).single()
+  return (data?.last_seen_at as string | null) ?? null
+}
+
+export async function touchLastSeen(supabase: SupabaseClient, userId: string) {
+  return supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', userId)
 }
 
 export type ProjectMember = {

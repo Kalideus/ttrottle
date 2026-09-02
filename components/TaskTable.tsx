@@ -22,9 +22,11 @@ interface TaskTableProps {
   onNoHeadingRename: (name: string, taskIds: string[]) => Promise<void>;
   onTaskReorder: (taskId: string, swapWithTaskId: string) => Promise<void>;
   manualOrder?: boolean;
+  /** Flat list with no section headers or "+ Add section" — used by My Tasks. */
+  flat?: boolean;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
@@ -531,6 +533,13 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
       <div className="table-body">
         {sectionIds.map((headingId) => {
           const headingTasks = groupedTasks[headingId] ?? [];
+          if (flat) {
+            return (
+              <div key={headingId} className="table-section">
+                {headingTasks.map((task) => renderTask(task, headingTasks))}
+              </div>
+            );
+          }
           return (
           <div
             key={headingId}
@@ -636,7 +645,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           );
         })}
 
-        {addingSection ? (
+        {flat ? null : addingSection ? (
           <div style={{ padding: '12px 24px', display: 'flex', gap: '8px' }}>
             <input
               autoFocus

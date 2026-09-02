@@ -32,6 +32,8 @@ import {
   deleteHeading,
   getMyTasks,
   getCurrentProfile,
+  getLastSeen,
+  touchLastSeen,
   getNotifications,
   getUnreadCount,
   markNotificationRead,
@@ -97,28 +99,14 @@ export default function AppPage() {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsBadge, setNotificationsBadge] = useState(0);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  // ponytail: per-device "last visited My Tasks" marker; the badge counts tasks
-  // assigned to me since then. Cross-device would need a server-side last_seen_at.
-  const [myTasksSeenAt, setMyTasksSeenAt] = useState<string>(() => {
-    if (typeof window === 'undefined') return new Date().toISOString();
-    const stored = window.localStorage.getItem('ttr:myTasksSeenAt');
-    if (stored) return stored;
-    const now = new Date().toISOString();
-    window.localStorage.setItem('ttr:myTasksSeenAt', now);
-    return now;
-  });
+  // Timestamp of my previous session; "My tasks" badges tasks assigned since then.
+  const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
-  const markMyTasksSeen = () => {
-    const now = new Date().toISOString();
-    window.localStorage.setItem('ttr:myTasksSeenAt', now);
-    setMyTasksSeenAt(now);
-  };
-
   const myTasksBadge = useMemo(
-    () => myTasks.filter((t) => t.created_at && t.created_at > myTasksSeenAt).length,
-    [myTasks, myTasksSeenAt]
+    () => (lastLoginAt ? myTasks.filter((t) => t.created_at && t.created_at > lastLoginAt).length : 0),
+    [myTasks, lastLoginAt]
   );
 
   useEffect(() => {
@@ -171,9 +159,13 @@ export default function AppPage() {
   }, [activeSection, currentUserId, currentProfile, supabase]);
 
   useEffect(() => {
-    // Opening the view = you've seen what's new, so the badge clears (Slack-style).
-    if (activeSection === 'my-tasks') markMyTasksSeen();
-  }, [activeSection]);
+    if (!currentUserId) return;
+    // Read my previous session time (badge cutoff), then stamp this session.
+    getLastSeen(supabase, currentUserId).then((ts) => {
+      setLastLoginAt(ts);
+      void touchLastSeen(supabase, currentUserId);
+    });
+  }, [currentUserId, supabase]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -532,11 +524,13 @@ export default function AppPage() {
 
   const handleNotificationClick = async (notificationId: string) => {
     const notif = notifications.find((n) => n.id === notificationId);
-    await markNotificationRead(supabase, notificationId);
-    // Slack-style: reading it removes it from the feed...
-    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
-    setNotificationsBadge((c) => Math.max(0, c - 1));
-    // ...and jumps you to the task it's about.
+    if (notif && !notif.readAt) {
+      await markNotificationRead(supabase, notificationId);
+      // Slack-style: the item stays in the feed as history, just loses its unread state.
+      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, readAt: new Date().toISOString() } : n)));
+      setNotificationsBadge((c) => Math.max(0, c - 1));
+    }
+    // Clicking a notification jumps you to the task it's about.
     if (notif?.projectId && notif?.taskId) {
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
@@ -547,7 +541,7 @@ export default function AppPage() {
   const handleMarkAllRead = async () => {
     if (!currentUserId) return;
     await markAllNotificationsRead(supabase, currentUserId);
-    setNotifications([]);
+    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setNotificationsBadge(0);
   };
 
@@ -681,6 +675,7 @@ export default function AppPage() {
                 <TaskTable
                   tasks={displayedTasks}
                   headings={[]}
+                  flat
                   onTaskSelect={setSelectedTaskId}
                   selectedTaskId={selectedTaskId}
                   currentUserId={currentUserId}
