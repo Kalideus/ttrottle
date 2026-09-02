@@ -20,7 +20,6 @@ import {
   updateTask,
   deleteTask,
   getProjectMembers,
-  inviteProjectMember,
   getComments,
   createComment,
   updateComment,
@@ -509,12 +508,21 @@ export default function AppPage() {
     }
     const email = window.prompt('Invite by email:');
     if (!email || !email.trim()) return;
-    const { data, error } = await inviteProjectMember(supabase, { project_id: activeProjectId, email: email.trim() });
-    if (error) {
-      window.alert(`Could not invite: ${error.message}`);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const resp = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+      body: JSON.stringify({ email: email.trim(), projectId: activeProjectId }),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      window.alert(`Could not invite: ${result.error ?? resp.statusText}`);
       return;
     }
-    if (data) setProjectMembers((prev) => [...prev, data]);
+    window.alert(result.emailSent ? `Invite email sent to ${email.trim()}.` : `${email.trim()} already has an account and was added to the project.`);
+    const { data: memberRows } = await getProjectMembers(supabase, activeProjectId);
+    setProjectMembers(memberRows ?? []);
   };
 
   const handleCommentAdd = async (body: string) => {
