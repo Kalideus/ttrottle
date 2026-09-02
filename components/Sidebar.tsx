@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Inbox, MoreVertical, Mail } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 
 interface SidebarProps {
   activeSection: 'my-tasks' | 'inbox' | 'projects';
   activeProjectId?: string;
   projects: Project[];
+  myTasksBadge?: number;
+  notificationsBadge?: number;
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectCreate: () => void;
@@ -18,6 +20,8 @@ export function Sidebar({
   activeSection,
   activeProjectId,
   projects,
+  myTasksBadge = 0,
+  notificationsBadge = 0,
   onSectionChange,
   onProjectSelect,
   onProjectCreate,
@@ -39,16 +43,16 @@ export function Sidebar({
         >
           <CheckSquare size={20} className="sidebar-nav-icon" />
           <span>My tasks</span>
-          <div className="sidebar-nav-badge">3</div>
+          {myTasksBadge > 0 && <div className="sidebar-nav-badge">{myTasksBadge}</div>}
         </button>
 
         <button
           className={`sidebar-nav-item ${activeSection === 'inbox' ? 'active' : ''}`}
           onClick={() => onSectionChange('inbox')}
         >
-          <Inbox size={20} className="sidebar-nav-icon" />
-          <span>Inbox</span>
-          <div className="sidebar-nav-badge">2</div>
+          <Bell size={20} className="sidebar-nav-icon" />
+          <span>Notifications</span>
+          {notificationsBadge > 0 && <div className="sidebar-nav-badge">{notificationsBadge}</div>}
         </button>
       </div>
 

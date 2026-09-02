@@ -6,6 +6,8 @@ export interface NotificationItem {
   id: string;
   type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated';
   taskName: string;
+  taskId?: string | null;
+  projectId?: string | null;
   actorName: string;
   createdAt: string;
   readAt: string | null;

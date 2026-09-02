@@ -595,6 +595,8 @@ export async function getTaskTags(supabase: SupabaseClient, taskId: string) {
 }
 
 export async function getNotifications(supabase: SupabaseClient, userId: string, { limit = 50 } = {}) {
+  // Slack-notifications behaviour: the feed only shows unread items; reading one
+  // (markNotificationRead) drops it from the list. History still lives in the table.
   const { data: notifications, error } = await supabase
     .from('notifications')
     .select(`
@@ -602,6 +604,7 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
       task:tasks!notifications_task_id_fkey(id, name, project_id)
     `)
     .eq('user_id', userId)
+    .is('read_at', null)
     .order('created_at', { ascending: false })
     .limit(limit)
 

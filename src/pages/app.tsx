@@ -33,6 +33,7 @@ import {
   getMyTasks,
   getCurrentProfile,
   getNotifications,
+  getUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
   getTags,
@@ -94,9 +95,31 @@ export default function AppPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsBadge, setNotificationsBadge] = useState(0);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  // ponytail: per-device "last visited My Tasks" marker; the badge counts tasks
+  // assigned to me since then. Cross-device would need a server-side last_seen_at.
+  const [myTasksSeenAt, setMyTasksSeenAt] = useState<string>(() => {
+    if (typeof window === 'undefined') return new Date().toISOString();
+    const stored = window.localStorage.getItem('ttr:myTasksSeenAt');
+    if (stored) return stored;
+    const now = new Date().toISOString();
+    window.localStorage.setItem('ttr:myTasksSeenAt', now);
+    return now;
+  });
 
   const supabase = useMemo(() => createClient(), []);
+
+  const markMyTasksSeen = () => {
+    const now = new Date().toISOString();
+    window.localStorage.setItem('ttr:myTasksSeenAt', now);
+    setMyTasksSeenAt(now);
+  };
+
+  const myTasksBadge = useMemo(
+    () => myTasks.filter((t) => t.created_at && t.created_at > myTasksSeenAt).length,
+    [myTasks, myTasksSeenAt]
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -137,7 +160,8 @@ export default function AppPage() {
   }, [activeProjectId, router, supabase]);
 
   useEffect(() => {
-    if (activeSection !== 'my-tasks' || !currentUserId) return;
+    if (!currentUserId) return;
+    // Loaded regardless of section so the sidebar "My tasks" badge stays accurate.
     getMyTasks(supabase, currentUserId).then(({ data }) => {
       // My Tasks spans every project, so per-project heading ids don't map to anything here —
       // grouping by heading_id would silently drop any task whose heading isn't in an (empty) heading list.
@@ -147,6 +171,16 @@ export default function AppPage() {
   }, [activeSection, currentUserId, currentProfile, supabase]);
 
   useEffect(() => {
+    // Opening the view = you've seen what's new, so the badge clears (Slack-style).
+    if (activeSection === 'my-tasks') markMyTasksSeen();
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    getUnreadCount(supabase, currentUserId).then(setNotificationsBadge);
+  }, [currentUserId, activeSection, supabase]);
+
+  useEffect(() => {
     if (activeSection !== 'inbox' || !currentUserId) return;
     setNotificationsLoading(true);
     getNotifications(supabase, currentUserId).then(({ data }) => {
@@ -154,6 +188,8 @@ export default function AppPage() {
         id: n.id,
         type: n.type,
         taskName: n.task?.name ?? 'a task',
+        taskId: n.task?.id ?? null,
+        projectId: n.task?.project_id ?? null,
         actorName: n.actor?.name ?? 'Someone',
         createdAt: n.created_at,
         readAt: n.read_at,
@@ -495,14 +531,24 @@ export default function AppPage() {
   };
 
   const handleNotificationClick = async (notificationId: string) => {
+    const notif = notifications.find((n) => n.id === notificationId);
     await markNotificationRead(supabase, notificationId);
-    setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, readAt: new Date().toISOString() } : n)));
+    // Slack-style: reading it removes it from the feed...
+    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+    setNotificationsBadge((c) => Math.max(0, c - 1));
+    // ...and jumps you to the task it's about.
+    if (notif?.projectId && notif?.taskId) {
+      setActiveProjectId(notif.projectId);
+      setSelectedTaskId(notif.taskId);
+      setActiveSection('projects');
+    }
   };
 
   const handleMarkAllRead = async () => {
     if (!currentUserId) return;
     await markAllNotificationsRead(supabase, currentUserId);
-    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
+    setNotifications([]);
+    setNotificationsBadge(0);
   };
 
   return (
@@ -514,6 +560,8 @@ export default function AppPage() {
           activeSection={activeSection}
           activeProjectId={activeProjectId}
           projects={projects}
+          myTasksBadge={myTasksBadge}
+          notificationsBadge={notificationsBadge}
           onSectionChange={setActiveSection}
           onProjectSelect={setActiveProjectId}
           onProjectCreate={handleProjectCreate}
@@ -616,12 +664,6 @@ export default function AppPage() {
 
           {activeSection === 'my-tasks' && (
             <>
-              <div className="project-header" style={{ paddingLeft: '24px', paddingRight: '24px' }}>
-                <div className="project-header-left">
-                  <div className="project-name">My Tasks</div>
-                </div>
-              </div>
-
               <Toolbar
                 onAddTask={() => window.alert('Open a project to add tasks there.')}
                 activeFilters={activeFilters}
