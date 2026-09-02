@@ -34,7 +34,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 
 export default function Page() {
-  const [notes, setNotes] = useState<any[] | null>(null)
+  const [notes, setNotes] = useState<Array<Record<string, unknown>> | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
