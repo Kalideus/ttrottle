@@ -1,7 +1,7 @@
 'use client';
 
 import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
@@ -84,6 +84,33 @@ export function TaskDetailPanel({
   const [showFollowerMenu, setShowFollowerMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const anyEditorOpen =
+    isEditingTitle || isEditingDescription || showAssigneeMenu || showDueDateMenu ||
+    showPriorityMenu || showHeadingMenu || showFollowerMenu || showOptionsMenu || isAddingSubtask;
+
+  // Esc closes the panel, unless an inline editor / menu is open (Esc cancels that first).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !anyEditorOpen) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, anyEditorOpen]);
+
+  // Click outside the panel closes it — but clicking another task row (to switch)
+  // or the app chrome does not.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (panelRef.current?.contains(t)) return;
+      if (t.closest('.task-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar')) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [onClose]);
 
   const priorityOptions: Array<'high' | 'medium' | 'low'> = ['low', 'medium', 'high'];
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
@@ -106,7 +133,7 @@ export function TaskDetailPanel({
   };
 
   return (
-    <div className="app-detail-panel">
+    <div className="app-detail-panel" ref={panelRef}>
       <div className="detail-panel-header" style={{ paddingBottom: '12px' }}>
         <button
           className={`detail-panel-complete-btn ${task.completed ? 'completed' : ''}`}
@@ -692,25 +719,26 @@ export function TaskDetailPanel({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={handleSaveDescription}
-              placeholder="What needs doing?"
+              placeholder="Add a description…"
             />
           ) : (
             <div
               onClick={() => setIsEditingDescription(true)}
               style={{
                 width: '100%',
-                minHeight: '100px',
+                minHeight: '72px',
                 padding: '12px',
                 border: '1px solid var(--border)',
                 borderRadius: '6px',
                 fontSize: '14px',
                 color: description ? 'var(--text)' : 'var(--text-muted)',
+                fontStyle: description ? 'normal' : 'italic',
                 cursor: 'pointer',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }}
             >
-              {description || 'What needs doing?'}
+              {description || 'Add a description…'}
             </div>
           )}
         </div>

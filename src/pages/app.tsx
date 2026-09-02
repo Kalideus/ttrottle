@@ -703,6 +703,9 @@ export default function AppPage() {
                       manualOrder={sortField === 'position'}
                     />
                     {selectedTask && (
+                      <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
+                    )}
+                    {selectedTask && (
                       <TaskDetailPanel
                         key={selectedTask.id}
                         task={selectedTask}
@@ -774,6 +777,9 @@ export default function AppPage() {
                   onNoHeadingRename={async () => window.alert('Open a project to add sections there.')}
                   onTaskReorder={async () => {}}
                 />
+                {selectedTask && (
+                  <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
+                )}
                 {selectedTask && (
                   <TaskDetailPanel
                     key={selectedTask.id}

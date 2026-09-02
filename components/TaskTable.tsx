@@ -405,7 +405,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                 {task.assignee.initials || task.assignee.name?.substring(0, 2).toUpperCase()}
               </div>
             ) : (
-              <div className="empty-cell">👤</div>
+              <div className="empty-cell" data-hint="Assign">👤</div>
             )}
           </div>
 
@@ -417,7 +417,9 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
               <span className={`priority-chip priority-${task.priority}`}>
                 {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
               </span>
-            ) : null}
+            ) : (
+              <span className="priority-hint" data-hint="Set priority" />
+            )}
           </div>
         </div>
 

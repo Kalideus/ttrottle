@@ -100,9 +100,7 @@ button { cursor: pointer; }
 }
 
 .app-detail-panel {
-  width: 40%;
-  min-width: 360px;
-  max-width: 100%;
+  width: 440px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: var(--surface);
@@ -114,7 +112,7 @@ button { cursor: pointer; }
 .app-content {
   display: flex;
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
 }
 
@@ -122,8 +120,27 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 480px;
-  overflow: visible;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.detail-panel-backdrop { display: none; }
+
+/* Narrow screens: the panel covers the table instead of squeezing it. */
+@media (max-width: 900px) {
+  .app-detail-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: 30;
+  }
+  .detail-panel-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(30, 31, 33, 0.32);
+    z-index: 29;
+  }
 }
 
 /* Top Bar Components */
@@ -668,6 +685,7 @@ button { cursor: pointer; }
   position: sticky;
   top: 0;
   z-index: 10;
+  min-width: 640px;
 }
 
 .table-header-cell {
@@ -687,7 +705,7 @@ button { cursor: pointer; }
 .table-body {
   flex: 1;
   overflow-y: auto;
-  overflow-x: auto;
+  min-width: 640px;
 }
 
 .table-section {
@@ -899,6 +917,33 @@ button { cursor: pointer; }
   justify-content: center;
   color: var(--text-muted);
   font-size: 12px;
+  opacity: 0.6;
+}
+
+/* Row-hover hints on empty Assignee / Priority cells */
+.task-row:hover .empty-cell[data-hint] {
+  width: auto;
+  height: auto;
+  border: none;
+  opacity: 1;
+  font-size: 0;
+}
+.task-row:hover .empty-cell[data-hint]::after {
+  content: attr(data-hint);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.priority-hint::before {
+  content: "—";
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-size: 13px;
+}
+.task-row:hover .priority-hint::before {
+  content: attr(data-hint);
+  color: var(--accent);
+  font-size: 12px;
 }
 
 .due-date-cell {
@@ -1099,23 +1144,23 @@ button { cursor: pointer; }
 .detail-panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 16px 24px;
 }
 
 .detail-panel-title {
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
   color: var(--text);
-  margin-bottom: 22px;
+  margin-bottom: 14px;
 }
 
 .detail-field-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 0;
+  gap: 6px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1125,7 +1170,7 @@ button { cursor: pointer; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   display: block;
 }
 
