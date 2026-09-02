@@ -100,7 +100,9 @@ button { cursor: pointer; }
 }
 
 .app-detail-panel {
-  width: 440px;
+  width: 40%;
+  min-width: 380px;
+  max-width: 640px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: var(--surface);
@@ -677,7 +679,7 @@ button { cursor: pointer; }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-columns: 1fr 140px 140px 140px;
+  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
   align-items: center;
   padding: 0 24px;
   gap: 0;
@@ -685,7 +687,7 @@ button { cursor: pointer; }
   position: sticky;
   top: 0;
   z-index: 10;
-  min-width: 640px;
+  min-width: 520px;
 }
 
 .table-header-cell {
@@ -705,7 +707,7 @@ button { cursor: pointer; }
 .table-body {
   flex: 1;
   overflow-y: auto;
-  min-width: 640px;
+  min-width: 520px;
 }
 
 .table-section {
@@ -716,7 +718,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: 1fr 140px 140px 140px;
+  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
   align-items: center;
   background: var(--surface);
   cursor: pointer;
@@ -758,7 +760,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: 1fr 140px 140px minmax(100px, 140px);
+  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -984,7 +986,7 @@ button { cursor: pointer; }
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: 1fr 140px 140px 140px;
+  grid-template-columns: minmax(140px, 1fr) minmax(88px, 140px) minmax(104px, 140px) minmax(88px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
