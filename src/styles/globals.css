@@ -235,7 +235,35 @@ button { cursor: pointer; }
   justify-content: center;
   font-weight: 600;
   font-size: 13px;
+  text-transform: uppercase;
 }
+
+.topbar-account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 11;
+  min-width: 168px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 32px -12px rgba(30, 31, 33, 0.28);
+}
+
+.topbar-account-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.topbar-account-menu button:hover { background: var(--surface-alt); }
 
 /* Sidebar Components */
 .sidebar-create-btn {

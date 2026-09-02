@@ -1,6 +1,12 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
+// Captured before the Supabase client parses and clears the URL hash. Invite and
+// recovery links both drop the user here needing to choose a password.
+const ARRIVED_TO_SET_PASSWORD =
+  typeof window !== 'undefined' &&
+  /[#?&]type=(invite|recovery)\b/.test(window.location.hash + window.location.search);
+
 const supabase = createClient();
 
 const SUCCESS_MESSAGES = ['Signed in', 'Password updated', 'Check your email for the reset link'];
@@ -25,9 +31,9 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
-  // ponytail: recovery mode is just a boolean; Supabase fires PASSWORD_RECOVERY
-  // after the browser client parses the reset link's URL hash.
-  const [recovering, setRecovering] = useState(false);
+  // "Set a password" mode: entered from an invite/recovery link. The hash check
+  // catches invites; the PASSWORD_RECOVERY event is the backup for reset links.
+  const [recovering, setRecovering] = useState(ARRIVED_TO_SET_PASSWORD);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -77,8 +83,8 @@ export default function Login() {
         <div className="login-card">
           <Brand />
           <div className="login-header">
-            <h1 className="login-title">Set a new password</h1>
-            <p className="login-subtitle">Choose a password for your account.</p>
+            <h1 className="login-title">Set your password</h1>
+            <p className="login-subtitle">Choose a password so you can sign in from now on.</p>
           </div>
           <form onSubmit={setNewPassword} className="login-form">
             <label className="form-group">

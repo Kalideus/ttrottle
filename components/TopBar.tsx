@@ -1,14 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import { Menu, HelpCircle, ChevronDown } from 'lucide-react';
 
 interface TopBarProps {
   onHamburgerClick: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  avatarInitials?: string;
+  onChangePassword: () => void;
+  onLogout: () => void;
 }
 
-export function TopBar({ onHamburgerClick, searchQuery, onSearchChange }: TopBarProps) {
+export function TopBar({
+  onHamburgerClick,
+  searchQuery,
+  onSearchChange,
+  avatarInitials = '?',
+  onChangePassword,
+  onLogout,
+}: TopBarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <div className="app-top-bar">
       <button className="topbar-hamburger" onClick={onHamburgerClick}>
@@ -38,10 +51,35 @@ export function TopBar({ onHamburgerClick, searchQuery, onSearchChange }: TopBar
         <button className="topbar-help-btn" title="Help">
           <HelpCircle size={18} />
         </button>
-        <div className="topbar-avatar">JD</div>
-        <button className="topbar-account-btn">
-          <ChevronDown size={18} />
-        </button>
+        <div className="topbar-avatar">{avatarInitials}</div>
+        <div style={{ position: 'relative' }}>
+          <button className="topbar-account-btn" onClick={() => setMenuOpen((o) => !o)}>
+            <ChevronDown size={18} />
+          </button>
+          {menuOpen && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setMenuOpen(false)} />
+              <div className="topbar-account-menu">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onChangePassword();
+                  }}
+                >
+                  Change password
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onLogout();
+                  }}
+                >
+                  Log out
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

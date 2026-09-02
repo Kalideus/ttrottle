@@ -525,6 +525,22 @@ export default function AppPage() {
     setProjectMembers(memberRows ?? []);
   };
 
+  const handleChangePassword = async () => {
+    const next = window.prompt('New password (at least 6 characters):');
+    if (!next) return;
+    if (next.length < 6) {
+      window.alert('Password must be at least 6 characters.');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: next });
+    window.alert(error ? `Could not update password: ${error.message}` : 'Password updated.');
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   const handleCommentAdd = async (body: string) => {
     if (!selectedTaskId || !currentUserId) return;
     await createComment(supabase, { task_id: selectedTaskId, author_id: currentUserId, body });
@@ -567,7 +583,14 @@ export default function AppPage() {
 
   return (
     <div className="app-container">
-      <TopBar onHamburgerClick={() => {}} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+      <TopBar
+        onHamburgerClick={() => {}}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        avatarInitials={currentProfile?.initials ?? currentProfile?.name?.slice(0, 2) ?? '?'}
+        onChangePassword={handleChangePassword}
+        onLogout={handleLogout}
+      />
 
       <div className="app-main">
         <Sidebar

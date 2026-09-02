@@ -37,8 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Invite the auth user, or find them if they already have an account.
   let invitedId: string | null = null;
   let emailSent = false;
+  // Land on /login so they're forced to set a password before entering the app.
   const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${origin}/app`,
+    redirectTo: `${origin}/login`,
   });
   if (invited?.user) {
     invitedId = invited.user.id;
