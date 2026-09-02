@@ -50,8 +50,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!invitedId) return res.status(400).json({ error: inviteErr?.message ?? 'Could not invite that address' });
   }
 
-  // A profile row is required for the app to work once they log in.
-  await admin.from('profiles').upsert({ id: invitedId, email }, { onConflict: 'id' });
+  // A profile row is required for the app to work once they log in. The
+  // on-signup trigger normally creates it; this covers the case where it isn't
+  // there. name/initials are NOT NULL, so derive them from the address.
+  const local = email.split('@')[0];
+  await admin.from('profiles').upsert(
+    { id: invitedId, email, name: local, initials: local.slice(0, 2).toUpperCase() },
+    { onConflict: 'id', ignoreDuplicates: true }
+  );
 
   const { error: memErr } = await admin.from('project_members').upsert(
     { project_id: projectId, email, profile_id: invitedId, invited_at: new Date().toISOString() },
