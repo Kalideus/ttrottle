@@ -483,6 +483,15 @@ export default function AppPage() {
     }
   };
 
+  const handleCreateTaskClick = () => {
+    if (!activeProjectId) {
+      window.alert('Create or open a project first, then add tasks to it.');
+      return;
+    }
+    setActiveSection('projects');
+    setShowCreateTask(true);
+  };
+
   const handleProjectUpdate = async (updates: { name?: string; color?: string; icon?: string }) => {
     if (!activeProjectId) return;
     await updateProject(supabase, activeProjectId, updates);
@@ -547,7 +556,7 @@ export default function AppPage() {
 
   return (
     <div className="app-container">
-      <TopBar onHamburgerClick={() => {}} />
+      <TopBar onHamburgerClick={() => {}} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
       <div className="app-main">
         <Sidebar
@@ -559,6 +568,7 @@ export default function AppPage() {
           onSectionChange={setActiveSection}
           onProjectSelect={setActiveProjectId}
           onProjectCreate={handleProjectCreate}
+          onCreateTask={handleCreateTaskClick}
           onInvite={handleInvite}
         />
 

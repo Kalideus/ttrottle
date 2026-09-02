@@ -1,15 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { Menu, HelpCircle, ChevronDown } from 'lucide-react';
 
 interface TopBarProps {
   onHamburgerClick: () => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
-export function TopBar({ onHamburgerClick }: TopBarProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-
+export function TopBar({ onHamburgerClick, searchQuery, onSearchChange }: TopBarProps) {
   return (
     <div className="app-top-bar">
       <button className="topbar-hamburger" onClick={onHamburgerClick}>
@@ -25,9 +24,9 @@ export function TopBar({ onHamburgerClick }: TopBarProps) {
         <span style={{ opacity: 0.6 }}>🔍</span>
         <input
           type="text"
-          placeholder="Search"
+          placeholder="Search tasks"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
         />
         <div className="topbar-keycaps">
           <div className="topbar-keycap">⌘</div>

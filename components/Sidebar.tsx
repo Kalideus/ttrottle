@@ -13,6 +13,7 @@ interface SidebarProps {
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectCreate: () => void;
+  onCreateTask: () => void;
   onInvite: () => void;
 }
 
@@ -25,13 +26,14 @@ export function Sidebar({
   onSectionChange,
   onProjectSelect,
   onProjectCreate,
+  onCreateTask,
   onInvite,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState(true);
 
   return (
     <div className="app-sidebar">
-      <button className="sidebar-create-btn" onClick={onProjectCreate}>
+      <button className="sidebar-create-btn" onClick={onCreateTask}>
         <Plus size={20} />
         <span>Create</span>
       </button>
