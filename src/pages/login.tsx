@@ -3,6 +3,24 @@ import { createClient } from '@/lib/supabase/client';
 
 const supabase = createClient();
 
+const SUCCESS_MESSAGES = ['Signed in', 'Password updated', 'Check your email for the reset link'];
+const PROGRESS_MESSAGES = ['Signing in...', 'Sending reset link...', 'Updating password...'];
+
+function messageClass(message: string) {
+  if (SUCCESS_MESSAGES.includes(message)) return 'login-message is-success';
+  if (PROGRESS_MESSAGES.includes(message)) return 'login-message';
+  return 'login-message is-error';
+}
+
+function Brand() {
+  return (
+    <div className="login-brand">
+      <div className="login-brand-mark">τ</div>
+      <span className="login-brand-word">TukTuk</span>
+    </div>
+  );
+}
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,18 +75,26 @@ export default function Login() {
     return (
       <div className="login-shell">
         <div className="login-card">
+          <Brand />
           <div className="login-header">
-            <p className="kicker">TukTukRental</p>
-            <h1 className="page-title" style={{ fontSize: '2rem' }}>Set a new password</h1>
+            <h1 className="login-title">Set a new password</h1>
+            <p className="login-subtitle">Choose a password for your account.</p>
           </div>
-          <form onSubmit={setNewPassword} style={{ display: 'grid', gap: '16px' }}>
+          <form onSubmit={setNewPassword} className="login-form">
             <label className="form-group">
               <span className="field-label">New password</span>
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required minLength={6} className="text-field" />
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                required
+                minLength={6}
+                className="text-field"
+              />
             </label>
-            <button type="submit" className="primary-button" style={{ width: '100%' }}>Update password</button>
+            <button type="submit" className="login-submit">Update password</button>
           </form>
-          {message && <p className="task-meta" style={{ marginTop: '16px' }}>{message}</p>}
+          {message && <p className={messageClass(message)}>{message}</p>}
         </div>
       </div>
     );
@@ -77,13 +103,13 @@ export default function Login() {
   return (
     <div className="login-shell">
       <div className="login-card">
+        <Brand />
         <div className="login-header">
-          <p className="kicker">TukTukRental</p>
-          <h1 className="page-title" style={{ fontSize: '2rem' }}>Welcome back</h1>
+          <h1 className="login-title">Welcome back</h1>
           <p className="login-subtitle">Sign in to continue managing your work.</p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '16px' }}>
+        <form onSubmit={handleSubmit} className="login-form">
           <label className="form-group">
             <span className="field-label">Email</span>
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required className="text-field" />
@@ -94,20 +120,14 @@ export default function Login() {
             <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required className="text-field" />
           </label>
 
-          <button type="submit" className="primary-button" style={{ width: '100%' }}>
-            Sign in
-          </button>
+          <button type="submit" className="login-submit">Sign in</button>
         </form>
 
-        <button type="button" onClick={sendReset} className="task-meta" style={{ marginTop: '12px', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+        <button type="button" onClick={sendReset} className="login-link">
           Forgot password?
         </button>
 
-        {message && (
-          <p className="task-meta" style={{ marginTop: '16px', color: message === 'Signed in' ? '#15803d' : '#b91c1c' }}>
-            {message}
-          </p>
-        )}
+        {message && <p className={messageClass(message)}>{message}</p>}
       </div>
     </div>
   );
