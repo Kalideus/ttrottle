@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
+import { InviteModal } from '@/components/InviteModal';
 import { avatarInitials } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -102,6 +103,7 @@ export default function AppPage() {
   // Timestamp of my previous session; "My tasks" badges tasks assigned since then.
   const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -535,39 +537,37 @@ export default function AppPage() {
     setProjects(projectRows ?? []);
   };
 
-  const handleInvite = async () => {
+  const handleInvite = () => {
     if (!activeProjectId) {
       window.alert('Select a project first.');
       return;
     }
-    const email = window.prompt('Invite by email:');
-    if (!email || !email.trim()) return;
-    // Corporate mail scanners (Outlook/M365 Safe Links) can burn a one-time
-    // invite link before the person clicks it -- offer a copyable link that
-    // skips email entirely as a fallback.
-    const sendEmail = window.confirm(
-      'Email them the invite link?\n\nCancel to get a copyable link instead (send it yourself -- avoids work email link-scanners eating it).'
-    );
+    setShowInvite(true);
+  };
+
+  const submitInvite = async (email: string, sendEmail: boolean) => {
+    if (!activeProjectId) return { ok: false, message: 'Select a project first.' };
 
     const { data: { session } } = await supabase.auth.getSession();
     const resp = await fetch('/api/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
-      body: JSON.stringify({ email: email.trim(), projectId: activeProjectId, sendEmail }),
+      body: JSON.stringify({ email, projectId: activeProjectId, sendEmail }),
     });
     const result = await resp.json();
-    if (!resp.ok) {
-      window.alert(`Could not invite: ${result.error ?? resp.statusText}`);
-      return;
-    }
-    if (result.link) {
-      await navigator.clipboard.writeText(result.link);
-      window.alert(`Invite link copied to clipboard for ${email.trim()} -- send it to them yourself.`);
-    } else {
-      window.alert(result.emailSent ? `Invite email sent to ${email.trim()}.` : `${email.trim()} already has an account and was added to the project.`);
-    }
+    if (!resp.ok) return { ok: false, message: result.error ?? resp.statusText };
+
     const { data: memberRows } = await getProjectMembers(supabase, activeProjectId);
     setProjectMembers(memberRows ?? []);
+
+    if (result.link) {
+      await navigator.clipboard.writeText(result.link);
+      return { ok: true, message: `Link copied to clipboard for ${email} -- send it to them yourself.` };
+    }
+    return {
+      ok: true,
+      message: result.emailSent ? `Invite email sent to ${email}.` : `${email} already has an account and was added to the project.`,
+    };
   };
 
   const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string }) => {
@@ -651,6 +651,10 @@ export default function AppPage() {
           onSave={handleProfileSave}
           onClose={() => setShowProfile(false)}
         />
+      )}
+
+      {showInvite && (
+        <InviteModal onInvite={submitInvite} onClose={() => setShowInvite(false)} />
       )}
 
       <div className="app-main">
