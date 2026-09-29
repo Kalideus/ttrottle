@@ -675,6 +675,7 @@ export default function AppPage() {
         onSearchChange={setSearchQuery}
         avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
         avatarColor={currentProfile?.avatar_color ?? 'var(--accent)'}
+        isSuperAdmin={!!currentProfile?.is_super_admin}
         onOpenProfile={() => setShowProfile(true)}
         onChangePassword={handleChangePassword}
         onLogout={handleLogout}

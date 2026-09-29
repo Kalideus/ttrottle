@@ -9,6 +9,7 @@ interface TopBarProps {
   onSearchChange: (query: string) => void;
   avatarInitials?: string;
   avatarColor?: string;
+  isSuperAdmin?: boolean;
   onOpenProfile: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
@@ -20,6 +21,7 @@ export function TopBar({
   onSearchChange,
   avatarInitials = '?',
   avatarColor = 'var(--accent)',
+  isSuperAdmin = false,
   onOpenProfile,
   onChangePassword,
   onLogout,
@@ -80,6 +82,16 @@ export function TopBar({
                 >
                   Change password
                 </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      window.location.href = '/admin/team';
+                    }}
+                  >
+                    Team &amp; permissions
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setMenuOpen(false);
