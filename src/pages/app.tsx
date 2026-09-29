@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
+import { CreateTaskModal } from '@/components/CreateTaskModal';
 import { avatarInitials } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -104,6 +105,7 @@ export default function AppPage() {
   const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showCreateTask, setShowCreateTask] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -511,16 +513,19 @@ export default function AppPage() {
     }
   };
 
-  const handleCreateTaskClick = async () => {
+  const handleCreateTaskClick = () => {
     if (!activeProjectId) {
       window.alert('Create or open a project first, then add tasks to it.');
       return;
     }
-    // Create a blank task in the current project and open it in the right-hand
-    // panel to fill out inline — no separate modal.
+    setShowCreateTask(true);
+  };
+
+  const submitCreateTask = async (name: string) => {
+    if (!activeProjectId) return;
     const { data } = await createTask(supabase, {
       project_id: activeProjectId,
-      name: 'Untitled task',
+      name,
       created_by: currentUserId,
     });
     await refreshTasks();
@@ -654,6 +659,10 @@ export default function AppPage() {
 
       {showInvite && (
         <InviteModal onInvite={submitInvite} onClose={() => setShowInvite(false)} />
+      )}
+
+      {showCreateTask && (
+        <CreateTaskModal onCreate={submitCreateTask} onClose={() => setShowCreateTask(false)} />
       )}
 
       <div className="app-main">

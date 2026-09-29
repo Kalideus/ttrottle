@@ -73,6 +73,9 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   // A task just created by the "Create" button opens ready to name.
   const isFresh = task.name === 'Untitled task';
+  // Creator can always delete; so can the project's owner/admin.
+  const myRole = projectMembers.find((m) => m.profile_id === currentUserId)?.role;
+  const canDeleteTask = task.created_by === currentUserId || myRole === 'owner' || myRole === 'admin';
   const [isEditingTitle, setIsEditingTitle] = useState(isFresh);
   const [title, setTitle] = useState(isFresh ? '' : task.name);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -168,7 +171,7 @@ export function TaskDetailPanel({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               }}
             >
-              {task.created_by === currentUserId ? (
+              {canDeleteTask ? (
                 <button
                   onClick={() => {
                     setShowOptionsMenu(false);
@@ -183,7 +186,7 @@ export function TaskDetailPanel({
                 </button>
               ) : (
                 <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Only the creator can delete this task.
+                  Only the task creator or a project owner/admin can delete this task.
                 </div>
               )}
             </div>

@@ -35,7 +35,7 @@ export function Sidebar({
     <div className="app-sidebar">
       <button className="sidebar-create-btn" onClick={onCreateTask}>
         <Plus size={20} />
-        <span>Create</span>
+        <span>Create task</span>
       </button>
 
       <div className="sidebar-nav">
