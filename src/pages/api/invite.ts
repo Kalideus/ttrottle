@@ -56,19 +56,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!invitedId) return res.status(400).json({ error: inviteErr?.message ?? 'Could not invite that address' });
     }
   } else {
-    // No email -- hand back a raw link the caller can send themselves (Slack,
-    // text, whatever), so a corporate mail scanner never sees it. `invite` type
-    // creates the account; falls back to `recovery` if they already have one
-    // (e.g. re-sharing a link for someone who never finished setting a password).
+    // No email -- hand back a link the caller can send themselves (Slack, text,
+    // whatever). `invite` type creates the account; falls back to `recovery` if
+    // they already have one (e.g. re-sharing a link for someone who never
+    // finished setting a password).
+    //
+    // generateLink()'s own action_link points at Supabase's /auth/v1/verify,
+    // which consumes the one-time token on ANY GET -- not just an email
+    // scanner, also e.g. Slack's link-unfurl bot fetching it to build a
+    // preview the moment it's pasted into a message, before the real person
+    // ever clicks. So we build our own link straight to /login with the raw
+    // token_hash instead; login.tsx redeems it itself via verifyOtp() from
+    // React, which a bot fetching the page's HTML never triggers.
     const { data: gen, error: genErr } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { redirectTo } });
     if (gen?.user) {
       invitedId = gen.user.id;
-      link = gen.properties?.action_link;
+      link = `${origin}/login?token_hash=${gen.properties?.hashed_token}&type=invite`;
     } else {
       const { data: recGen, error: recErr } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo } });
       if (!recGen?.user) return res.status(400).json({ error: recErr?.message ?? genErr?.message ?? 'Could not generate a link' });
       invitedId = recGen.user.id;
-      link = recGen.properties?.action_link;
+      link = `${origin}/login?token_hash=${recGen.properties?.hashed_token}&type=recovery`;
     }
   }
 
