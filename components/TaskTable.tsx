@@ -28,7 +28,9 @@ interface TaskTableProps {
 
 export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  // Accordion: only one task's subtasks open at a time -- opening a new one
+  // closes whichever was open, clicking the open one again closes it.
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
   const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
   const [editingHeadingId, setEditingHeadingId] = useState<string | null>(null);
@@ -60,10 +62,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
   };
 
   const toggleTaskExpand = (taskId: string) => {
-    setExpandedTasks((prev) => ({
-      ...prev,
-      [taskId]: !prev[taskId],
-    }));
+    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   };
 
   const toggleTaskComplete = (task: Task, e: React.MouseEvent) => {
@@ -203,7 +202,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
 
   const renderTask = (task: Task, siblings: Task[], isLevel2 = false) => {
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-    const isExpanded = expandedTasks[task.id];
+    const isExpanded = expandedTaskId === task.id;
     const isCompleted = task.completed;
     const siblingIndex = siblings.findIndex((t) => t.id === task.id);
     const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : null;
@@ -214,7 +213,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
         <div className={`task-row ${isLevel2 ? 'level-2' : ''} ${selectedTaskId === task.id ? 'selected' : ''} ${completingTaskId === task.id ? 'completing' : ''}`}
           onClick={() => {
             onTaskSelect(task.id);
-            if (hasSubtasks) setExpandedTasks((prev) => ({ ...prev, [task.id]: true }));
+            if (hasSubtasks) toggleTaskExpand(task.id);
           }}
           draggable={!isLevel2}
           onDragStart={(e) => {
@@ -385,7 +384,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenMenuTaskId(null);
-                          setExpandedTasks((prev) => ({ ...prev, [task.id]: true }));
+                          setExpandedTaskId(task.id);
                           setAddingSubtaskTo(task.id);
                         }}
                         style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}
