@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Menu, HelpCircle, ChevronDown } from 'lucide-react';
 
 interface TopBarProps {
@@ -27,6 +27,19 @@ export function TopBar({
   onLogout,
 }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // The ⌘/Ctrl+K keycap hint next to search was purely decorative -- wire it up.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="app-top-bar">
@@ -42,6 +55,7 @@ export function TopBar({
       <div className="topbar-search">
         <span style={{ opacity: 0.6 }}>🔍</span>
         <input
+          ref={searchRef}
           type="text"
           placeholder="Search tasks"
           value={searchQuery}

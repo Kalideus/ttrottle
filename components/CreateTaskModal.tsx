@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { useEscapeToClose } from '@/lib/useEscapeToClose';
 
 interface CreateTaskModalProps {
   onCreate: (name: string) => Promise<void>;
@@ -9,6 +10,7 @@ interface CreateTaskModalProps {
 }
 
 export function CreateTaskModal({ onCreate, onClose }: CreateTaskModalProps) {
+  useEscapeToClose(onClose);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
 

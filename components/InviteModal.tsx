@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { useEscapeToClose } from '@/lib/useEscapeToClose';
 
 interface InviteModalProps {
   onInvite: (email: string, sendEmail: boolean) => Promise<{ ok: boolean; message: string; link?: string }>;
@@ -9,6 +10,7 @@ interface InviteModalProps {
 }
 
 export function InviteModal({ onInvite, onClose }: InviteModalProps) {
+  useEscapeToClose(onClose);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState<'email' | 'link' | null>(null);
   const [result, setResult] = useState<{ ok: boolean; message: string; link?: string } | null>(null);

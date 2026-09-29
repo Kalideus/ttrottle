@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { avatarInitials, AVATAR_COLORS, DEFAULT_AVATAR_COLOR } from '@/lib/avatar';
+import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import type { Profile } from '@/lib/supabase/queries';
 
 interface ProfileModalProps {
@@ -23,6 +24,8 @@ export function ProfileModal({ profile, onSave, onClose, requireFullName = false
   const initials = avatarInitials(name, profile.email);
   const hasFullName = name.trim().includes(' ');
   const canSave = requireFullName ? hasFullName : true;
+
+  useEscapeToClose(onClose, !requireFullName);
 
   const handleSave = async () => {
     if (!canSave) return;

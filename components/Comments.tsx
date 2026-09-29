@@ -56,6 +56,22 @@ function activeMentionAt(value: string, cursor: number): { start: number; query:
   return { start: cursor - match[1].length - 1, query: match[1] };
 }
 
+// Highlights "@name" tokens that actually resolve to a real project member
+// (same rule as extractMentions) -- an "@" that doesn't match anyone stays
+// plain text rather than being colored as if it worked.
+function renderBody(body: string, users: { id: string; name: string }[]) {
+  return body.split(/(@[a-zA-Z][\w'-]*)/g).map((part, i) => {
+    if (part[0] === '@' && users.some((u) => firstName(u.name).toLowerCase() === part.slice(1).toLowerCase())) {
+      return (
+        <span key={i} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 export function Comments({
   taskId,
   comments,
@@ -110,7 +126,25 @@ export function Comments({
     });
   };
 
+  const submitComment = async () => {
+    if (!composerValue.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
+      setComposerValue('');
+      setComposerRows(1);
+      setMention(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      void submitComment();
+      return;
+    }
     if (!mention || !mentionMatches.length) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -127,19 +161,9 @@ export function Comments({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!composerValue.trim() || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
-      setComposerValue('');
-      setComposerRows(1);
-      setMention(null);
-    } finally {
-      setIsSubmitting(false);
-    }
+    void submitComment();
   };
 
   const handleEditStart = (comment: CommentItem) => {
@@ -227,7 +251,7 @@ export function Comments({
                           wordBreak: 'break-word',
                         }}
                       >
-                        {comment.body}
+                        {renderBody(comment.body, mentionableUsers)}
                       </div>
                     )}
 
@@ -415,7 +439,7 @@ export function Comments({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Tip: use @name to mention</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>@name to mention &middot; ⌘/Ctrl+Enter to send</div>
             <button
               type="submit"
               disabled={!composerValue.trim() || isSubmitting}
