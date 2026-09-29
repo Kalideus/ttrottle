@@ -561,8 +561,7 @@ export default function AppPage() {
     setProjectMembers(memberRows ?? []);
 
     if (result.link) {
-      await navigator.clipboard.writeText(result.link);
-      return { ok: true, message: `Link copied to clipboard for ${email} -- send it to them yourself.` };
+      return { ok: true, message: `Link ready for ${email}.`, link: result.link as string };
     }
     return {
       ok: true,
