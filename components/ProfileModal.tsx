@@ -9,16 +9,23 @@ interface ProfileModalProps {
   profile: Profile;
   onSave: (updates: { name: string; initials: string; avatar_color: string }) => Promise<void>;
   onClose: () => void;
+  // No X/Cancel/backdrop-dismiss, and Save is disabled until a first + last
+  // name is entered -- used to make new/invited users set a real name
+  // instead of the email-derived default.
+  requireFullName?: boolean;
 }
 
-export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
+export function ProfileModal({ profile, onSave, onClose, requireFullName = false }: ProfileModalProps) {
   const [name, setName] = useState(profile.name ?? '');
   const [color, setColor] = useState(profile.avatar_color ?? DEFAULT_AVATAR_COLOR);
   const [saving, setSaving] = useState(false);
 
   const initials = avatarInitials(name, profile.email);
+  const hasFullName = name.trim().includes(' ');
+  const canSave = requireFullName ? hasFullName : true;
 
   const handleSave = async () => {
+    if (!canSave) return;
     setSaving(true);
     try {
       await onSave({ name: name.trim(), initials, avatar_color: color });
@@ -29,14 +36,22 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={requireFullName ? undefined : onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2 className="modal-title">Profile</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
+          {!requireFullName && (
+            <button className="modal-close" onClick={onClose} aria-label="Close">
+              <X size={18} />
+            </button>
+          )}
         </div>
+
+        {requireFullName && (
+          <p className="modal-field-hint" style={{ marginTop: '-8px' }}>
+            Enter your first and last name so teammates can tell who&rsquo;s who.
+          </p>
+        )}
 
         <div className="profile-preview">
           <div className="profile-avatar-lg" style={{ background: color }}>{initials}</div>
@@ -55,7 +70,11 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
             placeholder="First Last"
             autoFocus
           />
-          <span className="modal-field-hint">Your avatar shows the first and last initial ({initials}).</span>
+          <span className="modal-field-hint">
+            {requireFullName && !hasFullName
+              ? 'Enter a first and last name (e.g. "Jamie Lee").'
+              : `Your avatar shows the first and last initial (${initials}).`}
+          </span>
         </label>
 
         <div className="modal-field">
@@ -75,8 +94,10 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
         </div>
 
         <div className="modal-actions">
-          <button className="modal-btn ghost" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="modal-btn primary" onClick={handleSave} disabled={saving || !name.trim()}>
+          {!requireFullName && (
+            <button className="modal-btn ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          )}
+          <button className="modal-btn primary" onClick={handleSave} disabled={saving || !canSave}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>

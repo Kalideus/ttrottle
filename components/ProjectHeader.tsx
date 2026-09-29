@@ -12,8 +12,11 @@ interface ProjectHeaderProps {
   projectColor: string;
   projectIcon: string;
   members: ProjectMember[];
+  currentUserId: string | null;
   onInvite: () => void;
   onProjectUpdate: (updates: { name?: string; color?: string; icon?: string }) => Promise<void>;
+  onProjectArchive: () => void;
+  onProjectDelete: () => void;
 }
 
 export function ProjectHeader({
@@ -21,12 +24,18 @@ export function ProjectHeader({
   projectColor,
   projectIcon,
   members,
+  currentUserId,
   onInvite,
   onProjectUpdate,
+  onProjectArchive,
+  onProjectDelete,
 }: ProjectHeaderProps) {
   const visibleMembers = members.slice(0, 3);
   const [showEdit, setShowEdit] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
+  const myRole = members.find((m) => m.profile_id === currentUserId)?.role;
+  const canArchive = myRole === 'owner' || myRole === 'admin';
+  const canDelete = myRole === 'owner';
 
   const openEdit = () => {
     setNameDraft(projectName);
@@ -135,6 +144,27 @@ export function ProjectHeader({
                   ))}
                 </div>
               </div>
+
+              {(canArchive || canDelete) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+                  {canArchive && (
+                    <button
+                      onClick={() => { setShowEdit(false); onProjectArchive(); }}
+                      style={{ textAlign: 'left', padding: '6px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)' }}
+                    >
+                      Archive project
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => { setShowEdit(false); onProjectDelete(); }}
+                      style={{ textAlign: 'left', padding: '6px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#D64545' }}
+                    >
+                      Delete project permanently
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}

@@ -778,3 +778,23 @@ export async function getProjectMembers(supabase: SupabaseClient, projectId: str
 export async function removeProjectMember(supabase: SupabaseClient, projectId: string, email: string) {
   return supabase.from('project_members').delete().eq('project_id', projectId).eq('email', email)
 }
+
+// Admin-page reads: every project (including archived) and every member
+// across every project, for the site-admin "roles + invites" page. Writes
+// from that page go through /api/admin/* (service-role, is_super_admin
+// checked server-side) rather than these -- see db/migrations/014.
+export async function getAllProjectsAdmin(supabase: SupabaseClient) {
+  return supabase.from('projects').select('*').order('name', { ascending: true })
+}
+
+export async function getAllProjectMembersAdmin(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('*, profile:profiles!project_members_profile_id_fkey(*)')
+    .order('invited_at', { ascending: true })
+  return { data: (data ?? []) as ProjectMember[], error }
+}
+
+export async function getAllProfilesAdmin(supabase: SupabaseClient) {
+  return supabase.from('profiles').select('*').order('name', { ascending: true })
+}

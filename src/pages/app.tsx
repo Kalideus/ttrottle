@@ -20,6 +20,7 @@ import {
   getTasksForProject,
   createProject,
   updateProject,
+  deleteProject,
   createTask,
   updateTask,
   deleteTask,
@@ -108,6 +109,11 @@ export default function AppPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
+
+  // Invite-created profiles default to an email-derived single-word name
+  // (e.g. "jsmith23") -- treat anything with no space as "not set yet" and
+  // force the profile modal until they enter a real first + last name.
+  const needsFullName = !!currentProfile && !currentProfile.name?.trim().includes(' ');
 
   const myTasksBadge = useMemo(
     () => (lastLoginAt ? myTasks.filter((t) => t.created_at && t.created_at > lastLoginAt).length : 0),
@@ -542,6 +548,31 @@ export default function AppPage() {
     setProjects(projectRows ?? []);
   };
 
+  const dropToNextProject = (remaining: Project[]) => {
+    setProjects(remaining);
+    setActiveProjectId(remaining[0]?.id ?? '');
+  };
+
+  const handleProjectArchive = async () => {
+    if (!activeProjectId) return;
+    if (!window.confirm('Archive this project? It\'ll disappear from the sidebar; an admin can bring it back later.')) return;
+    await updateProject(supabase, activeProjectId, { archived: true });
+    const { data: projectRows } = await getProjects(supabase);
+    dropToNextProject(projectRows ?? []);
+  };
+
+  const handleProjectDelete = async () => {
+    if (!activeProjectId) return;
+    const project = projects.find((p) => p.id === activeProjectId);
+    const typed = window.prompt(
+      `This permanently deletes "${project?.name}" and every task/comment in it. This cannot be undone.\n\nType the project name to confirm:`
+    );
+    if (typed !== project?.name) return;
+    await deleteProject(supabase, activeProjectId);
+    const { data: projectRows } = await getProjects(supabase);
+    dropToNextProject(projectRows ?? []);
+  };
+
   const handleInvite = () => {
     if (!activeProjectId) {
       window.alert('Select a project first.');
@@ -649,10 +680,11 @@ export default function AppPage() {
         onLogout={handleLogout}
       />
 
-      {showProfile && currentProfile && (
+      {(showProfile || needsFullName) && currentProfile && (
         <ProfileModal
           profile={currentProfile}
           onSave={handleProfileSave}
+          requireFullName={needsFullName}
           onClose={() => setShowProfile(false)}
         />
       )}
@@ -687,8 +719,11 @@ export default function AppPage() {
                 projectColor={currentProject?.color ?? '#4573D2'}
                 projectIcon={currentProject?.icon ?? '📋'}
                 members={projectMembers}
+                currentUserId={currentUserId}
                 onInvite={handleInvite}
                 onProjectUpdate={handleProjectUpdate}
+                onProjectArchive={handleProjectArchive}
+                onProjectDelete={handleProjectDelete}
               />
 
               <Toolbar
