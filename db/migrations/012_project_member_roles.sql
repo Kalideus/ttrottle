@@ -27,6 +27,10 @@ $$;
 -- project_members --------------------------------------------------------
 
 drop policy if exists "Authenticated users full access" on project_members;
+drop policy if exists "Authenticated users can view members" on project_members;
+drop policy if exists "Owners and admins can add members" on project_members;
+drop policy if exists "Owners and admins can remove non-owner members" on project_members;
+drop policy if exists "Owners can change member roles" on project_members;
 
 -- unchanged: everyone can see who's on a project (matches projects being
 -- visible to the whole team today -- see getProjects()).
@@ -59,6 +63,12 @@ create policy "Owners can change member roles" on project_members
 -- projects ----------------------------------------------------------------
 
 alter table projects enable row level security;
+
+drop policy if exists "Authenticated users can view projects" on projects;
+drop policy if exists "Authenticated users can create projects" on projects;
+drop policy if exists "Permitted users can create projects" on projects;
+drop policy if exists "Owners and admins can edit their project" on projects;
+drop policy if exists "Owners can delete their project" on projects;
 
 -- unchanged: every signed-in user can see every project.
 create policy "Authenticated users can view projects" on projects
