@@ -13,6 +13,7 @@ interface TopBarProps {
   onOpenProfile: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
+  onShowShortcuts: () => void;
 }
 
 export function TopBar({
@@ -25,6 +26,7 @@ export function TopBar({
   onOpenProfile,
   onChangePassword,
   onLogout,
+  onShowShortcuts,
 }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -68,7 +70,7 @@ export function TopBar({
       </div>
 
       <div className="topbar-right">
-        <button className="topbar-help-btn" title="Help">
+        <button className="topbar-help-btn" title="Keyboard shortcuts (?)" onClick={onShowShortcuts}>
           <HelpCircle size={18} />
         </button>
         <div className="topbar-avatar" style={{ background: avatarColor }}>{avatarInitials}</div>

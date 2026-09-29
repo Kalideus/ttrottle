@@ -6,6 +6,7 @@ import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
 import { CreateTaskModal } from '@/components/CreateTaskModal';
+import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { avatarInitials } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -107,6 +108,7 @@ export default function AppPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -527,6 +529,27 @@ export default function AppPage() {
     setShowCreateTask(true);
   };
 
+  // Global shortcuts: "c" opens Create task, "?" toggles the cheat sheet.
+  // Ignored while typing anywhere (input/textarea/contentEditable) so they
+  // don't fight with actually typing a "c" or "?" into a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts((s) => !s);
+      } else if (e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCreateTaskClick();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeProjectId]);
+
   const submitCreateTask = async (name: string) => {
     if (!activeProjectId) return;
     const { data } = await createTask(supabase, {
@@ -679,6 +702,7 @@ export default function AppPage() {
         onOpenProfile={() => setShowProfile(true)}
         onChangePassword={handleChangePassword}
         onLogout={handleLogout}
+        onShowShortcuts={() => setShowShortcuts(true)}
       />
 
       {(showProfile || needsFullName) && currentProfile && (
@@ -697,6 +721,8 @@ export default function AppPage() {
       {showCreateTask && (
         <CreateTaskModal onCreate={submitCreateTask} onClose={() => setShowCreateTask(false)} />
       )}
+
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
       <div className="app-main">
         <Sidebar

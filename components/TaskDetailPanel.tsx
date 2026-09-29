@@ -714,6 +714,15 @@ export function TaskDetailPanel({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={handleSaveDescription}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveDescription();
+                } else if (e.key === 'Escape') {
+                  setDescription(task.description ?? '');
+                  setIsEditingDescription(false);
+                }
+              }}
               placeholder="Add a description…"
             />
           ) : (
