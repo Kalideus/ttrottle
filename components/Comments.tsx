@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
 
 export interface CommentItem {
@@ -29,17 +29,31 @@ interface CommentsProps {
 
 // "@name" only matches a single word, so this only requires (and only
 // supports) matching on someone's first name -- good enough for a small
-// team; a real @-autocomplete that inserts a token would be needed to
-// support full names or disambiguate duplicate first names.
+// team. Doesn't disambiguate two people sharing a first name (first match
+// wins); add last-name matching if that becomes a real problem.
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? '';
+}
+
 function extractMentions(body: string, users: { id: string; name: string }[]): string[] {
   const tokens = body.match(/@([a-zA-Z][\w'-]*)/g) ?? [];
   const ids = new Set<string>();
   for (const token of tokens) {
     const needle = token.slice(1).toLowerCase();
-    const match = users.find((u) => u.name.trim().split(/\s+/)[0]?.toLowerCase() === needle);
+    const match = users.find((u) => firstName(u.name).toLowerCase() === needle);
     if (match) ids.add(match.id);
   }
   return Array.from(ids);
+}
+
+// Active "@partial" the cursor is currently sitting inside, if any -- must
+// be preceded by whitespace/start-of-string so an email address's "@" (or
+// one mid-word) doesn't trigger it.
+function activeMentionAt(value: string, cursor: number): { start: number; query: string } | null {
+  const before = value.slice(0, cursor);
+  const match = before.match(/(?:^|\s)@([a-zA-Z0-9'_-]*)$/);
+  if (!match) return null;
+  return { start: cursor - match[1].length - 1, query: match[1] };
 }
 
 export function Comments({
@@ -58,12 +72,59 @@ export function Comments({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  const mentionMatches = mention
+    ? mentionableUsers
+        .filter((u) => firstName(u.name).toLowerCase().startsWith(mention.query.toLowerCase()))
+        .slice(0, 6)
+    : [];
+
+  const updateMentionState = (value: string, cursor: number) => {
+    setMention(activeMentionAt(value, cursor));
+    setActiveMentionIndex(0);
+  };
 
   const handleComposerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setComposerValue(value);
     const lines = value.split('\n').length;
     setComposerRows(Math.min(Math.max(lines, 1), 6));
+    updateMentionState(value, e.target.selectionStart);
+  };
+
+  const selectMention = (user: { id: string; name: string }) => {
+    if (!mention) return;
+    const insertion = `@${firstName(user.name)} `;
+    const before = composerValue.slice(0, mention.start);
+    const after = composerValue.slice(mention.start + 1 + mention.query.length);
+    const next = before + insertion + after;
+    setComposerValue(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const pos = before.length + insertion.length;
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!mention || !mentionMatches.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveMentionIndex((i) => (i + 1) % mentionMatches.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      selectMention(mentionMatches[activeMentionIndex]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setMention(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,6 +136,7 @@ export function Comments({
       await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
       setComposerValue('');
       setComposerRows(1);
+      setMention(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -284,23 +346,73 @@ export function Comments({
         </div>
 
         <form onSubmit={handleSubmit}>
-          <textarea
-            value={composerValue}
-            onChange={handleComposerChange}
-            rows={composerRows}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontFamily: 'inherit',
-              color: 'var(--text)',
-              resize: 'vertical',
-              marginBottom: '8px',
-            }}
-            placeholder="Add a comment…"
-          />
+          <div style={{ position: 'relative' }}>
+            <textarea
+              ref={composerRef}
+              value={composerValue}
+              onChange={handleComposerChange}
+              onSelect={(e) => updateMentionState(composerValue, e.currentTarget.selectionStart)}
+              onKeyDown={handleComposerKeyDown}
+              onBlur={() => setTimeout(() => setMention(null), 150)}
+              rows={composerRows}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                color: 'var(--text)',
+                resize: 'vertical',
+                marginBottom: '8px',
+              }}
+              placeholder="Add a comment…"
+            />
+
+            {mention && mentionMatches.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '-4px',
+                  zIndex: 50,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: '180px',
+                  overflow: 'hidden',
+                }}
+              >
+                {mentionMatches.map((u, i) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    // onMouseDown, not onClick: fires before the textarea's onBlur, so the
+                    // dropdown doesn't close (and unmount this button) first.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectMention(u);
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '8px 12px',
+                      border: 'none',
+                      background: i === activeMentionIndex ? 'var(--surface-alt)' : 'transparent',
+                      color: 'var(--text)',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Tip: use @name to mention</div>
