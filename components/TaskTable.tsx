@@ -285,22 +285,9 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                 }}
               />
             ) : (
-              <>
-                <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
-                  {task.name}
-                </div>
-                <button
-                  className="task-name-edit-btn"
-                  title="Rename"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTaskNameDraft(task.name);
-                    setEditingTaskNameId(task.id);
-                  }}
-                >
-                  <Pencil size={13} />
-                </button>
-              </>
+              <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
+                {task.name}
+              </div>
             )}
 
             {task.project && (
@@ -381,6 +368,18 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     }}
                   >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuTaskId(null);
+                        setTaskNameDraft(task.name);
+                        setEditingTaskNameId(task.id);
+                      }}
+                      style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}
+                    >
+                      <Pencil size={14} />
+                      Rename
+                    </button>
                     {!isLevel2 && (
                       <button
                         onClick={(e) => {
