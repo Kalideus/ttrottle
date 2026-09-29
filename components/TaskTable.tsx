@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus } from 'lucide-react';
+import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil } from 'lucide-react';
 import type { Task, Heading } from '@/lib/supabase/queries';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
@@ -285,16 +285,22 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                 }}
               />
             ) : (
-              <div
-                className={`task-name ${isCompleted ? 'completed' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setTaskNameDraft(task.name);
-                  setEditingTaskNameId(task.id);
-                }}
-              >
-                {task.name}
-              </div>
+              <>
+                <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
+                  {task.name}
+                </div>
+                <button
+                  className="task-name-edit-btn"
+                  title="Rename"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTaskNameDraft(task.name);
+                    setEditingTaskNameId(task.id);
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
+              </>
             )}
 
             {task.project && (
