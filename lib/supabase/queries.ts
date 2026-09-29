@@ -721,7 +721,7 @@ export type ProjectMember = {
   project_id: string
   profile_id: string | null
   email: string
-  role: 'owner' | 'member'
+  role: 'owner' | 'admin' | 'member'
   invited_at: string
   joined_at: string | null
   profile?: Profile | null

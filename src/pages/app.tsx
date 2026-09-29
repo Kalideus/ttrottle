@@ -591,9 +591,9 @@ export default function AppPage() {
     window.location.href = '/login';
   };
 
-  const handleCommentAdd = async (body: string) => {
+  const handleCommentAdd = async (body: string, mentions: string[]) => {
     if (!selectedTaskId || !currentUserId) return;
-    await createComment(supabase, { task_id: selectedTaskId, author_id: currentUserId, body });
+    await createComment(supabase, { task_id: selectedTaskId, author_id: currentUserId, body, mentions });
     const { data } = await getComments(supabase, selectedTaskId);
     setComments(mapComments(data ?? [], currentUserId));
   };

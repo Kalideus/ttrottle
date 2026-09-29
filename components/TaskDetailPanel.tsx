@@ -29,7 +29,7 @@ interface TaskDetailPanelProps {
   onTagAdd: (tag: Tag) => void;
   onTagRemove: (tagId: string) => void;
   onNewTag: (name: string, color: string) => Promise<void>;
-  onCommentAdd: (body: string) => Promise<void>;
+  onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
 }
@@ -747,6 +747,9 @@ export function TaskDetailPanel({
           taskId={task.id}
           comments={comments}
           loading={commentsLoading}
+          mentionableUsers={projectMembers
+            .filter((m) => m.profile_id)
+            .map((m) => ({ id: m.profile_id as string, name: m.profile?.name ?? m.email }))}
           onCommentAdd={onCommentAdd}
           onCommentEdit={onCommentEdit}
           onCommentDelete={onCommentDelete}

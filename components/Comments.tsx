@@ -19,16 +19,33 @@ export interface CommentItem {
 interface CommentsProps {
   taskId: string;
   comments: CommentItem[];
-  onCommentAdd: (body: string) => Promise<void>;
+  mentionableUsers: { id: string; name: string }[];
+  onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
   loading?: boolean;
 }
 
+// "@name" only matches a single word, so this only requires (and only
+// supports) matching on someone's first name -- good enough for a small
+// team; a real @-autocomplete that inserts a token would be needed to
+// support full names or disambiguate duplicate first names.
+function extractMentions(body: string, users: { id: string; name: string }[]): string[] {
+  const tokens = body.match(/@([a-zA-Z][\w'-]*)/g) ?? [];
+  const ids = new Set<string>();
+  for (const token of tokens) {
+    const needle = token.slice(1).toLowerCase();
+    const match = users.find((u) => u.name.trim().split(/\s+/)[0]?.toLowerCase() === needle);
+    if (match) ids.add(match.id);
+  }
+  return Array.from(ids);
+}
+
 export function Comments({
   taskId,
   comments,
+  mentionableUsers,
   onCommentAdd,
   onCommentEdit,
   onCommentDelete,
@@ -55,7 +72,7 @@ export function Comments({
 
     setIsSubmitting(true);
     try {
-      await onCommentAdd(composerValue);
+      await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
       setComposerValue('');
       setComposerRows(1);
     } finally {
