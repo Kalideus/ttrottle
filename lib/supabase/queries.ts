@@ -737,22 +737,6 @@ export async function getProjectMembers(supabase: SupabaseClient, projectId: str
   return { data: (data ?? []) as ProjectMember[], error }
 }
 
-export async function inviteProjectMember(supabase: SupabaseClient, { project_id, email }: { project_id: string; email: string }) {
-  const normalizedEmail = email.trim().toLowerCase()
-  const { data: profile } = await supabase.from('profiles').select('id').eq('email', normalizedEmail).maybeSingle()
-
-  return supabase
-    .from('project_members')
-    .insert({
-      project_id,
-      email: normalizedEmail,
-      profile_id: profile?.id ?? null,
-      joined_at: profile ? new Date().toISOString() : null,
-    })
-    .select('*, profile:profiles!project_members_profile_id_fkey(*)')
-    .single()
-}
-
 export async function removeProjectMember(supabase: SupabaseClient, projectId: string, email: string) {
   return supabase.from('project_members').delete().eq('project_id', projectId).eq('email', email)
 }

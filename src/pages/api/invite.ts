@@ -21,34 +21,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const email = String(req.body?.email ?? '').trim().toLowerCase();
   const projectId = String(req.body?.projectId ?? '');
+  const sendEmail = req.body?.sendEmail !== false;
   if (!email || !projectId) return res.status(400).json({ error: 'email and projectId are required' });
 
-  // Caller must belong to the project they're inviting to (creators get an 'owner' row).
+  // Caller must be an owner or admin of the project they're inviting to.
   const { data: membership } = await admin
     .from('project_members')
-    .select('email')
+    .select('role')
     .eq('project_id', projectId)
     .eq('profile_id', caller.user.id)
     .maybeSingle();
-  if (!membership) return res.status(403).json({ error: 'You are not a member of this project' });
+  if (!membership || !['owner', 'admin'].includes(membership.role)) {
+    return res.status(403).json({ error: 'Only project owners and admins can invite members' });
+  }
 
   const origin = req.headers.origin ?? `https://${req.headers.host}`;
 
   // Invite the auth user, or find them if they already have an account.
   let invitedId: string | null = null;
   let emailSent = false;
+  let link: string | undefined;
   // Land on /login so they're forced to set a password before entering the app.
-  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${origin}/login`,
-  });
-  if (invited?.user) {
-    invitedId = invited.user.id;
-    emailSent = true;
+  const redirectTo = `${origin}/login`;
+
+  if (sendEmail) {
+    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
+    if (invited?.user) {
+      invitedId = invited.user.id;
+      emailSent = true;
+    } else {
+      // ponytail: listUsers is one page of 50; fine for a small team, paginate if it grows.
+      const { data: list } = await admin.auth.admin.listUsers();
+      invitedId = list?.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
+      if (!invitedId) return res.status(400).json({ error: inviteErr?.message ?? 'Could not invite that address' });
+    }
   } else {
-    // ponytail: listUsers is one page of 50; fine for a small team, paginate if it grows.
-    const { data: list } = await admin.auth.admin.listUsers();
-    invitedId = list?.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
-    if (!invitedId) return res.status(400).json({ error: inviteErr?.message ?? 'Could not invite that address' });
+    // No email -- hand back a raw link the caller can send themselves (Slack,
+    // text, whatever), so a corporate mail scanner never sees it. `invite` type
+    // creates the account; falls back to `recovery` if they already have one
+    // (e.g. re-sharing a link for someone who never finished setting a password).
+    const { data: gen, error: genErr } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { redirectTo } });
+    if (gen?.user) {
+      invitedId = gen.user.id;
+      link = gen.properties?.action_link;
+    } else {
+      const { data: recGen, error: recErr } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo } });
+      if (!recGen?.user) return res.status(400).json({ error: recErr?.message ?? genErr?.message ?? 'Could not generate a link' });
+      invitedId = recGen.user.id;
+      link = recGen.properties?.action_link;
+    }
   }
 
   // A profile row is required for the app to work once they log in. The
@@ -66,5 +87,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   );
   if (memErr) return res.status(400).json({ error: memErr.message });
 
-  return res.status(200).json({ ok: true, emailSent });
+  return res.status(200).json({ ok: true, emailSent, link });
 }

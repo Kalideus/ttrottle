@@ -542,19 +542,30 @@ export default function AppPage() {
     }
     const email = window.prompt('Invite by email:');
     if (!email || !email.trim()) return;
+    // Corporate mail scanners (Outlook/M365 Safe Links) can burn a one-time
+    // invite link before the person clicks it -- offer a copyable link that
+    // skips email entirely as a fallback.
+    const sendEmail = window.confirm(
+      'Email them the invite link?\n\nCancel to get a copyable link instead (send it yourself -- avoids work email link-scanners eating it).'
+    );
 
     const { data: { session } } = await supabase.auth.getSession();
     const resp = await fetch('/api/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
-      body: JSON.stringify({ email: email.trim(), projectId: activeProjectId }),
+      body: JSON.stringify({ email: email.trim(), projectId: activeProjectId, sendEmail }),
     });
     const result = await resp.json();
     if (!resp.ok) {
       window.alert(`Could not invite: ${result.error ?? resp.statusText}`);
       return;
     }
-    window.alert(result.emailSent ? `Invite email sent to ${email.trim()}.` : `${email.trim()} already has an account and was added to the project.`);
+    if (result.link) {
+      await navigator.clipboard.writeText(result.link);
+      window.alert(`Invite link copied to clipboard for ${email.trim()} -- send it to them yourself.`);
+    } else {
+      window.alert(result.emailSent ? `Invite email sent to ${email.trim()}.` : `${email.trim()} already has an account and was added to the project.`);
+    }
     const { data: memberRows } = await getProjectMembers(supabase, activeProjectId);
     setProjectMembers(memberRows ?? []);
   };
