@@ -73,9 +73,6 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   // A task just created by the "Create" button opens ready to name.
   const isFresh = task.name === 'Untitled task';
-  // Creator can always delete; so can the project's owner/admin.
-  const myRole = projectMembers.find((m) => m.profile_id === currentUserId)?.role;
-  const canDeleteTask = task.created_by === currentUserId || myRole === 'owner' || myRole === 'admin';
   const [isEditingTitle, setIsEditingTitle] = useState(isFresh);
   const [title, setTitle] = useState(isFresh ? '' : task.name);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -171,24 +168,19 @@ export function TaskDetailPanel({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               }}
             >
-              {canDeleteTask ? (
-                <button
-                  onClick={() => {
-                    setShowOptionsMenu(false);
-                    if (window.confirm(`Delete "${task.name}"? This can't be undone.`)) {
-                      onTaskDelete(task.id);
-                    }
-                  }}
-                  style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#D64545', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Trash2 size={14} />
-                  Delete task
-                </button>
-              ) : (
-                <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Only the task creator or a project owner/admin can delete this task.
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  setShowOptionsMenu(false);
+                  // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
+                  if (window.confirm(`Delete "${task.name}"? It's recoverable for 90 days, then removed for good.`)) {
+                    onTaskDelete(task.id);
+                  }
+                }}
+                style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#D64545', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Trash2 size={14} />
+                Delete task
+              </button>
             </div>
           )}
         </div>

@@ -359,25 +359,20 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                         Add subtask
                       </button>
                     )}
-                    {task.created_by === currentUserId ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenMenuTaskId(null);
-                          if (window.confirm(`Delete "${task.name}"? This can't be undone.`)) {
-                            onTaskDelete(task.id);
-                          }
-                        }}
-                        style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#D64545', display: 'flex', alignItems: 'center', gap: '8px' }}
-                      >
-                        <Trash2 size={14} />
-                        Delete task
-                      </button>
-                    ) : (
-                      <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                        Only the creator can delete this task.
-                      </div>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuTaskId(null);
+                        // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
+                        if (window.confirm(`Delete "${task.name}"? It's recoverable for 90 days, then removed for good.`)) {
+                          onTaskDelete(task.id);
+                        }
+                      }}
+                      style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#D64545', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Trash2 size={14} />
+                      Delete task
+                    </button>
                   </div>
                 </>
               )}

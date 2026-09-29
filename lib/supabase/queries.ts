@@ -34,11 +34,14 @@ export type Task = {
   position: number
   created_by: string | null
   created_at: string
+  deleted_at?: string | null
+  deleted_by?: string | null
   assignee?: Profile | null
   subtasks?: Task[]
   tags?: Tag[]
   comment_count?: number
   project?: { id: string; name: string; color: string } | null
+  deletedByProfile?: Profile | null
 }
 
 export type Comment = {
@@ -67,6 +70,8 @@ export type Profile = {
   initials: string
   avatar_url: string | null
   avatar_color: string | null
+  can_create_projects?: boolean
+  is_super_admin?: boolean
 }
 
 export type Notification = {
@@ -243,6 +248,7 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
     `)
     .eq('project_id', projectId)
     .is('parent_task_id', null)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
 
   if (tasksError) return { data: [], error: tasksError }
@@ -284,11 +290,13 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   const normalized = (tasks ?? []).map((task) => ({
     ...task,
     assignee: task.assignee_id ? profileMap.get(task.assignee_id) ?? null : null,
-    subtasks: (task.subtasks ?? []).map((subtask: Task) => ({
-      ...subtask,
-      assignee: subtask.assignee_id ? profileMap.get(subtask.assignee_id) ?? null : null,
-      tags: tagsByTask.get(subtask.id) ?? [],
-    })),
+    subtasks: (task.subtasks ?? [])
+      .filter((subtask: Task) => !subtask.deleted_at)
+      .map((subtask: Task) => ({
+        ...subtask,
+        assignee: subtask.assignee_id ? profileMap.get(subtask.assignee_id) ?? null : null,
+        tags: tagsByTask.get(subtask.id) ?? [],
+      })),
     comment_count: countMap.get(task.id) ?? 0,
     tags: tagsByTask.get(task.id) ?? [],
   }))
@@ -449,8 +457,37 @@ export async function updateTask(
   return result
 }
 
-export async function deleteTask(supabase: SupabaseClient, id: string) {
-  return supabase.from('tasks').delete().eq('id', id)
+// Soft delete: anyone can delete a task, but it's recoverable for 90 days
+// (see /admin/deleted-tasks and the purge cron) rather than gone for good.
+export async function deleteTask(supabase: SupabaseClient, id: string, deletedBy?: string | null) {
+  return supabase.from('tasks').update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy ?? null }).eq('id', id)
+}
+
+export async function restoreTask(supabase: SupabaseClient, id: string) {
+  return supabase.from('tasks').update({ deleted_at: null, deleted_by: null }).eq('id', id)
+}
+
+export async function getDeletedTasks(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*, project:projects!tasks_project_id_fkey(id, name, color)')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+
+  if (error) return { data: [], error }
+
+  const deleterIds = Array.from(new Set((data ?? []).map((t) => t.deleted_by).filter(Boolean))) as string[]
+  const deleterMap = new Map<string, Profile>()
+  if (deleterIds.length) {
+    const { data: profiles } = await supabase.from('profiles').select('*').in('id', deleterIds)
+    ;(profiles ?? []).forEach((p: Profile) => deleterMap.set(p.id, p))
+  }
+
+  const withDeleter = (data ?? []).map((t) => ({
+    ...t,
+    deletedByProfile: t.deleted_by ? deleterMap.get(t.deleted_by) ?? null : null,
+  }))
+  return { data: withDeleter, error: null }
 }
 
 export async function getMyTasks(supabase: SupabaseClient, userId: string) {
@@ -462,6 +499,7 @@ export async function getMyTasks(supabase: SupabaseClient, userId: string) {
     `)
     .eq('assignee_id', userId)
     .eq('completed', false)
+    .is('deleted_at', null)
     .order('due_date', { ascending: true })
 
   return { data, error }

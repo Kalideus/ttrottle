@@ -343,7 +343,7 @@ export default function AppPage() {
   };
 
   const handleTaskDelete = async (taskId: string) => {
-    await deleteTask(supabase, taskId);
+    await deleteTask(supabase, taskId, currentUserId);
     if (selectedTaskId === taskId) setSelectedTaskId(null);
     if (activeSection === 'my-tasks' && currentUserId) {
       const { data } = await getMyTasks(supabase, currentUserId);
