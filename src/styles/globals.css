@@ -874,6 +874,20 @@ button { cursor: pointer; }
   color: var(--text-muted);
 }
 
+.task-name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface-alt);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: -3px -7px;
+  outline: none;
+}
+
 .task-row.level-2 .task-name {
   font-size: 14px;
 }
@@ -1852,7 +1866,10 @@ button { cursor: pointer; }
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--surface);
+  /* surface-alt, not surface: the card itself is --surface, so an unfocused
+     field needs its own contrast against it to read as a field at all
+     (was invisible-looking until focus turned the border/glow on). */
+  background: var(--surface-alt);
   color: var(--text);
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;

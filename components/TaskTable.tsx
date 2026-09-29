@@ -41,6 +41,14 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
   const [undoTask, setUndoTask] = useState<{ id: string; name: string } | null>(null);
   const [openMenuTaskId, setOpenMenuTaskId] = useState<string | null>(null);
   const [addingSubtaskTo, setAddingSubtaskTo] = useState<string | null>(null);
+  const [editingTaskNameId, setEditingTaskNameId] = useState<string | null>(null);
+  const [taskNameDraft, setTaskNameDraft] = useState('');
+
+  const saveTaskName = (task: Task) => {
+    const trimmed = taskNameDraft.trim();
+    if (trimmed && trimmed !== task.name) onTaskUpdate(task.id, { name: trimmed });
+    setEditingTaskNameId(null);
+  };
 
   const headingMap = new Map(headings.map((h) => [h.id, h.name]));
 
@@ -263,9 +271,31 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
               {(isCompleted || completingTaskId === task.id) && <Check size={12} strokeWidth={3} />}
             </div>
 
-            <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
-              {task.name}
-            </div>
+            {editingTaskNameId === task.id ? (
+              <input
+                className="task-name-input"
+                autoFocus
+                value={taskNameDraft}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setTaskNameDraft(e.target.value)}
+                onBlur={() => saveTaskName(task)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') setEditingTaskNameId(null);
+                }}
+              />
+            ) : (
+              <div
+                className={`task-name ${isCompleted ? 'completed' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTaskNameDraft(task.name);
+                  setEditingTaskNameId(task.id);
+                }}
+              >
+                {task.name}
+              </div>
+            )}
 
             {task.project && (
               <span
