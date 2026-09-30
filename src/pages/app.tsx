@@ -125,6 +125,9 @@ export default function AppPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  // Super-admin bulk select: null = off, a Set = on (possibly empty).
+  const [bulk, setBulk] = useState<Set<string> | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [allPeople, setAllPeople] = useState<Profile[]>([]);
 
   const supabase = useMemo(() => createClient(), []);
@@ -356,6 +359,28 @@ export default function AppPage() {
 
     return result;
   }, [taskPool, activeFilters, searchQuery, showCompleted, sortField, sortDirection, activeSection]);
+
+  const allVisibleTaskIds = useMemo(
+    () => displayedTasks.flatMap((t) => [t.id, ...(t.subtasks ?? []).map((s) => s.id)]),
+    [displayedTasks]
+  );
+
+  // leave select mode when switching project
+  useEffect(() => setBulk(null), [activeProjectId]);
+
+  const handleBulkDelete = async () => {
+    if (!bulk?.size) return;
+    if (!window.confirm(`Delete ${bulk.size} task${bulk.size === 1 ? '' : 's'}? They can be restored from Admin → Deleted tasks.`)) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all([...bulk].map((id) => deleteTask(supabase, id, currentUserId)));
+      if (selectedTaskId && bulk.has(selectedTaskId)) setSelectedTaskId(null);
+      setBulk(new Set());
+      await refreshTasks();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const refreshTasks = async () => {
     if (!activeProjectId) return;
@@ -902,6 +927,30 @@ export default function AppPage() {
                 availableTags={availableTags}
               />
 
+              {currentProfile?.is_super_admin && (
+                <div className="bulk-bar">
+                  {bulk ? (
+                    <>
+                      <span className="bulk-count">{bulk.size} selected</span>
+                      <button type="button" className="bulk-btn" onClick={() => setBulk(new Set(allVisibleTaskIds))}>
+                        Select all ({allVisibleTaskIds.length})
+                      </button>
+                      <button type="button" className="bulk-btn" onClick={() => setBulk(new Set())} disabled={bulk.size === 0}>
+                        Clear
+                      </button>
+                      <button type="button" className="bulk-btn is-danger" onClick={handleBulkDelete} disabled={bulk.size === 0 || bulkDeleting}>
+                        {bulkDeleting ? 'Deleting…' : `Delete ${bulk.size || ''}`}
+                      </button>
+                      <button type="button" className="bulk-btn" onClick={() => setBulk(null)}>Done</button>
+                    </>
+                  ) : (
+                    <button type="button" className="bulk-btn" onClick={() => setBulk(new Set())}>
+                      Select tasks
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="app-content">
                 {!loading && activeProjectId ? (
                   <>
@@ -921,6 +970,15 @@ export default function AppPage() {
                       onNoHeadingRename={handleNoHeadingRename}
                       onTaskReorder={handleTaskReorder}
                       manualOrder={sortField === 'position'}
+                      bulkSelected={bulk}
+                      onBulkToggle={(id) =>
+                        setBulk((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(id)) next.delete(id);
+                          else next.add(id);
+                          return next;
+                        })
+                      }
                     />
                     {selectedTask && (
                       <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />

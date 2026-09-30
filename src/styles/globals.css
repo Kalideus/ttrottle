@@ -1963,6 +1963,19 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 .modal-btn.ghost { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
 .modal-btn.ghost:hover { background: var(--surface-alt); }
 
+/* Super-admin bulk select */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.bulk-count { font-size: 13px; font-weight: 600; color: var(--text); margin-right: 4px; }
+.bulk-btn {
+  height: 28px; padding: 0 10px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.bulk-btn:hover { background: var(--surface-alt); }
+.bulk-btn:disabled { opacity: 0.5; cursor: default; }
+.bulk-btn.is-danger { color: #D64545; border-color: #D64545; }
+.task-bulk-check { width: 16px; height: 16px; margin: 0 6px 0 0; flex-shrink: 0; cursor: pointer; accent-color: var(--accent); }
+
 /* Project members window */
 .mm-card { max-width: 480px; max-height: calc(100vh - 48px); overflow-y: auto; }
 .mm-section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }

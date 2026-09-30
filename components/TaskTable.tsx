@@ -25,9 +25,12 @@ interface TaskTableProps {
   manualOrder?: boolean;
   /** Flat list with no section headers or "+ Add section" — used by My Tasks. */
   flat?: boolean;
+  // Bulk-select mode: when set, each row gets a checkbox.
+  bulkSelected?: Set<string> | null;
+  onBulkToggle?: (taskId: string) => void;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -226,6 +229,16 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 ? undefined : 'grab' }}
         >
           <div className="task-row-content">
+            {bulkSelected && (
+              <input
+                type="checkbox"
+                className="task-bulk-check"
+                aria-label={`Select ${task.name}`}
+                checked={bulkSelected.has(task.id)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => onBulkToggle?.(task.id)}
+              />
+            )}
             {hasSubtasks && (
               <div
                 className={`task-disclosure ${isExpanded ? '' : 'collapsed'}`}

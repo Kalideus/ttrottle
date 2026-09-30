@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Protected from '../../components/Protected';
 import { createClient } from '@/lib/supabase/client';
@@ -25,6 +25,10 @@ export default function TeamAdminPage() {
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // "Add to projects" panel: which person it's open for, and the ticked projects
+  const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [pickedRole, setPickedRole] = useState<(typeof ROLES)[number]>('member');
   const statusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const load = async () => {
@@ -121,7 +125,8 @@ export default function TeamAdminPage() {
           <h2 className="text-lg font-semibold text-slate-900">People</h2>
           <p className="mt-1 text-sm text-slate-600">
             Super admin sees and restores deleted tasks (/admin/deleted-tasks) across every project. Can create
-            projects lets someone use the &ldquo;+ new project&rdquo; button.
+            projects lets someone use the &ldquo;+ new project&rdquo; button. &ldquo;Add to projects&rdquo; puts someone
+            who already has an account into several projects at once, with no invite email or link.
           </p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
@@ -131,11 +136,19 @@ export default function TeamAdminPage() {
                   <th className="py-2 pr-4">Email</th>
                   <th className="py-2 pr-4">Can create projects</th>
                   <th className="py-2 pr-4">Super admin</th>
+                  <th className="py-2 pr-4">Projects</th>
                 </tr>
               </thead>
               <tbody>
-                {profiles.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-100">
+                {profiles.map((p) => {
+                  const inIds = new Set(members.filter((m) => m.profile_id === p.id).map((m) => m.project_id));
+                  const shared = activeProjects.filter((pr) => !pr.is_private);
+                  const inProjects = shared.filter((pr) => inIds.has(pr.id));
+                  const notIn = shared.filter((pr) => !inIds.has(pr.id));
+                  const open = addingFor === p.id;
+                  return (
+                  <Fragment key={p.id}>
+                  <tr className={open ? 'bg-slate-50' : 'border-b border-slate-100'}>
                     <td className="py-2 pr-4">{p.name}</td>
                     <td className="py-2 pr-4 text-slate-500">{p.email}</td>
                     <td className="py-2 pr-4">
@@ -152,8 +165,83 @@ export default function TeamAdminPage() {
                         onChange={(e) => callAdmin('set-flags', { userId: p.id, is_super_admin: e.target.checked })}
                       />
                     </td>
+                    <td className="py-2 pr-4">
+                      <span className="text-slate-500" title={inProjects.map((pr) => pr.name).join(', ')}>
+                        {inProjects.length} of {shared.length}
+                      </span>
+                      {notIn.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setAddingFor(open ? null : p.id);
+                            setPicked(new Set());
+                            setPickedRole('member');
+                          }}
+                          aria-expanded={open}
+                          className="ml-3 rounded-lg border border-sky-300 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-50"
+                        >
+                          {open ? 'Cancel' : 'Add to projects'}
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  {open && (
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <td colSpan={5} className="px-3 pb-4 pt-1">
+                        <div className="flex flex-wrap gap-x-5 gap-y-2">
+                          {notIn.map((pr) => (
+                            <label key={pr.id} className="inline-flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={picked.has(pr.id)}
+                                onChange={() =>
+                                  setPicked((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(pr.id)) next.delete(pr.id);
+                                    else next.add(pr.id);
+                                    return next;
+                                  })
+                                }
+                              />
+                              <span>{pr.icon} {pr.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={() => setPicked(picked.size === notIn.length ? new Set() : new Set(notIn.map((pr) => pr.id)))}
+                            className="text-xs text-slate-600 hover:underline"
+                          >
+                            {picked.size === notIn.length ? 'Select none' : 'Select all'}
+                          </button>
+                          <label className="inline-flex items-center gap-2 text-slate-600">
+                            As
+                            <select
+                              value={pickedRole}
+                              onChange={(e) => setPickedRole(e.target.value as (typeof ROLES)[number])}
+                              className="rounded border border-slate-300 px-2 py-1"
+                            >
+                              {ROLES.map((r) => (
+                                <option key={r} value={r}>{r}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            disabled={picked.size === 0 || status === 'saving'}
+                            onClick={async () => {
+                              await callAdmin('add-members', { userId: p.id, projectIds: [...picked], role: pickedRole });
+                              setAddingFor(null);
+                            }}
+                            className="rounded-lg bg-sky-600 px-3 py-1 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                          >
+                            Add to {picked.size || ''} project{picked.size === 1 ? '' : 's'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
