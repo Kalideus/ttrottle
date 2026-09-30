@@ -8,6 +8,7 @@ import { InviteModal } from '@/components/InviteModal';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { MembersModal } from '@/components/MembersModal';
+import { GlobalSearch } from '@/components/GlobalSearch';
 import { avatarInitials, squareAvatarBlob, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -30,6 +31,7 @@ import {
   addProjectMember,
   removeProjectMember,
   getProfiles,
+  searchTasks,
   getComments,
   createComment,
   updateComment,
@@ -819,6 +821,9 @@ export default function AppPage() {
     }
   };
 
+  // stable identity so GlobalSearch's debounce effect doesn't re-run every render
+  const runTaskSearch = useCallback((q: string) => searchTasks(supabase, q), [supabase]);
+
   const openInProject = (projectId: string, taskId?: string | null) => {
     setActiveProjectId(projectId);
     setSelectedTaskId(taskId ?? null);
@@ -840,8 +845,14 @@ export default function AppPage() {
         onCreateTask={handleCreateTaskClick}
         userName={currentProfile?.name}
         userEmail={currentProfile?.email}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        search={
+          <GlobalSearch
+            projects={projects}
+            searchTasks={runTaskSearch}
+            onOpenTask={openInProject}
+            onOpenProject={(projectId) => openInProject(projectId)}
+          />
+        }
         avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
         avatarColor={currentProfile?.avatar_color ?? 'var(--accent)'}
         avatarUrl={currentProfile?.avatar_url}

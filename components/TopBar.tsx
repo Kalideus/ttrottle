@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Menu, HelpCircle, ChevronDown, Plus, Search } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Menu, HelpCircle, ChevronDown, Plus } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
 
 interface TopBarProps {
   onHamburgerClick: () => void;
   sidebarOpen: boolean;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
+  search: ReactNode;
   avatarInitials?: string;
   avatarColor?: string;
   avatarUrl?: string | null;
@@ -25,8 +24,7 @@ interface TopBarProps {
 export function TopBar({
   onHamburgerClick,
   sidebarOpen,
-  searchQuery,
-  onSearchChange,
+  search,
   avatarInitials = '?',
   avatarColor = 'var(--accent)',
   avatarUrl,
@@ -40,22 +38,6 @@ export function TopBar({
   onShowShortcuts,
 }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  // Decided after mount (navigator isn't available during server render).
-  const [modKey, setModKey] = useState('Ctrl');
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setModKey('⌘');
-
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const menuItem = (label: string, action: () => void) => (
     <button
@@ -89,21 +71,7 @@ export function TopBar({
       </div>
 
       <div className="topbar-center">
-        <label className="topbar-search">
-          <Search size={16} aria-hidden />
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder="Search tasks"
-            aria-label="Search tasks"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-          <span className="topbar-keycaps" aria-hidden>
-            <kbd className="topbar-keycap">{modKey}</kbd>
-            <kbd className="topbar-keycap">K</kbd>
-          </span>
-        </label>
+        {search}
         <button className="topbar-icon-btn topbar-create" onClick={onCreateTask} title="Create task (C)" aria-label="Create task">
           <Plus size={20} />
         </button>

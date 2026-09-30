@@ -124,6 +124,21 @@ export type TaskWithRelations = Task & {
   comment_count: number
 }
 
+// Top-bar search: task names containing `query`, across every project the
+// user can see (RLS does the scoping). Open tasks first.
+export async function searchTasks(supabase: SupabaseClient, query: string) {
+  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  const { data } = await supabase
+    .from('tasks')
+    .select('id, name, project_id, completed, parent_task_id')
+    .ilike('name', pattern)
+    .is('deleted_at', null)
+    .order('completed', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(10)
+  return data ?? []
+}
+
 export async function getProjects(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('projects')
