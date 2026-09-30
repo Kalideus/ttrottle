@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Link from 'next/link';
 import Protected from '../../components/Protected';
 
 export default function RecurrenceAdminPage() {
@@ -34,6 +35,9 @@ export default function RecurrenceAdminPage() {
   return (
     <Protected>
       <div className="mx-auto max-w-4xl px-6 py-8">
+        <Link href="/app" className="mb-4 inline-flex text-sm font-medium text-slate-600 hover:text-slate-900">
+          ← Back to app
+        </Link>
         <header className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Admin</p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900">Recurrence</h1>

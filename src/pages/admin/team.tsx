@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import Protected from '../../components/Protected';
 import { createClient } from '@/lib/supabase/client';
 import { InviteModal } from '@/components/InviteModal';
@@ -23,6 +24,8 @@ export default function TeamAdminPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const statusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const load = async () => {
     const p = await getCurrentProfile(supabase);
@@ -46,6 +49,7 @@ export default function TeamAdminPage() {
 
   const callAdmin = async (path: string, body: object) => {
     setError(null);
+    setStatus('saving');
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -56,10 +60,14 @@ export default function TeamAdminPage() {
     });
     const result = await resp.json();
     if (!resp.ok) {
+      setStatus('idle');
       setError(result.error ?? resp.statusText);
       throw new Error(result.error);
     }
     await load();
+    setStatus('saved');
+    clearTimeout(statusTimer.current);
+    statusTimer.current = setTimeout(() => setStatus('idle'), 2500);
   };
 
   const activeProjects = projects.filter((p) => !p.archived);
@@ -71,6 +79,9 @@ export default function TeamAdminPage() {
     return (
       <Protected>
         <div className="mx-auto max-w-5xl px-6 py-8">
+          <Link href="/app" className="mb-4 inline-flex text-sm font-medium text-slate-600 hover:text-slate-900">
+            ← Back to app
+          </Link>
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
             You don&rsquo;t have access to this page.
           </div>
@@ -82,10 +93,24 @@ export default function TeamAdminPage() {
   return (
     <Protected>
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-8">
+        <Link href="/app" className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900">
+          ← Back to app
+        </Link>
+
         <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Admin</p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">Team &amp; permissions</h1>
-          <p className="mt-1 text-sm text-slate-600">Site-wide flags, project roles, invites and archived projects.</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Admin</p>
+              <h1 className="mt-2 text-3xl font-bold text-slate-900">Team &amp; permissions</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Site-wide flags, project roles, invites and archived projects. Changes save as soon as you make them.
+              </p>
+            </div>
+            <span role="status" aria-live="polite" className="text-sm font-medium">
+              {status === 'saving' && <span className="text-slate-500">Saving…</span>}
+              {status === 'saved' && <span className="text-emerald-600">✓ Saved</span>}
+            </span>
+          </div>
         </header>
 
         {error && (
