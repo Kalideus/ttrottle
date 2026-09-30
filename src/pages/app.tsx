@@ -7,7 +7,7 @@ import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
-import { avatarInitials } from '@/lib/avatar';
+import { avatarInitials, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
@@ -774,6 +774,12 @@ export default function AppPage() {
           members={projectMembers}
           headings={headings}
           tags={availableTags}
+          onCreateTag={async (name) => {
+            const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+            const { data: tag } = await createTag(supabase, { name, color, created_by: currentUserId });
+            if (tag) setAvailableTags((prev) => [...prev, tag]);
+            return tag ?? null;
+          }}
           onCreate={submitCreateTask}
           onClose={() => setShowCreateTask(false)}
         />

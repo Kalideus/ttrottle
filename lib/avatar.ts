@@ -8,6 +8,7 @@ export function avatarInitials(name?: string | null, email?: string | null): str
   return '?';
 }
 
+// Keep in sync with the random default in db/migrations/019_random_avatar_color.sql.
 export const AVATAR_COLORS: string[] = [
   '#4573D2', // blue
   '#F06A6A', // coral

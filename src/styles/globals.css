@@ -2020,6 +2020,38 @@ button { cursor: pointer; }
 }
 .ct-chip.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .ct-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--chip, var(--text-muted)); }
+.ct-picker { position: relative; justify-self: start; }
+.ct-picker-btn { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; text-align: left; }
+.ct-picker-backdrop { position: fixed; inset: 0; z-index: 1; }
+.ct-picker-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  width: 260px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.25);
+}
+.ct-picker-list { max-height: 220px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; }
+.ct-picker-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: none; border-radius: 6px;
+  background: transparent; font: inherit; font-size: 13px; color: var(--text);
+  text-align: left; cursor: pointer;
+}
+.ct-picker-item:hover, .ct-picker-item[aria-selected='true'] { background: var(--surface-alt); }
+.ct-avatar {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: #fff; text-transform: uppercase; object-fit: cover;
+}
+.ct-avatar-empty { border: 1.5px dashed var(--border-strong); }
+.ct-muted { color: var(--text-muted); }
+.ct-chip-add { border-style: dashed; color: var(--accent); }
+.ct-empty { font-size: 12px; color: var(--text-muted); padding: 4px 0; }
 .ct-inline { display: flex; flex-wrap: wrap; gap: 8px; }
 .ct-full { width: 100%; min-width: 0; }
 .ct-textarea { height: auto; padding: 6px 10px; line-height: 1.45; resize: vertical; }

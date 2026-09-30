@@ -25,8 +25,22 @@ interface CreateTaskModalProps {
   members: ProjectMember[];
   headings: Heading[];
   tags: Tag[];
+  onCreateTag: (name: string) => Promise<Tag | null>;
   onCreate: (task: NewTaskInput) => Promise<void>;
   onClose: () => void;
+}
+
+const matches = (text: string, q: string) => text.toLowerCase().includes(q.trim().toLowerCase());
+const memberName = (m: ProjectMember) => m.profile?.name ?? m.email;
+
+function MemberAvatar({ member }: { member: ProjectMember }) {
+  const p = member.profile;
+  if (p?.avatar_url) return <img className="ct-avatar" src={p.avatar_url} alt="" />;
+  return (
+    <span className="ct-avatar" style={{ background: p?.avatar_color || 'var(--accent)' }} aria-hidden>
+      {p?.initials ?? member.email.slice(0, 2).toUpperCase()}
+    </span>
+  );
 }
 
 const PRIORITIES = [
@@ -36,7 +50,7 @@ const PRIORITIES = [
   { value: 'high', label: 'High' },
 ] as const;
 
-export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: CreateTaskModalProps) {
+export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate, onClose }: CreateTaskModalProps) {
   useEscapeToClose(onClose);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -52,13 +66,55 @@ export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: 
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [tagQuery, setTagQuery] = useState('');
+  const [personQuery, setPersonQuery] = useState('');
+  const [creatingTag, setCreatingTag] = useState(false);
+
+  const people = members.filter((m) => m.profile_id);
+
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState('');
+  const assignee = people.find((m) => m.profile_id === assigneeId);
+  const assigneeMatches = people.filter((m) => matches(`${memberName(m)} ${m.email}`, assigneeQuery));
+  const pickAssignee = (id: string) => {
+    setAssigneeId(id);
+    setAssigneeOpen(false);
+    setAssigneeQuery('');
+  };
+
+  // Selected items always stay visible; the search narrows the rest.
+  const visibleTags = tags.filter((t) => tagIds.includes(t.id) || matches(t.name, tagQuery));
+  const exactTag = tags.find((t) => t.name.toLowerCase() === tagQuery.trim().toLowerCase());
+  const visiblePeople = people.filter(
+    (m) => followerIds.includes(m.profile_id!) || matches(`${m.profile?.name ?? ''} ${m.email}`, personQuery)
+  );
+
+  const selectTag = (id: string) => {
+    if (!tagIds.includes(id)) setTagIds([...tagIds, id]);
+    setTagQuery('');
+  };
+
+  const handleNewTag = async () => {
+    const tagName = tagQuery.trim();
+    if (!tagName || creatingTag) return;
+    setCreatingTag(true);
+    try {
+      const tag = await onCreateTag(tagName);
+      if (tag) {
+        setTagIds((prev) => [...prev, tag.id]);
+        setTagQuery('');
+      }
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+
   const addSubtask = () => {
     if (!subtaskDraft.trim()) return;
     setSubtasks([...subtasks, subtaskDraft.trim()]);
     setSubtaskDraft('');
   };
 
-  const people = members.filter((m) => m.profile_id);
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
   const handleCreate = async () => {
@@ -125,15 +181,74 @@ export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: 
           />
 
           <div className="ct-props">
-            <label className="ct-row">
+            <div className="ct-row">
               <span className="ct-label">Assignee</span>
-              <select className="ct-control" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-                <option value="">Unassigned</option>
-                {people.map((m) => (
-                  <option key={m.profile_id!} value={m.profile_id!}>{m.profile?.name ?? m.email}</option>
-                ))}
-              </select>
-            </label>
+              <div className="ct-picker">
+                <button
+                  type="button"
+                  className="ct-control ct-picker-btn"
+                  aria-haspopup="listbox"
+                  aria-expanded={assigneeOpen}
+                  onClick={() => setAssigneeOpen(!assigneeOpen)}
+                >
+                  {assignee ? (
+                    <>
+                      <MemberAvatar member={assignee} />
+                      {memberName(assignee)}
+                    </>
+                  ) : (
+                    <span className="ct-muted">Unassigned</span>
+                  )}
+                </button>
+
+                {assigneeOpen && (
+                  <>
+                    <div className="ct-picker-backdrop" onClick={() => setAssigneeOpen(false)} />
+                    <div className="ct-picker-pop">
+                      <input
+                        className="ct-control ct-full"
+                        aria-label="Search people"
+                        placeholder="Search people"
+                        value={assigneeQuery}
+                        onChange={(e) => setAssigneeQuery(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            e.stopPropagation(); // close the picker, not the whole modal
+                            setAssigneeOpen(false);
+                          } else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+                            e.preventDefault();
+                            if (assigneeMatches[0]) pickAssignee(assigneeMatches[0].profile_id!);
+                          }
+                        }}
+                      />
+                      <div className="ct-picker-list" role="listbox">
+                        {!assigneeQuery.trim() && (
+                          <button type="button" role="option" aria-selected={!assigneeId} className="ct-picker-item" onClick={() => pickAssignee('')}>
+                            <span className="ct-avatar ct-avatar-empty" />
+                            Unassigned
+                          </button>
+                        )}
+                        {assigneeMatches.map((m) => (
+                          <button
+                            key={m.profile_id!}
+                            type="button"
+                            role="option"
+                            aria-selected={assigneeId === m.profile_id}
+                            className="ct-picker-item"
+                            onClick={() => pickAssignee(m.profile_id!)}
+                          >
+                            <MemberAvatar member={m} />
+                            {memberName(m)}
+                          </button>
+                        ))}
+                        {assigneeMatches.length === 0 && <span className="ct-empty">No one matches</span>}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
 
             <label className="ct-row">
               <span className="ct-label">Due date</span>
@@ -186,11 +301,24 @@ export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: 
               </div>
             </div>
 
-            {tags.length > 0 && (
-              <div className="ct-row ct-row-top">
-                <span className="ct-label">Tags</span>
+            <div className="ct-row ct-row-top">
+              <span className="ct-label">Tags</span>
+              <div className="ct-list">
+                <input
+                  className="ct-control ct-full"
+                  aria-label="Search or create tag"
+                  placeholder="Search or create a tag"
+                  value={tagQuery}
+                  onChange={(e) => setTagQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.metaKey || e.ctrlKey) return;
+                    e.preventDefault();
+                    if (exactTag) selectTag(exactTag.id);
+                    else if (tagQuery.trim()) handleNewTag();
+                  }}
+                />
                 <div className="ct-chips">
-                  {tags.map((t) => (
+                  {visibleTags.map((t) => (
                     <button
                       key={t.id}
                       type="button"
@@ -203,15 +331,37 @@ export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: 
                       {t.name}
                     </button>
                   ))}
+                  {tagQuery.trim() && !exactTag && (
+                    <button type="button" className="ct-chip ct-chip-add" onClick={handleNewTag} disabled={creatingTag}>
+                      + Create “{tagQuery.trim()}”
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
 
             {people.length > 0 && (
               <div className="ct-row ct-row-top">
                 <span className="ct-label">Followers</span>
+                <div className="ct-list">
+                <input
+                  className="ct-control ct-full"
+                  aria-label="Search people"
+                  placeholder="Search people"
+                  value={personQuery}
+                  onChange={(e) => setPersonQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.metaKey || e.ctrlKey) return;
+                    e.preventDefault();
+                    const first = visiblePeople.find((m) => !followerIds.includes(m.profile_id!));
+                    if (first) {
+                      setFollowerIds([...followerIds, first.profile_id!]);
+                      setPersonQuery('');
+                    }
+                  }}
+                />
                 <div className="ct-chips">
-                  {people.map((m) => (
+                  {visiblePeople.map((m) => (
                     <button
                       key={m.profile_id!}
                       type="button"
@@ -222,6 +372,8 @@ export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: 
                       {m.profile?.name ?? m.email}
                     </button>
                   ))}
+                  {personQuery.trim() && visiblePeople.length === 0 && <span className="ct-empty">No one matches</span>}
+                </div>
                 </div>
               </div>
             )}
