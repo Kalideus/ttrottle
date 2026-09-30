@@ -672,7 +672,7 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
     .from('notifications')
     .select(`
       *,
-      task:tasks!notifications_task_id_fkey(id, name, project_id)
+      task:tasks!notifications_task_id_fkey(id, name, project_id, due_date, priority, completed, assignee_id)
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -681,7 +681,13 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
   if (error) return { data: [], error }
 
   const withActors = await attachProfilesById(supabase, notifications ?? [], 'actor_id', 'actor')
-  return { data: withActors, error: null }
+  // flatten the task's assignee id so it can be resolved to a profile like the actor
+  const withAssigneeId = withActors.map((n) => ({
+    ...n,
+    task_assignee_id: (n.task as { assignee_id?: string | null } | null)?.assignee_id ?? null,
+  }))
+  const withAssignees = await attachProfilesById(supabase, withAssigneeId, 'task_assignee_id', 'task_assignee')
+  return { data: withAssignees, error: null }
 }
 
 export async function markNotificationRead(supabase: SupabaseClient, id: string) {

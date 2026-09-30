@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, CheckCheck } from 'lucide-react';
+import { avatarStyle } from '@/lib/avatar';
 
 export interface NotificationItem {
   id: string;
@@ -8,6 +9,11 @@ export interface NotificationItem {
   taskName: string;
   taskId?: string | null;
   projectId?: string | null;
+  // current state of the task, so people can orient themselves at a glance
+  dueDate?: string | null;
+  priority?: 'low' | 'medium' | 'high' | null;
+  completed?: boolean;
+  assignee?: { name: string; initials: string; avatar_color: string | null; avatar_url: string | null } | null;
   actorName: string;
   detail?: string | null;
   createdAt: string;
@@ -162,6 +168,32 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-muted)' }}>
                   <span>{relativeTime(notif.createdAt)}</span>
+                  {notif.assignee && (
+                    <span
+                      className="inbox-avatar"
+                      title={`Assigned to ${notif.assignee.name}`}
+                      style={avatarStyle(notif.assignee.avatar_url, notif.assignee.avatar_color)}
+                    >
+                      {notif.assignee.initials}
+                    </span>
+                  )}
+                  {notif.dueDate && (() => {
+                    const overdue = !notif.completed && new Date(notif.dueDate) < new Date();
+                    return (
+                      <span
+                        title={overdue ? 'Overdue' : 'Due date'}
+                        style={{ color: overdue ? '#D64545' : 'var(--text)', fontWeight: overdue ? 600 : 500 }}
+                      >
+                        {new Date(notif.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      </span>
+                    );
+                  })()}
+                  {notif.priority && (
+                    <span className={`priority-chip priority-${notif.priority} inbox-chip`}>
+                      {notif.priority.charAt(0).toUpperCase() + notif.priority.slice(1)}
+                    </span>
+                  )}
+                  {notif.completed && <span style={{ color: '#2E9E6B', fontWeight: 600 }}>✓ Done</span>}
                   {project && (
                     <button
                       type="button"
