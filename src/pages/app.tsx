@@ -125,6 +125,7 @@ export default function AppPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   // Super-admin bulk select: null = off, a Set = on (possibly empty).
   const [bulk, setBulk] = useState<Set<string> | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -834,7 +835,11 @@ export default function AppPage() {
   return (
     <div className="app-container">
       <TopBar
-        onHamburgerClick={() => {}}
+        onHamburgerClick={() => setSidebarOpen((o) => !o)}
+        sidebarOpen={sidebarOpen}
+        onCreateTask={handleCreateTaskClick}
+        userName={currentProfile?.name}
+        userEmail={currentProfile?.email}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
@@ -892,7 +897,7 @@ export default function AppPage() {
         />
       )}
 
-      <div className="app-main">
+      <div className={`app-main ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
         <Sidebar
           activeSection={activeSection}
           activeProjectId={activeProjectId}
