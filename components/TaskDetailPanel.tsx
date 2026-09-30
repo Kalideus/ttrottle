@@ -6,6 +6,7 @@ import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '
 import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
+import { avatarStyle } from '@/lib/avatar';
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -276,8 +277,7 @@ export function TaskDetailPanel({
                       width: 20,
                       height: 20,
                       borderRadius: '50%',
-                      background: assignedMember.profile?.avatar_color || 'var(--accent)',
-                      color: 'white',
+                      ...avatarStyle(assignedMember.profile?.avatar_url, assignedMember.profile?.avatar_color),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -373,8 +373,7 @@ export function TaskDetailPanel({
                       width: 18,
                       height: 18,
                       borderRadius: '50%',
-                      background: f.profile?.avatar_color || 'var(--accent)',
-                      color: 'white',
+                      ...avatarStyle(f.profile?.avatar_url, f.profile?.avatar_color),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

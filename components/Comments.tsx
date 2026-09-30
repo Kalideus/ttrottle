@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
+import { avatarStyle } from '@/lib/avatar';
 
 export interface CommentItem {
   id: string;
   authorId: string;
   authorName: string;
   authorInitials: string;
+  authorColor?: string | null;
+  authorAvatarUrl?: string | null;
   body: string;
   createdAt: string;
   editedAt?: string;
@@ -201,8 +204,7 @@ export function Comments({
                       width: 28,
                       height: 28,
                       borderRadius: '50%',
-                      background: 'var(--accent)',
-                      color: 'white',
+                      ...avatarStyle(comment.authorAvatarUrl, comment.authorColor),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

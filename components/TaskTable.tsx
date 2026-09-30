@@ -5,6 +5,7 @@ import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil } fro
 import type { Task, Heading } from '@/lib/supabase/queries';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
+import { avatarStyle } from '@/lib/avatar';
 
 interface TaskTableProps {
   tasks: (Task & { subtasks?: Task[] })[];
@@ -421,8 +422,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
                   width: 26,
                   height: 26,
                   borderRadius: '50%',
-                  background: task.assignee.avatar_color || 'var(--accent)',
-                  color: 'white',
+                  ...avatarStyle(task.assignee.avatar_url, task.assignee.avatar_color),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

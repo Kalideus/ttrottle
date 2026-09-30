@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { avatarInitials, AVATAR_COLORS, DEFAULT_AVATAR_COLOR } from '@/lib/avatar';
+import { avatarInitials, avatarStyle, AVATAR_COLORS, DEFAULT_AVATAR_COLOR } from '@/lib/avatar';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import type { Profile } from '@/lib/supabase/queries';
 
 interface ProfileModalProps {
   profile: Profile;
-  onSave: (updates: { name: string; initials: string; avatar_color: string }) => Promise<void>;
+  onSave: (updates: { name: string; initials: string; avatar_color: string; avatar_url: string | null }) => Promise<void>;
+  onUploadPhoto: (file: File) => Promise<string>;
   onClose: () => void;
   // No X/Cancel/backdrop-dismiss, and Save is disabled until a first + last
   // name is entered -- used to make new/invited users set a real name
@@ -16,10 +17,26 @@ interface ProfileModalProps {
   requireFullName?: boolean;
 }
 
-export function ProfileModal({ profile, onSave, onClose, requireFullName = false }: ProfileModalProps) {
+export function ProfileModal({ profile, onSave, onUploadPhoto, onClose, requireFullName = false }: ProfileModalProps) {
   const [name, setName] = useState(profile.name ?? '');
   const [color, setColor] = useState(profile.avatar_color ?? DEFAULT_AVATAR_COLOR);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(profile.avatar_url ?? null);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoError('');
+    setUploading(true);
+    try {
+      setPhotoUrl(await onUploadPhoto(file));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const initials = avatarInitials(name, profile.email);
   const hasFullName = name.trim().includes(' ');
@@ -31,7 +48,7 @@ export function ProfileModal({ profile, onSave, onClose, requireFullName = false
     if (!canSave) return;
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), initials, avatar_color: color });
+      await onSave({ name: name.trim(), initials, avatar_color: color, avatar_url: photoUrl });
       onClose();
     } finally {
       setSaving(false);
@@ -57,7 +74,7 @@ export function ProfileModal({ profile, onSave, onClose, requireFullName = false
         )}
 
         <div className="profile-preview">
-          <div className="profile-avatar-lg" style={{ background: color }}>{initials}</div>
+          <div className="profile-avatar-lg" style={avatarStyle(photoUrl, color)}>{initials}</div>
           <div>
             <div className="profile-preview-name">{name.trim() || 'Your name'}</div>
             <div className="profile-preview-email">{profile.email}</div>
@@ -81,6 +98,33 @@ export function ProfileModal({ profile, onSave, onClose, requireFullName = false
         </label>
 
         <div className="modal-field">
+          <span className="modal-field-label">Photo</span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <label className="modal-btn ghost" style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+              {uploading ? 'Uploading…' : photoUrl ? 'Change photo' : 'Upload photo'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                disabled={uploading}
+                onChange={(e) => {
+                  pickPhoto(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {photoUrl && (
+              <button type="button" className="modal-btn ghost" onClick={() => setPhotoUrl(null)} disabled={uploading}>
+                Remove
+              </button>
+            )}
+          </div>
+          <span className="modal-field-hint">
+            {photoError || 'Optional. Shown instead of your initials; the colour is used if you remove it.'}
+          </span>
+        </div>
+
+        <div className="modal-field">
           <span className="modal-field-label">Avatar colour</span>
           <div className="swatch-grid">
             {AVATAR_COLORS.map((c) => (
@@ -100,7 +144,7 @@ export function ProfileModal({ profile, onSave, onClose, requireFullName = false
           {!requireFullName && (
             <button className="modal-btn ghost" onClick={onClose} disabled={saving}>Cancel</button>
           )}
-          <button className="modal-btn primary" onClick={handleSave} disabled={saving || !canSave}>
+          <button className="modal-btn primary" onClick={handleSave} disabled={saving || uploading || !canSave}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>

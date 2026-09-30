@@ -7,7 +7,7 @@ import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
-import { avatarInitials, AVATAR_COLORS } from '@/lib/avatar';
+import { avatarInitials, squareAvatarBlob, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
@@ -77,6 +77,8 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
     authorId: c.author_id,
     authorName: c.author?.name ?? 'Unknown',
     authorInitials: c.author?.initials ?? '?',
+    authorColor: c.author?.avatar_color,
+    authorAvatarUrl: c.author?.avatar_url,
     body: c.body,
     createdAt: c.created_at,
     editedAt: c.edited_at ?? undefined,
@@ -663,10 +665,25 @@ export default function AppPage() {
     };
   };
 
-  const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string }) => {
+  const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string; avatar_url: string | null }) => {
     if (!currentUserId) return;
     const { data } = await updateProfile(supabase, currentUserId, updates);
     if (data) setCurrentProfile(data);
+    // other people's avatars (members, comments) carry the old profile; reload members so mine updates there too
+    if (activeProjectId) {
+      const { data: members } = await getProjectMembers(supabase, activeProjectId);
+      setProjectMembers(members ?? []);
+    }
+  };
+
+  // ponytail: each upload gets a new file name (no stale browser cache); old photos stay in the bucket, clean up if storage ever matters
+  const handlePhotoUpload = async (file: File) => {
+    if (!currentUserId) throw new Error('Not signed in');
+    const blob = await squareAvatarBlob(file);
+    const path = `${currentUserId}/${Date.now()}.jpg`;
+    const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' });
+    if (error) throw new Error(error.message);
+    return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
   };
 
   const handleChangePassword = async () => {
@@ -749,6 +766,7 @@ export default function AppPage() {
         onSearchChange={setSearchQuery}
         avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
         avatarColor={currentProfile?.avatar_color ?? 'var(--accent)'}
+        avatarUrl={currentProfile?.avatar_url}
         isSuperAdmin={!!currentProfile?.is_super_admin}
         onOpenProfile={() => setShowProfile(true)}
         onChangePassword={handleChangePassword}
@@ -760,6 +778,7 @@ export default function AppPage() {
         <ProfileModal
           profile={currentProfile}
           onSave={handleProfileSave}
+          onUploadPhoto={handlePhotoUpload}
           requireFullName={needsFullName}
           onClose={() => setShowProfile(false)}
         />

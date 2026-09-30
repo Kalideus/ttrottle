@@ -757,7 +757,7 @@ export async function getCurrentProfile(supabase: SupabaseClient) {
 export async function updateProfile(
   supabase: SupabaseClient,
   userId: string,
-  updates: { name?: string; initials?: string; avatar_color?: string }
+  updates: { name?: string; initials?: string; avatar_color?: string; avatar_url?: string | null }
 ) {
   return supabase.from('profiles').update(updates).eq('id', userId).select('*').single()
 }

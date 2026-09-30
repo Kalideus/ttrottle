@@ -3,6 +3,7 @@
 import { ChevronDown, Lock, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { ProjectMember } from '@/lib/supabase/queries';
+import { avatarStyle } from '@/lib/avatar';
 
 const PROJECT_COLORS = ['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C', '#5DA283'];
 const PROJECT_ICONS = ['📋', '🎨', '🌐', '📊', '👥', '🚀', '💡', '📱', '🛠️', '📦'];
@@ -184,7 +185,7 @@ export function ProjectHeader({
               key={member.email}
               className="project-member-avatar"
               title={member.profile?.name ?? member.email}
-              style={{ background: member.profile?.avatar_color || undefined }}
+              style={avatarStyle(member.profile?.avatar_url, member.profile?.avatar_color)}
             >
               {member.profile?.initials ?? member.email.slice(0, 2).toUpperCase()}
             </div>

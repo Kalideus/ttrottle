@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Menu, HelpCircle, ChevronDown } from 'lucide-react';
+import { avatarStyle } from '@/lib/avatar';
 
 interface TopBarProps {
   onHamburgerClick: () => void;
@@ -9,6 +10,7 @@ interface TopBarProps {
   onSearchChange: (query: string) => void;
   avatarInitials?: string;
   avatarColor?: string;
+  avatarUrl?: string | null;
   isSuperAdmin?: boolean;
   onOpenProfile: () => void;
   onChangePassword: () => void;
@@ -22,6 +24,7 @@ export function TopBar({
   onSearchChange,
   avatarInitials = '?',
   avatarColor = 'var(--accent)',
+  avatarUrl,
   isSuperAdmin = false,
   onOpenProfile,
   onChangePassword,
@@ -73,7 +76,7 @@ export function TopBar({
         <button className="topbar-help-btn" title="Keyboard shortcuts (?)" onClick={onShowShortcuts}>
           <HelpCircle size={18} />
         </button>
-        <div className="topbar-avatar" style={{ background: avatarColor }}>{avatarInitials}</div>
+        <div className="topbar-avatar" style={avatarStyle(avatarUrl, avatarColor)}>{avatarInitials}</div>
         <div style={{ position: 'relative' }}>
           <button className="topbar-account-btn" onClick={() => setMenuOpen((o) => !o)}>
             <ChevronDown size={18} />
