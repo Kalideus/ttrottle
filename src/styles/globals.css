@@ -2070,6 +2070,62 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   .inbox-col { justify-content: flex-start; }
 }
 
+/* Task-complete celebration: a tuk-tuk drives across the bottom, confetti falls */
+.tuktuk-stage { position: fixed; inset: 0; z-index: 90; pointer-events: none; overflow: hidden; }
+.tuktuk-driver {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  animation: tuktuk-drive 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) forwards;
+}
+.tuktuk-svg { animation: tuktuk-bounce 0.28s ease-in-out infinite alternate; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.18)); }
+.tuktuk-wheel { animation: tuktuk-spin 0.35s linear infinite; }
+.tuktuk-flag {
+  margin: 0 0 58px -6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.tuktuk-dust {
+  position: absolute;
+  left: -18px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(160, 150, 130, 0.45);
+  animation: tuktuk-puff 0.5s ease-out infinite;
+}
+.tuktuk-confetti {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: tuktuk-fall 2.2s ease-in forwards;
+}
+@keyframes tuktuk-drive { from { transform: translateX(-180px); } to { transform: translateX(calc(100vw + 40px)); } }
+@keyframes tuktuk-bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@keyframes tuktuk-spin { to { transform: rotate(360deg); } }
+@keyframes tuktuk-puff { from { transform: scale(0.5); opacity: 0.7; } to { transform: translateX(-26px) scale(1.4); opacity: 0; } }
+@keyframes tuktuk-fall {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  100% { opacity: 0; transform: translate(var(--drift), 80vh) rotate(var(--spin)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tuktuk-confetti, .tuktuk-dust, .tuktuk-svg { display: none; }
+  .tuktuk-driver { left: 50%; transform: translateX(-50%); animation: none; }
+  .tuktuk-flag { margin: 0; }
+}
+
 /* Super-admin bulk select */
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .bulk-count { font-size: 13px; font-weight: 600; color: var(--text); margin-right: 4px; }

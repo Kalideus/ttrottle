@@ -9,6 +9,7 @@ import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { MembersModal } from '@/components/MembersModal';
 import { GlobalSearch } from '@/components/GlobalSearch';
+import { TukTukCelebration } from '@/components/TukTukCelebration';
 import { avatarInitials, squareAvatarBlob, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -128,6 +129,8 @@ export default function AppPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [celebration, setCelebration] = useState<number | null>(null);
+  const endCelebration = useCallback(() => setCelebration(null), []);
   // Super-admin bulk select: null = off, a Set = on (possibly empty).
   const [bulk, setBulk] = useState<Set<string> | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -477,6 +480,8 @@ export default function AppPage() {
   };
 
   const handleTaskUpdate = async (taskId: string, updates: Record<string, unknown>) => {
+    // new key each time so a second completion mid-animation restarts it
+    if (updates.completed === true) setCelebration(Date.now());
     const messages = buildActivityMessages(updates);
     // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
     await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined);
@@ -894,6 +899,8 @@ export default function AppPage() {
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+      {celebration && <TukTukCelebration key={celebration} onDone={endCelebration} />}
 
       {showMembers && (
         <MembersModal
