@@ -12,15 +12,19 @@ export interface NewTaskInput {
   due_date: string | null;
   priority: 'low' | 'medium' | 'high' | null;
   heading_id: string | null;
+  new_heading: string | null;
   tag_ids: string[];
   follower_ids: string[];
+  subtasks: string[];
+  comment: string | null;
 }
+
+const NEW_HEADING = '__new__';
 
 interface CreateTaskModalProps {
   members: ProjectMember[];
   headings: Heading[];
   tags: Tag[];
-  isPrivate?: boolean;
   onCreate: (task: NewTaskInput) => Promise<void>;
   onClose: () => void;
 }
@@ -32,7 +36,7 @@ const PRIORITIES = [
   { value: 'high', label: 'High' },
 ] as const;
 
-export function CreateTaskModal({ members, headings, tags, isPrivate = false, onCreate, onClose }: CreateTaskModalProps) {
+export function CreateTaskModal({ members, headings, tags, onCreate, onClose }: CreateTaskModalProps) {
   useEscapeToClose(onClose);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -42,7 +46,17 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
   const [headingId, setHeadingId] = useState('');
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [followerIds, setFollowerIds] = useState<string[]>([]);
+  const [newHeading, setNewHeading] = useState('');
+  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtaskDraft, setSubtaskDraft] = useState('');
+  const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const addSubtask = () => {
+    if (!subtaskDraft.trim()) return;
+    setSubtasks([...subtasks, subtaskDraft.trim()]);
+    setSubtaskDraft('');
+  };
 
   const people = members.filter((m) => m.profile_id);
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -57,9 +71,13 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
         assignee_id: assigneeId || null,
         due_date: dueDate || null,
         priority,
-        heading_id: headingId || null,
+        heading_id: headingId && headingId !== NEW_HEADING ? headingId : null,
+        new_heading: headingId === NEW_HEADING && newHeading.trim() ? newHeading.trim() : null,
         tag_ids: tagIds,
         follower_ids: followerIds,
+        // a subtask typed but not yet added with Enter still counts
+        subtasks: subtaskDraft.trim() ? [...subtasks, subtaskDraft.trim()] : subtasks,
+        comment: comment.trim() || null,
       });
       onClose();
     } finally {
@@ -101,7 +119,7 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
             className="ct-notes"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Add notes…"
+            placeholder="Add a description…"
             aria-label="Description"
             rows={3}
           />
@@ -140,17 +158,33 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
               </div>
             </div>
 
-            {headings.length > 0 && (
-              <label className="ct-row">
-                <span className="ct-label">Section</span>
-                <select className="ct-control" value={headingId} onChange={(e) => setHeadingId(e.target.value)}>
-                  <option value="">No section</option>
+            <div className="ct-row">
+              <span className="ct-label">Heading</span>
+              <div className="ct-inline">
+                <select
+                  className="ct-control"
+                  aria-label="Heading"
+                  value={headingId}
+                  onChange={(e) => setHeadingId(e.target.value)}
+                >
+                  <option value="">No heading</option>
                   {headings.map((h) => (
                     <option key={h.id} value={h.id}>{h.name}</option>
                   ))}
+                  <option value={NEW_HEADING}>New heading…</option>
                 </select>
-              </label>
-            )}
+                {headingId === NEW_HEADING && (
+                  <input
+                    className="ct-control"
+                    aria-label="New heading name"
+                    placeholder="Heading name"
+                    value={newHeading}
+                    onChange={(e) => setNewHeading(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </div>
+            </div>
 
             {tags.length > 0 && (
               <div className="ct-row ct-row-top">
@@ -173,8 +207,7 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
               </div>
             )}
 
-            {/* ponytail: private projects have only you as a member, so nobody to follow */}
-            {!isPrivate && people.length > 0 && (
+            {people.length > 0 && (
               <div className="ct-row ct-row-top">
                 <span className="ct-label">Followers</span>
                 <div className="ct-chips">
@@ -192,6 +225,50 @@ export function CreateTaskModal({ members, headings, tags, isPrivate = false, on
                 </div>
               </div>
             )}
+
+            <div className="ct-row ct-row-top">
+              <span className="ct-label">Subtasks</span>
+              <div className="ct-list">
+                {subtasks.map((s, i) => (
+                  <div key={i} className="ct-list-item">
+                    <span className="ct-check" aria-hidden />
+                    <span className="ct-list-text">{s}</span>
+                    <button
+                      type="button"
+                      className="ct-remove"
+                      aria-label={`Remove subtask ${s}`}
+                      onClick={() => setSubtasks(subtasks.filter((_, j) => j !== i))}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                <input
+                  className="ct-control ct-full"
+                  aria-label="Add subtask"
+                  placeholder="Add a subtask and press Enter"
+                  value={subtaskDraft}
+                  onChange={(e) => setSubtaskDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+                      e.preventDefault();
+                      addSubtask();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <label className="ct-row ct-row-top">
+              <span className="ct-label">Comment</span>
+              <textarea
+                className="ct-control ct-full ct-textarea"
+                placeholder="Add a comment…"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={2}
+              />
+            </label>
           </div>
 
           <div className="ct-actions">

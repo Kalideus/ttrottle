@@ -565,14 +565,33 @@ export default function AppPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeProjectId]);
 
-  const submitCreateTask = async ({ tag_ids, ...fields }: NewTaskInput) => {
+  const submitCreateTask = async ({ tag_ids, new_heading, subtasks, comment, ...fields }: NewTaskInput) => {
     if (!activeProjectId) return;
+
+    let heading_id = fields.heading_id;
+    if (new_heading) {
+      const { data: heading } = await createHeading(supabase, { project_id: activeProjectId, name: new_heading });
+      heading_id = heading?.id ?? null;
+      const { data: headingRows } = await getHeadings(supabase, activeProjectId);
+      setHeadings(headingRows ?? []);
+    }
+
     const { data } = await createTask(supabase, {
       ...fields,
+      heading_id,
       project_id: activeProjectId,
       created_by: currentUserId,
     });
-    if (data) await Promise.all(tag_ids.map((tagId) => addTagToTask(supabase, data.id, tagId)));
+    if (data) {
+      await Promise.all(tag_ids.map((tagId) => addTagToTask(supabase, data.id, tagId)));
+      // sequential so subtasks keep the order they were typed in
+      for (const name of subtasks) {
+        await createTask(supabase, { project_id: activeProjectId, parent_task_id: data.id, name, created_by: currentUserId });
+      }
+      if (comment && currentUserId) {
+        await createComment(supabase, { task_id: data.id, author_id: currentUserId, body: comment, mentions: [] });
+      }
+    }
     await refreshTasks();
     if (data) {
       setActiveSection('projects');
@@ -755,7 +774,6 @@ export default function AppPage() {
           members={projectMembers}
           headings={headings}
           tags={availableTags}
-          isPrivate={!!currentProject?.is_private}
           onCreate={submitCreateTask}
           onClose={() => setShowCreateTask(false)}
         />
