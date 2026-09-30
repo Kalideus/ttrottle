@@ -210,14 +210,11 @@ button { cursor: pointer; }
   color: var(--chrome-text);
 }
 
-/* Logo sits on a white app-icon tile: the traced logo has white in its artwork */
+/* Transparent logo, sits straight on the background (no tile) */
 .topbar-logo-mark, .login-brand-mark {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
-  background: #fff;
-  border-radius: 7px;
-  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1789,10 +1786,8 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 }
 
 .login-brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  box-shadow: 0 0 0 1px var(--border);
+  width: 40px;
+  height: 40px;
 }
 
 .login-brand-word {
