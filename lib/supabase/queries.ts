@@ -9,6 +9,7 @@ export type Project = {
   position: number
   created_by: string | null
   created_at: string
+  is_private?: boolean
 }
 
 export type Heading = {

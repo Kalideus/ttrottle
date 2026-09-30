@@ -4,7 +4,13 @@ import { Plus, ChevronDown, Filter, ArrowUpDown, Search } from 'lucide-react';
 import { useState } from 'react';
 import type { Tag } from '@/lib/supabase/queries';
 
-export type FilterValue = 'priority:high' | 'priority:medium' | 'priority:low' | 'no-due-date' | 'overdue' | `tag:${string}`;
+export type FilterValue =
+  | 'priority:high' | 'priority:medium' | 'priority:low' | 'no-due-date' | 'overdue'
+  | 'due-today' | 'due-7d' | 'due-month' | 'created-7d' | 'created-30d' | 'completed-7d'
+  | `tag:${string}`;
+
+// Pick-one group: choosing a date filter replaces the previous one.
+const DATE_FILTERS: FilterValue[] = ['due-today', 'due-7d', 'due-month', 'created-7d', 'created-30d', 'completed-7d'];
 
 export type SortField = 'due_date' | 'priority' | 'name' | 'created_at' | 'position';
 
@@ -52,6 +58,12 @@ export function Toolbar({
     { label: 'Low Priority', value: 'priority:low' },
     { label: 'No Due Date', value: 'no-due-date' },
     { label: 'Overdue', value: 'overdue' },
+    { label: 'Due today', value: 'due-today' },
+    { label: 'Due next 7 days', value: 'due-7d' },
+    { label: 'Due this month', value: 'due-month' },
+    { label: 'Created last 7 days', value: 'created-7d' },
+    { label: 'Created last 30 days', value: 'created-30d' },
+    { label: 'Completed last 7 days', value: 'completed-7d' },
     ...availableTags.map((tag) => ({ label: `Tag: ${tag.name}`, value: `tag:${tag.id}` as FilterValue })),
   ];
 
@@ -136,7 +148,10 @@ export function Toolbar({
                     }}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        onFilterChange([...activeFilters, opt.value]);
+                        const base = DATE_FILTERS.includes(opt.value)
+                          ? activeFilters.filter((f) => !DATE_FILTERS.includes(f))
+                          : activeFilters;
+                        onFilterChange([...base, opt.value]);
                       } else {
                         onFilterChange(activeFilters.filter((f) => f !== opt.value));
                       }

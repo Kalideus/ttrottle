@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 
 interface SidebarProps {
@@ -83,6 +83,7 @@ export function Sidebar({
                 style={{ backgroundColor: project.color }}
               />
               <span className="sidebar-project-name">{project.name}</span>
+              {project.is_private && <Lock size={12} aria-label="Private" style={{ opacity: 0.6 }} />}
               <div className="sidebar-project-menu" style={{ cursor: 'pointer' }}>
                 <MoreVertical size={16} />
               </div>

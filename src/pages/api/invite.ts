@@ -35,6 +35,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(403).json({ error: 'Only project owners and admins can invite members' });
   }
 
+  const { data: project } = await admin.from('projects').select('is_private').eq('id', projectId).maybeSingle();
+  if (project?.is_private) return res.status(403).json({ error: 'Private projects cannot be shared' });
+
   const origin = req.headers.origin ?? `https://${req.headers.host}`;
 
   // Invite the auth user, or find them if they already have an account.

@@ -63,6 +63,14 @@ import {
   type TaskActivity,
 } from '@/lib/supabase/queries';
 
+const DAY_MS = 86400000;
+
+// Local-time YYYY-MM-DD, `plusDays` from today (due_date is a plain date, so compare as strings).
+function localYmd(plusDays: number) {
+  const d = new Date(Date.now() + plusDays * DAY_MS);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
   return (rows ?? []).map((c) => ({
     id: c.id,
@@ -290,7 +298,7 @@ export default function AppPage() {
   const displayedTasks = useMemo(() => {
     let result = [...taskPool];
 
-    if (!showCompleted) {
+    if (!showCompleted && !activeFilters.includes('completed-7d')) {
       result = result.filter((task) => !task.completed);
     }
 
@@ -307,6 +315,12 @@ export default function AppPage() {
           if (filter === 'priority:low') return task.priority === 'low';
           if (filter === 'no-due-date') return !task.due_date;
           if (filter === 'overdue') return task.due_date && new Date(task.due_date) < new Date() && !task.completed;
+          if (filter === 'due-today') return task.due_date?.slice(0, 10) === localYmd(0);
+          if (filter === 'due-7d') return !!task.due_date && task.due_date.slice(0, 10) >= localYmd(0) && task.due_date.slice(0, 10) <= localYmd(7);
+          if (filter === 'due-month') return !!task.due_date && task.due_date.slice(0, 10) >= localYmd(0) && task.due_date.slice(0, 7) === localYmd(0).slice(0, 7);
+          if (filter === 'created-7d') return Date.now() - new Date(task.created_at).getTime() <= 7 * DAY_MS;
+          if (filter === 'created-30d') return Date.now() - new Date(task.created_at).getTime() <= 30 * DAY_MS;
+          if (filter === 'completed-7d') return !!task.completed_at && Date.now() - new Date(task.completed_at).getTime() <= 7 * DAY_MS;
           if (filter.startsWith('tag:')) return (task.tags ?? []).some((t) => t.id === filter.slice(4));
           return true;
         });
@@ -762,6 +776,7 @@ export default function AppPage() {
                 projectName={currentProject?.name ?? 'Project'}
                 projectColor={currentProject?.color ?? '#4573D2'}
                 projectIcon={currentProject?.icon ?? '📋'}
+                isPrivate={!!currentProject?.is_private}
                 members={projectMembers}
                 currentUserId={currentUserId}
                 onInvite={handleInvite}

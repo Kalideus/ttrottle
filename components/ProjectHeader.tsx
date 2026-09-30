@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, UserPlus } from 'lucide-react';
+import { ChevronDown, Lock, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { ProjectMember } from '@/lib/supabase/queries';
 
@@ -11,6 +11,7 @@ interface ProjectHeaderProps {
   projectName: string;
   projectColor: string;
   projectIcon: string;
+  isPrivate?: boolean;
   members: ProjectMember[];
   currentUserId: string | null;
   onInvite: () => void;
@@ -23,6 +24,7 @@ export function ProjectHeader({
   projectName,
   projectColor,
   projectIcon,
+  isPrivate = false,
   members,
   currentUserId,
   onInvite,
@@ -34,8 +36,8 @@ export function ProjectHeader({
   const [showEdit, setShowEdit] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
   const myRole = members.find((m) => m.profile_id === currentUserId)?.role;
-  const canArchive = myRole === 'owner' || myRole === 'admin';
-  const canDelete = myRole === 'owner';
+  const canArchive = !isPrivate && (myRole === 'owner' || myRole === 'admin');
+  const canDelete = !isPrivate && myRole === 'owner';
 
   const openEdit = () => {
     setNameDraft(projectName);
@@ -58,6 +60,11 @@ export function ProjectHeader({
           {projectIcon}
         </div>
         <div className="project-name">{projectName}</div>
+        {isPrivate && (
+          <span title="Only you can see this project" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
+            <Lock size={12} /> Only you
+          </span>
+        )}
         <button className="project-header-menu" onClick={() => (showEdit ? setShowEdit(false) : openEdit())}>
           <ChevronDown size={18} />
         </button>
@@ -187,10 +194,12 @@ export function ProjectHeader({
           )}
         </div>
 
-        <button className="project-share-btn" onClick={onInvite}>
-          <UserPlus size={16} />
-          <span>Invite</span>
-        </button>
+        {!isPrivate && (
+          <button className="project-share-btn" onClick={onInvite}>
+            <UserPlus size={16} />
+            <span>Invite</span>
+          </button>
+        )}
 
         <button className="project-star-btn" title="Favorite">
           ☆
