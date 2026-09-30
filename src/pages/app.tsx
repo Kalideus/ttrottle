@@ -7,6 +7,7 @@ import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { MembersModal } from '@/components/MembersModal';
 import { avatarInitials, squareAvatarBlob, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
@@ -26,6 +27,9 @@ import {
   updateTask,
   deleteTask,
   getProjectMembers,
+  addProjectMember,
+  removeProjectMember,
+  getProfiles,
   getComments,
   createComment,
   updateComment,
@@ -120,6 +124,8 @@ export default function AppPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [allPeople, setAllPeople] = useState<Profile[]>([]);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -665,6 +671,31 @@ export default function AppPage() {
     };
   };
 
+  const openMembers = async () => {
+    setShowMembers(true);
+    const { data } = await getProfiles(supabase);
+    setAllPeople(data ?? []);
+  };
+
+  const reloadMembers = async () => {
+    const { data } = await getProjectMembers(supabase, activeProjectId);
+    setProjectMembers(data ?? []);
+  };
+
+  const handleMemberAdd = async (profile: Profile) => {
+    const { error } = await addProjectMember(supabase, activeProjectId, profile);
+    if (error) window.alert(`Couldn't add ${profile.name}: ${error.message}`);
+    await reloadMembers();
+  };
+
+  const handleMemberRemove = async (member: ProjectMember) => {
+    const name = member.profile?.name ?? member.email;
+    if (!window.confirm(`Remove ${name} from this project? They'll lose access to its tasks.`)) return;
+    const { error } = await removeProjectMember(supabase, activeProjectId, member.email);
+    if (error) window.alert(`Couldn't remove ${name}: ${error.message}`);
+    await reloadMembers();
+  };
+
   const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string; avatar_url: string | null }) => {
     if (!currentUserId) return;
     const { data } = await updateProfile(supabase, currentUserId, updates);
@@ -806,6 +837,19 @@ export default function AppPage() {
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
+      {showMembers && (
+        <MembersModal
+          projectName={currentProject?.name ?? 'Project'}
+          members={projectMembers}
+          people={allPeople}
+          currentUserId={currentUserId}
+          isPrivate={!!currentProject?.is_private}
+          onAdd={handleMemberAdd}
+          onRemove={handleMemberRemove}
+          onClose={() => setShowMembers(false)}
+        />
+      )}
+
       <div className="app-main">
         <Sidebar
           activeSection={activeSection}
@@ -838,6 +882,7 @@ export default function AppPage() {
                 members={projectMembers}
                 currentUserId={currentUserId}
                 onInvite={handleInvite}
+                onShowMembers={openMembers}
                 onProjectUpdate={handleProjectUpdate}
                 onProjectArchive={handleProjectArchive}
                 onProjectDelete={handleProjectDelete}

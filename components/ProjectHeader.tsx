@@ -24,6 +24,7 @@ interface ProjectHeaderProps {
   members: ProjectMember[];
   currentUserId: string | null;
   onInvite: () => void;
+  onShowMembers: () => void;
   onProjectUpdate: (updates: { name?: string; color?: string; icon?: string }) => Promise<void>;
   onProjectArchive: () => void;
   onProjectDelete: () => void;
@@ -37,6 +38,7 @@ export function ProjectHeader({
   members,
   currentUserId,
   onInvite,
+  onShowMembers,
   onProjectUpdate,
   onProjectArchive,
   onProjectDelete,
@@ -232,7 +234,13 @@ export function ProjectHeader({
       </div>
 
       <div className="project-header-right">
-        <div className="project-members">
+        <button
+          type="button"
+          className="project-members"
+          onClick={onShowMembers}
+          title="See who's in this project"
+          aria-label={`Members (${members.length})`}
+        >
           {visibleMembers.map((member) => (
             <div
               key={member.email}
@@ -246,7 +254,7 @@ export function ProjectHeader({
           {members.length > 3 && (
             <div className="project-member-more">+{members.length - 3}</div>
           )}
-        </div>
+        </button>
 
         {!isPrivate && (
           <button className="project-share-btn" onClick={onInvite}>

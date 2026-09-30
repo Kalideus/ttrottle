@@ -799,6 +799,18 @@ export async function getProjectMembers(supabase: SupabaseClient, projectId: str
   return { data: (data ?? []) as ProjectMember[], error }
 }
 
+// Adds someone who already has an account straight to a project (no email).
+// RLS only lets the project's owner/admins do this, and never on a private project.
+export async function addProjectMember(supabase: SupabaseClient, projectId: string, profile: { id: string; email: string }) {
+  return supabase.from('project_members').insert({
+    project_id: projectId,
+    profile_id: profile.id,
+    email: profile.email,
+    role: 'member',
+    joined_at: new Date().toISOString(),
+  })
+}
+
 export async function removeProjectMember(supabase: SupabaseClient, projectId: string, email: string) {
   return supabase.from('project_members').delete().eq('project_id', projectId).eq('email', email)
 }
