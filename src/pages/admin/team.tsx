@@ -14,6 +14,7 @@ import {
 } from '@/lib/supabase/queries';
 
 const ROLES = ['owner', 'admin', 'member'] as const;
+const INVITE_NEW = '__invite__';
 
 export default function TeamAdminPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -286,7 +287,8 @@ export default function TeamAdminPage() {
                         disabled={status === 'saving'}
                         onChange={(e) => {
                           const userId = e.target.value;
-                          if (userId) void callAdmin('add-members', { userId, projectIds: [project.id], role: 'member' }).catch(() => {});
+                          if (userId === INVITE_NEW) setInviteProjectId(project.id);
+                          else if (userId) void callAdmin('add-members', { userId, projectIds: [project.id], role: 'member' }).catch(() => {});
                         }}
                         className="rounded-lg border border-sky-300 px-2 py-1 text-sm text-sky-700 hover:bg-sky-50"
                       >
@@ -298,14 +300,10 @@ export default function TeamAdminPage() {
                               {pr.name} ({pr.email})
                             </option>
                           ))}
+                        <option disabled>──────────</option>
+                        <option value={INVITE_NEW}>✉ Invite someone new by email…</option>
                       </select>
                     )}
-                    <button
-                      onClick={() => setInviteProjectId(project.id)}
-                      className="rounded-lg border border-sky-300 px-3 py-1 text-sm text-sky-700 hover:bg-sky-50"
-                    >
-                      Invite
-                    </button>
                     <button
                       onClick={() => window.confirm(`Archive "${project.name}"?`) && callAdmin('project-action', { projectId: project.id, action: 'archive' })}
                       className="rounded-lg border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
