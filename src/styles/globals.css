@@ -467,6 +467,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   cursor: pointer;
 }
 .sidebar-menu button:hover { background: var(--surface-alt); }
+.sidebar-menu button.is-danger { color: #D64545; }
 
 .sidebar-rename-input {
   flex: 1;

@@ -126,7 +126,8 @@ export default function TeamAdminPage() {
           <p className="mt-1 text-sm text-slate-600">
             Super admin sees and restores deleted tasks (/admin/deleted-tasks) across every project. Can create
             projects lets someone use the &ldquo;+ new project&rdquo; button. &ldquo;Add to projects&rdquo; puts someone
-            who already has an account into several projects at once, with no invite email or link.
+            who already has an account into several projects at once, with no invite email or link. Click a name
+            to edit it; initials update to match.
           </p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
@@ -149,7 +150,27 @@ export default function TeamAdminPage() {
                   return (
                   <Fragment key={p.id}>
                   <tr className={open ? 'bg-slate-50' : 'border-b border-slate-100'}>
-                    <td className="py-2 pr-4">{p.name}</td>
+                    <td className="py-2 pr-4">
+                      <input
+                        key={p.name /* reset the draft after a save reloads the row */}
+                        defaultValue={p.name}
+                        aria-label={`Name for ${p.email}`}
+                        placeholder="First Last"
+                        className="w-44 rounded border border-transparent px-2 py-1 hover:border-slate-300 focus:border-sky-500 focus:outline-none"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                          if (e.key === 'Escape') {
+                            e.currentTarget.value = p.name;
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const name = e.currentTarget.value.trim();
+                          if (!name) e.currentTarget.value = p.name;
+                          else if (name !== p.name) void callAdmin('set-name', { userId: p.id, name }).catch(() => {});
+                        }}
+                      />
+                    </td>
                     <td className="py-2 pr-4 text-slate-500">{p.email}</td>
                     <td className="py-2 pr-4">
                       <input

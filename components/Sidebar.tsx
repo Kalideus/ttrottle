@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2 } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ interface SidebarProps {
   onProjectSelect: (projectId: string) => void;
   onProjectCreate: () => void;
   onProjectRename: (projectId: string, name: string) => void;
+  onProjectDelete: (projectId: string) => void;
   onCreateTask: () => void;
   onInvite: () => void;
 }
@@ -28,6 +29,7 @@ export function Sidebar({
   onProjectSelect,
   onProjectCreate,
   onProjectRename,
+  onProjectDelete,
   onCreateTask,
   onInvite,
 }: SidebarProps) {
@@ -144,6 +146,19 @@ export function Sidebar({
                     >
                       <Pencil size={14} /> Rename
                     </button>
+                    {!project.is_private && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="is-danger"
+                        onClick={() => {
+                          setMenuFor(null);
+                          onProjectDelete(project.id);
+                        }}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    )}
                   </div>
                 </>
               )}

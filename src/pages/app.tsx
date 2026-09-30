@@ -652,16 +652,23 @@ export default function AppPage() {
     dropToNextProject(projectRows ?? []);
   };
 
-  const handleProjectDelete = async () => {
-    if (!activeProjectId) return;
-    const project = projects.find((p) => p.id === activeProjectId);
+  const handleProjectDelete = async (projectId: string = activeProjectId) => {
+    if (!projectId) return;
+    const project = projects.find((p) => p.id === projectId);
     const typed = window.prompt(
       `This permanently deletes "${project?.name}" and every task/comment in it. This cannot be undone.\n\nType the project name to confirm:`
     );
     if (typed !== project?.name) return;
-    await deleteProject(supabase, activeProjectId);
+    await deleteProject(supabase, projectId);
     const { data: projectRows } = await getProjects(supabase);
-    dropToNextProject(projectRows ?? []);
+    const remaining = projectRows ?? [];
+    // RLS silently skips a delete you're not allowed to do, so check it actually went
+    if (remaining.some((p) => p.id === projectId)) {
+      window.alert(`Couldn't delete "${project?.name}": only the project's owner can do that.`);
+      return;
+    }
+    if (projectId === activeProjectId) dropToNextProject(remaining);
+    else setProjects(remaining);
   };
 
   const handleInvite = () => {
@@ -885,6 +892,7 @@ export default function AppPage() {
           onSectionChange={setActiveSection}
           onProjectSelect={setActiveProjectId}
           onProjectCreate={handleProjectCreate}
+          onProjectDelete={handleProjectDelete}
           onProjectRename={async (projectId, name) => {
             const { error } = await updateProject(supabase, projectId, { name });
             // RLS lets only owners/admins rename; a blocked update returns no row
@@ -910,7 +918,7 @@ export default function AppPage() {
                 onShowMembers={openMembers}
                 onProjectUpdate={handleProjectUpdate}
                 onProjectArchive={handleProjectArchive}
-                onProjectDelete={handleProjectDelete}
+                onProjectDelete={() => handleProjectDelete()}
               />
 
               <Toolbar
