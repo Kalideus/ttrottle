@@ -167,7 +167,9 @@ export async function createProject(
         project_id: result.data.id,
         profile_id: created_by,
         email: profile.email,
-        role: 'owner',
+        // Creators start as Manager ('admin'), not Owner: deleting the project and
+        // changing roles stay with super admins. Needs migration 023.
+        role: 'admin',
         joined_at: new Date().toISOString(),
       })
     }
