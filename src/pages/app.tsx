@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
-import { CreateTaskModal } from '@/components/CreateTaskModal';
+import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { avatarInitials } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
@@ -565,13 +565,14 @@ export default function AppPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeProjectId]);
 
-  const submitCreateTask = async (name: string) => {
+  const submitCreateTask = async ({ tag_ids, ...fields }: NewTaskInput) => {
     if (!activeProjectId) return;
     const { data } = await createTask(supabase, {
+      ...fields,
       project_id: activeProjectId,
-      name,
       created_by: currentUserId,
     });
+    if (data) await Promise.all(tag_ids.map((tagId) => addTagToTask(supabase, data.id, tagId)));
     await refreshTasks();
     if (data) {
       setActiveSection('projects');
@@ -750,7 +751,14 @@ export default function AppPage() {
       )}
 
       {showCreateTask && (
-        <CreateTaskModal onCreate={submitCreateTask} onClose={() => setShowCreateTask(false)} />
+        <CreateTaskModal
+          members={projectMembers}
+          headings={headings}
+          tags={availableTags}
+          isPrivate={!!currentProject?.is_private}
+          onCreate={submitCreateTask}
+          onClose={() => setShowCreateTask(false)}
+        />
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
