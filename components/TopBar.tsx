@@ -65,8 +65,10 @@ export function TopBar({
         </button>
 
         <div className="topbar-logo">
-          <div className="topbar-logo-mark">τ</div>
-          <span>TukTuk</span>
+          <div className="topbar-logo-mark">
+            <img src="/logo.svg" alt="" />
+          </div>
+          <span className="brand-word">ttrottle</span>
         </div>
       </div>
 

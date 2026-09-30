@@ -210,17 +210,25 @@ button { cursor: pointer; }
   color: var(--chrome-text);
 }
 
-.topbar-logo-mark {
+/* Logo sits on a white app-icon tile: the traced logo has white in its artwork */
+.topbar-logo-mark, .login-brand-mark {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--dot-coral), var(--dot-amber));
-  border-radius: 6px;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 7px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-weight: 800;
-  font-size: 16px;
+}
+.topbar-logo-mark img, .login-brand-mark img { width: 100%; height: 100%; display: block; }
+
+.brand-word {
+  font-family: var(--font-brand), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.02em;
 }
 
 .topbar-search {
@@ -1784,14 +1792,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   width: 36px;
   height: 36px;
   border-radius: 9px;
-  background: linear-gradient(135deg, var(--dot-coral), var(--dot-amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 20px;
-  line-height: 1;
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .login-brand-word {

@@ -38,8 +38,10 @@ function messageClass(message: string) {
 function Brand() {
   return (
     <div className="login-brand">
-      <div className="login-brand-mark">τ</div>
-      <span className="login-brand-word">TukTuk</span>
+      <div className="login-brand-mark">
+        <img src="/logo.svg" alt="" />
+      </div>
+      <span className="login-brand-word brand-word">ttrottle</span>
     </div>
   );
 }
