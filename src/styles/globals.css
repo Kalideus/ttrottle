@@ -2121,6 +2121,19 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   .tuktuk-flag { margin: 0; }
 }
 
+.detail-link-copied {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 5;
+}
+
 /* Super-admin bulk select */
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .bulk-count { font-size: 13px; font-weight: 600; color: var(--text); margin-right: 4px; }

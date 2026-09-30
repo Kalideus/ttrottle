@@ -26,7 +26,14 @@ function getInviteParams() {
   return { token_hash, type: type as 'invite' | 'recovery' };
 }
 
-const SUCCESS_MESSAGES = ['Signed in', 'Password updated', 'Check your email for the reset link'];
+// Where to go after signing in: the ?next= page the user was sent from (e.g. a
+// shared task link), but only same-site paths -- never an outside URL.
+function afterSignIn() {
+  const next = new URLSearchParams(window.location.search).get('next');
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/app';
+}
+
+const SUCCESS_MESSAGES =['Signed in', 'Password updated', 'Check your email for the reset link'];
 const PROGRESS_MESSAGES = ['Signing in...', 'Sending reset link...', 'Updating password...'];
 
 function messageClass(message: string) {
@@ -95,7 +102,7 @@ export default function Login() {
         setMessage(String(error.message));
       } else {
         setMessage('Signed in');
-        window.location.href = '/app';
+        window.location.href = afterSignIn();
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err);

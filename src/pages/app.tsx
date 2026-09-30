@@ -148,6 +148,18 @@ export default function AppPage() {
     [myTasks, lastLoginAt]
   );
 
+  // Shared task links: /app?project=<id>&task=<id> opens that task in its project.
+  // The query is then cleared so a refresh or later navigation doesn't re-open it.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const { project, task } = router.query;
+    if (typeof project !== 'string') return;
+    setActiveSection('projects');
+    setActiveProjectId(project);
+    if (typeof task === 'string') setSelectedTaskId(task);
+    void router.replace('/app', undefined, { shallow: true });
+  }, [router.isReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const load = async () => {
       const {
@@ -155,7 +167,8 @@ export default function AppPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        await router.push('/login');
+        // come back to the same place (e.g. a shared task link) after signing in
+        await router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return;
       }
 
@@ -167,9 +180,8 @@ export default function AppPage() {
       const nextProjects = projectRows ?? [];
       setProjects(nextProjects);
 
-      if (nextProjects.length > 0 && !activeProjectId) {
-        setActiveProjectId(nextProjects[0].id);
-      }
+      // functional update: a shared task link may already have chosen the project
+      if (nextProjects.length > 0) setActiveProjectId((current) => current || nextProjects[0].id);
 
       if (activeProjectId) {
         const { data: taskRows } = await getTasksForProject(supabase, activeProjectId);

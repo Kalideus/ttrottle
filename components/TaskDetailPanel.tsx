@@ -1,6 +1,6 @@
 'use client';
 
-import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft } from 'lucide-react';
+import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
@@ -87,6 +87,7 @@ export function TaskDetailPanel({
   const [showHeadingMenu, setShowHeadingMenu] = useState(false);
   const [showFollowerMenu, setShowFollowerMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -150,6 +151,26 @@ export function TaskDetailPanel({
         </button>
 
         <div className="detail-panel-actions" style={{ position: 'relative' }}>
+          {task.project_id && (
+            <button
+              className="detail-panel-menu-btn"
+              title={linkCopied ? 'Link copied' : 'Copy link to this task'}
+              aria-label="Copy link to this task"
+              onClick={async () => {
+                const url = `${window.location.origin}/app?project=${task.project_id}&task=${task.id}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                } catch {
+                  window.prompt('Copy this link:', url); // clipboard blocked (e.g. non-HTTPS)
+                }
+              }}
+            >
+              {linkCopied ? <Check size={18} /> : <Link2 size={18} />}
+            </button>
+          )}
+          {linkCopied && <span className="detail-link-copied" role="status">Link copied</span>}
           <button className="detail-panel-menu-btn" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>
             <MoreVertical size={18} />
           </button>
