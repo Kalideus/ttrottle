@@ -129,10 +129,37 @@ export default function Login() {
             <p className="login-subtitle">Choose a password so you can sign in from now on.</p>
           </div>
           {linkStatus === 'invalid' ? (
-            <p className="login-message is-error">
-              This link has expired or was already used (invite/reset links only work once). Ask
-              whoever invited you to send a new one.
-            </p>
+            <>
+              <p className="login-message is-error">
+                This link has expired or was already used (links only work once). Enter your email
+                and we&rsquo;ll send you a fresh one.
+              </p>
+              <form
+                className="login-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void sendReset();
+                }}
+              >
+                <label className="form-group">
+                  <span className="field-label">Your email</span>
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    required
+                    autoComplete="email"
+                    className="text-field"
+                  />
+                </label>
+                <button type="submit" className="login-submit" disabled={message === 'Sending reset link...'}>
+                  Email me a new link
+                </button>
+              </form>
+              <p className="login-subtitle" style={{ marginTop: 12 }}>
+                No email arriving? Ask whoever invited you to copy you a new link.
+              </p>
+            </>
           ) : (
             <form onSubmit={setNewPassword} className="login-form">
               <label className="form-group">
