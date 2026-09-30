@@ -47,29 +47,29 @@ create policy "Visible comments only" on comment_likes
 
 -- recurrences / dependencies -------------------------------------------------
 
-alter table task_recurrences enable row level security;
-alter table task_dependencies enable row level security;
+-- Tables that don't exist in this database are skipped.
 
 do $$
-declare r record;
+declare
+  t text;
+  r record;
+  cond text;
 begin
-  for r in
-    select policyname, tablename from pg_policies
-    where schemaname = 'public' and tablename in ('task_recurrences', 'task_dependencies')
-  loop
-    execute format('drop policy %I on public.%I', r.policyname, r.tablename);
+  foreach t in array array['task_recurrences', 'task_dependencies'] loop
+    continue when to_regclass('public.' || t) is null;
+
+    for r in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
+      execute format('drop policy %I on public.%I', r.policyname, t);
+    end loop;
+
+    cond := case t
+      when 'task_recurrences' then 'can_see_project(project_id) and (parent_task_id is null or can_see_task(parent_task_id))'
+      else 'can_see_task(task_id) and can_see_task(depends_on_task_id)'
+    end;
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy "Visible projects only" on public.%I for all using (%s) with check (%s)', t, cond, cond);
   end loop;
 end $$;
-
-create policy "Visible projects only" on task_recurrences
-  for all
-  using (can_see_project(project_id) and (parent_task_id is null or can_see_task(parent_task_id)))
-  with check (can_see_project(project_id) and (parent_task_id is null or can_see_task(parent_task_id)));
-
-create policy "Visible projects only" on task_dependencies
-  for all
-  using (can_see_task(task_id) and can_see_task(depends_on_task_id))
-  with check (can_see_task(task_id) and can_see_task(depends_on_task_id));
 
 -- private tasks stay with their owner ------------------------------------------
 
@@ -82,8 +82,13 @@ create policy "Visible projects only" on tasks
     and (assignee_id is null or assignee_id = auth.uid() or not project_is_private(project_id))
   );
 
-drop policy if exists "Visible projects only" on followers;
-create policy "Visible projects only" on followers
-  for all
-  using (can_see_task(task_id))
-  with check (can_see_task(task_id) and (user_id = auth.uid() or not task_is_private(task_id)));
+do $$
+begin
+  if to_regclass('public.followers') is not null then
+    drop policy if exists "Visible projects only" on followers;
+    create policy "Visible projects only" on followers
+      for all
+      using (can_see_task(task_id))
+      with check (can_see_task(task_id) and (user_id = auth.uid() or not task_is_private(task_id)));
+  end if;
+end $$;

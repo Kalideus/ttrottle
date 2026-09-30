@@ -137,38 +137,23 @@ create policy "Owners and admins can remove non-owner members" on project_member
 -- Drop any existing policies first: policies are OR'd together, so a leftover
 -- "any signed-in user" policy would silently defeat the privacy rule.
 
+-- Tables that don't exist in this database (e.g. attachments) are skipped.
+
 do $$
-declare r record;
+declare
+  t text;
+  r record;
+  cond text;
 begin
-  for r in
-    select policyname, tablename from pg_policies
-    where schemaname = 'public'
-      and tablename in ('tasks', 'headings', 'comments', 'followers', 'task_tags', 'task_activity', 'attachments')
-  loop
-    execute format('drop policy %I on public.%I', r.policyname, r.tablename);
+  foreach t in array array['tasks', 'headings', 'comments', 'followers', 'task_tags', 'task_activity', 'attachments'] loop
+    continue when to_regclass('public.' || t) is null;
+
+    for r in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
+      execute format('drop policy %I on public.%I', r.policyname, t);
+    end loop;
+
+    cond := case when t in ('tasks', 'headings') then 'can_see_project(project_id)' else 'can_see_task(task_id)' end;
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy "Visible projects only" on public.%I for all using (%s) with check (%s)', t, cond, cond);
   end loop;
 end $$;
-
-alter table tasks enable row level security;
-alter table headings enable row level security;
-alter table comments enable row level security;
-alter table followers enable row level security;
-alter table task_tags enable row level security;
-alter table task_activity enable row level security;
-alter table attachments enable row level security;
-
-create policy "Visible projects only" on tasks
-  for all using (can_see_project(project_id)) with check (can_see_project(project_id));
-create policy "Visible projects only" on headings
-  for all using (can_see_project(project_id)) with check (can_see_project(project_id));
-
-create policy "Visible projects only" on comments
-  for all using (can_see_task(task_id)) with check (can_see_task(task_id));
-create policy "Visible projects only" on followers
-  for all using (can_see_task(task_id)) with check (can_see_task(task_id));
-create policy "Visible projects only" on task_tags
-  for all using (can_see_task(task_id)) with check (can_see_task(task_id));
-create policy "Visible projects only" on task_activity
-  for all using (can_see_task(task_id)) with check (can_see_task(task_id));
-create policy "Visible projects only" on attachments
-  for all using (can_see_task(task_id)) with check (can_see_task(task_id));
