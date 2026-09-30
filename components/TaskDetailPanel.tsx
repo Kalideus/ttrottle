@@ -7,6 +7,7 @@ import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { avatarStyle } from '@/lib/avatar';
+import { PeoplePicker } from '@/components/PeoplePicker';
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -294,56 +295,17 @@ export function TaskDetailPanel({
               )}
 
               {showAssigneeMenu && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    minWidth: '200px',
-                    zIndex: 100,
-                    marginTop: '4px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                <PeoplePicker
+                  people={projectMembers}
+                  selectedId={task.assignee_id}
+                  allowNone
+                  emptyText="No members yet — invite someone from the project header."
+                  onPick={(id) => {
+                    onTaskUpdate(task.id, { assignee_id: id });
+                    setShowAssigneeMenu(false);
                   }}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTaskUpdate(task.id, { assignee_id: null });
-                      setShowAssigneeMenu(false);
-                    }}
-                    style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}
-                  >
-                    Unassigned
-                  </div>
-                  {projectMembers.filter((m) => m.profile_id).map((member) => (
-                    <div
-                      key={member.profile_id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTaskUpdate(task.id, { assignee_id: member.profile_id });
-                        setShowAssigneeMenu(false);
-                      }}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        borderBottom: '1px solid var(--border)',
-                        backgroundColor: task.assignee_id === member.profile_id ? 'var(--accent-soft)' : 'transparent',
-                        color: task.assignee_id === member.profile_id ? 'var(--accent)' : 'var(--text)',
-                      }}
-                    >
-                      👤 {member.profile?.name ?? member.email}
-                    </div>
-                  ))}
-                  {projectMembers.filter((m) => m.profile_id).length === 0 && (
-                    <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      No members yet — invite someone from the project header.
-                    </div>
-                  )}
-                </div>
+                  onClose={() => setShowAssigneeMenu(false)}
+                />
               )}
             </div>
           </div>
@@ -419,39 +381,16 @@ export function TaskDetailPanel({
               </button>
 
               {showFollowerMenu && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    minWidth: '200px',
-                    zIndex: 100,
-                    marginTop: '4px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                <PeoplePicker
+                  people={followableMembers}
+                  alignRight
+                  emptyText="Everyone is already following."
+                  onPick={(id) => {
+                    if (id) onFollowerAdd(id);
+                    setShowFollowerMenu(false);
                   }}
-                >
-                  {followableMembers.length > 0 ? (
-                    followableMembers.map((member) => (
-                      <div
-                        key={member.profile_id}
-                        onClick={() => {
-                          onFollowerAdd(member.profile_id!);
-                          setShowFollowerMenu(false);
-                        }}
-                        style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text)' }}
-                      >
-                        {member.profile?.name ?? member.email}
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      Everyone is already following.
-                    </div>
-                  )}
-                </div>
+                  onClose={() => setShowFollowerMenu(false)}
+                />
               )}
             </div>
           </div>

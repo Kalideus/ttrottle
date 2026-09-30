@@ -2288,7 +2288,9 @@ button.project-members:hover { background: var(--surface-alt); }
   background: transparent; font: inherit; font-size: 13px; color: var(--text);
   text-align: left; cursor: pointer;
 }
-.ct-picker-item:hover, .ct-picker-item[aria-selected='true'] { background: var(--surface-alt); }
+.ct-picker-item.is-active { background: var(--surface-alt); }
+.ct-picker-item[aria-selected='true'] { color: var(--accent); font-weight: 600; }
+.ct-picker-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ct-avatar {
   width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;

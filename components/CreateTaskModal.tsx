@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
+import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
 
 export interface NewTaskInput {
   name: string;
@@ -32,16 +33,6 @@ interface CreateTaskModalProps {
 
 const matches = (text: string, q: string) => text.toLowerCase().includes(q.trim().toLowerCase());
 const memberName = (m: ProjectMember) => m.profile?.name ?? m.email;
-
-function MemberAvatar({ member }: { member: ProjectMember }) {
-  const p = member.profile;
-  if (p?.avatar_url) return <img className="ct-avatar" src={p.avatar_url} alt="" />;
-  return (
-    <span className="ct-avatar" style={{ background: p?.avatar_color || 'var(--accent)' }} aria-hidden>
-      {p?.initials ?? member.email.slice(0, 2).toUpperCase()}
-    </span>
-  );
-}
 
 const PRIORITIES = [
   { value: null, label: 'None' },
@@ -73,14 +64,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
   const people = members.filter((m) => m.profile_id);
 
   const [assigneeOpen, setAssigneeOpen] = useState(false);
-  const [assigneeQuery, setAssigneeQuery] = useState('');
   const assignee = people.find((m) => m.profile_id === assigneeId);
-  const assigneeMatches = people.filter((m) => matches(`${memberName(m)} ${m.email}`, assigneeQuery));
-  const pickAssignee = (id: string) => {
-    setAssigneeId(id);
-    setAssigneeOpen(false);
-    setAssigneeQuery('');
-  };
 
   // Selected items always stay visible; the search narrows the rest.
   const visibleTags = tags.filter((t) => tagIds.includes(t.id) || matches(t.name, tagQuery));
@@ -202,50 +186,16 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
                 </button>
 
                 {assigneeOpen && (
-                  <>
-                    <div className="ct-picker-backdrop" onClick={() => setAssigneeOpen(false)} />
-                    <div className="ct-picker-pop">
-                      <input
-                        className="ct-control ct-full"
-                        aria-label="Search people"
-                        placeholder="Search people"
-                        value={assigneeQuery}
-                        onChange={(e) => setAssigneeQuery(e.target.value)}
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
-                            e.stopPropagation(); // close the picker, not the whole modal
-                            setAssigneeOpen(false);
-                          } else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
-                            e.preventDefault();
-                            if (assigneeMatches[0]) pickAssignee(assigneeMatches[0].profile_id!);
-                          }
-                        }}
-                      />
-                      <div className="ct-picker-list" role="listbox">
-                        {!assigneeQuery.trim() && (
-                          <button type="button" role="option" aria-selected={!assigneeId} className="ct-picker-item" onClick={() => pickAssignee('')}>
-                            <span className="ct-avatar ct-avatar-empty" />
-                            Unassigned
-                          </button>
-                        )}
-                        {assigneeMatches.map((m) => (
-                          <button
-                            key={m.profile_id!}
-                            type="button"
-                            role="option"
-                            aria-selected={assigneeId === m.profile_id}
-                            className="ct-picker-item"
-                            onClick={() => pickAssignee(m.profile_id!)}
-                          >
-                            <MemberAvatar member={m} />
-                            {memberName(m)}
-                          </button>
-                        ))}
-                        {assigneeMatches.length === 0 && <span className="ct-empty">No one matches</span>}
-                      </div>
-                    </div>
-                  </>
+                  <PeoplePicker
+                    people={people}
+                    selectedId={assigneeId || null}
+                    allowNone
+                    onPick={(id) => {
+                      setAssigneeId(id ?? '');
+                      setAssigneeOpen(false);
+                    }}
+                    onClose={() => setAssigneeOpen(false)}
+                  />
                 )}
               </div>
             </div>
