@@ -1970,7 +1970,41 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 9px; font-weight: 700; text-transform: uppercase;
 }
-.priority-chip.inbox-chip { font-size: 11px; padding: 2px 8px; }
+.inbox-avatar { width: 28px; height: 28px; font-size: 11px; }
+/* Same column rhythm as the task table: wide text column, then fixed metadata columns */
+.inbox-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 110px 120px 120px;
+  align-items: center;
+  column-gap: 16px;
+}
+.inbox-grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 24px 10px 27px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.inbox-col { display: flex; justify-content: center; font-size: 14px; }
+.inbox-col-project { display: flex; justify-content: flex-start; min-width: 0; }
+.inbox-project-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer;
+}
+.inbox-project-chip:hover { background: var(--surface-alt); }
+.inbox-project-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) {
+  /* narrow: text on top, metadata in a row underneath */
+  .inbox-grid { grid-template-columns: repeat(4, auto); justify-content: start; row-gap: 8px; }
+  .inbox-grid > :first-child { grid-column: 1 / -1; }
+  .inbox-grid-head { display: none; }
+  .inbox-col { justify-content: flex-start; }
+}
 
 /* Super-admin bulk select */
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
