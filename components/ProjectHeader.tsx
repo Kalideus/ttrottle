@@ -21,6 +21,7 @@ interface ProjectHeaderProps {
   projectColor: string;
   projectIcon: string;
   isPrivate?: boolean;
+  isSuperAdmin?: boolean;
   members: ProjectMember[];
   currentUserId: string | null;
   onInvite: () => void;
@@ -35,6 +36,7 @@ export function ProjectHeader({
   projectColor,
   projectIcon,
   isPrivate = false,
+  isSuperAdmin = false,
   members,
   currentUserId,
   onInvite,
@@ -256,7 +258,7 @@ export function ProjectHeader({
           )}
         </button>
 
-        {!isPrivate && (
+        {!isPrivate && (canArchive || isSuperAdmin) && (
           <button className="project-share-btn" onClick={onInvite}>
             <UserPlus size={16} />
             <span>Invite</span>

@@ -24,15 +24,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sendEmail = req.body?.sendEmail !== false;
   if (!email || !projectId) return res.status(400).json({ error: 'email and projectId are required' });
 
-  // Caller must be an owner or admin of the project they're inviting to.
-  const { data: membership } = await admin
-    .from('project_members')
-    .select('role')
-    .eq('project_id', projectId)
-    .eq('profile_id', caller.user.id)
-    .maybeSingle();
-  if (!membership || !['owner', 'admin'].includes(membership.role)) {
-    return res.status(403).json({ error: 'Only project owners and admins can invite members' });
+  // Caller must be the project's owner or a manager ('admin' role) of it, or a
+  // site super admin (who can invite to any project from /admin/team).
+  const [{ data: membership }, { data: callerProfile }] = await Promise.all([
+    admin.from('project_members').select('role').eq('project_id', projectId).eq('profile_id', caller.user.id).maybeSingle(),
+    admin.from('profiles').select('is_super_admin').eq('id', caller.user.id).maybeSingle(),
+  ]);
+  const isManager = !!membership && ['owner', 'admin'].includes(membership.role);
+  if (!isManager && !callerProfile?.is_super_admin) {
+    return res.status(403).json({ error: "Only this project's owner or managers can invite people to it" });
   }
 
   const { data: project } = await admin.from('projects').select('is_private').eq('id', projectId).maybeSingle();

@@ -17,7 +17,8 @@ interface MembersModalProps {
   onClose: () => void;
 }
 
-const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const;
+// DB role 'admin' = a project Manager (can invite/add/remove); not the site Super admin.
+const ROLE_LABEL = { owner: 'Owner', admin: 'Manager', member: 'Member' } as const;
 
 function Avatar({ url, color, initials }: { url?: string | null; color?: string | null; initials: string }) {
   return (
@@ -132,7 +133,7 @@ export function MembersModal({ projectName, members, people, currentUserId, isPr
         )}
 
         {!canManage && !isPrivate && (
-          <p className="modal-field-hint">Only this project&rsquo;s owner or admins can add or remove people.</p>
+          <p className="modal-field-hint">Only this project&rsquo;s owner or managers can add or remove people.</p>
         )}
       </div>
     </div>

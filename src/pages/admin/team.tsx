@@ -14,6 +14,8 @@ import {
 } from '@/lib/supabase/queries';
 
 const ROLES = ['owner', 'admin', 'member'] as const;
+// DB value 'admin' is shown as "Manager" so it isn't confused with site Super admin.
+const ROLE_LABEL = { owner: 'Owner', admin: 'Manager', member: 'Member' } as const;
 const INVITE_NEW = '__invite__';
 
 export default function TeamAdminPage() {
@@ -243,7 +245,7 @@ export default function TeamAdminPage() {
                               className="rounded border border-slate-300 px-2 py-1"
                             >
                               {ROLES.map((r) => (
-                                <option key={r} value={r}>{r}</option>
+                                <option key={r} value={r}>{ROLE_LABEL[r]}</option>
                               ))}
                             </select>
                           </label>
@@ -337,7 +339,7 @@ export default function TeamAdminPage() {
                               className="rounded border border-slate-300 px-2 py-1"
                             >
                               {ROLES.map((r) => (
-                                <option key={r} value={r}>{r}</option>
+                                <option key={r} value={r}>{ROLE_LABEL[r]}</option>
                               ))}
                             </select>
                           </td>

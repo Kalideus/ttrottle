@@ -906,7 +906,7 @@ export default function AppPage() {
           onProjectRename={async (projectId, name) => {
             const { error } = await updateProject(supabase, projectId, { name });
             // RLS lets only owners/admins rename; a blocked update returns no row
-            if (error) window.alert("Couldn't rename: only the project's owner or an admin can do that.");
+            if (error) window.alert("Couldn't rename: only the project's owner or a manager can do that.");
             const { data: projectRows } = await getProjects(supabase);
             setProjects(projectRows ?? []);
           }}
@@ -922,6 +922,7 @@ export default function AppPage() {
                 projectColor={currentProject?.color ?? '#4573D2'}
                 projectIcon={currentProject?.icon ?? '📋'}
                 isPrivate={!!currentProject?.is_private}
+                isSuperAdmin={!!currentProfile?.is_super_admin}
                 members={projectMembers}
                 currentUserId={currentUserId}
                 onInvite={handleInvite}
