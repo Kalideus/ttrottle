@@ -668,7 +668,7 @@ export default function AppPage() {
     const remaining = projectRows ?? [];
     // RLS silently skips a delete you're not allowed to do, so check it actually went
     if (remaining.some((p) => p.id === projectId)) {
-      window.alert(`Couldn't delete "${project?.name}": only the project's owner can do that.`);
+      window.alert(`Couldn't delete "${project?.name}": only the project's owner or a super admin can do that.`);
       return;
     }
     if (projectId === activeProjectId) dropToNextProject(remaining);

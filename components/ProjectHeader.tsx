@@ -63,7 +63,7 @@ export function ProjectHeader({
   };
   const myRole = members.find((m) => m.profile_id === currentUserId)?.role;
   const canArchive = !isPrivate && (myRole === 'owner' || myRole === 'admin');
-  const canDelete = !isPrivate && myRole === 'owner';
+  const canDelete = !isPrivate && (myRole === 'owner' || isSuperAdmin);
 
   const openEdit = () => {
     setNameDraft(projectName);
