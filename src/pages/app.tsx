@@ -806,12 +806,18 @@ export default function AppPage() {
       setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, readAt: new Date().toISOString() } : n)));
       setNotificationsBadge((c) => Math.max(0, c - 1));
     }
-    // Clicking a notification jumps you to the task it's about.
+    // Asana-style: stay in the inbox and open the task in the side panel. Loading
+    // the task's project in the background is what makes the panel able to find it.
     if (notif?.projectId && notif?.taskId) {
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
-      setActiveSection('projects');
     }
+  };
+
+  const openInProject = (projectId: string, taskId?: string | null) => {
+    setActiveProjectId(projectId);
+    setSelectedTaskId(taskId ?? null);
+    setActiveSection('projects');
   };
 
   const handleMarkAllRead = async () => {
@@ -889,7 +895,11 @@ export default function AppPage() {
           projects={projects}
           myTasksBadge={myTasksBadge}
           notificationsBadge={notificationsBadge}
-          onSectionChange={setActiveSection}
+          onSectionChange={(section) => {
+            // don't carry a task open elsewhere into the inbox's side panel
+            if (section === 'inbox') setSelectedTaskId(null);
+            setActiveSection(section);
+          }}
           onProjectSelect={setActiveProjectId}
           onProjectCreate={handleProjectCreate}
           onProjectDelete={handleProjectDelete}
@@ -1102,12 +1112,50 @@ export default function AppPage() {
           )}
 
           {activeSection === 'inbox' && (
-            <Inbox
-              notifications={notifications}
-              loading={notificationsLoading}
-              onNotificationClick={handleNotificationClick}
-              onMarkAllRead={handleMarkAllRead}
-            />
+            <div className="app-content">
+              <Inbox
+                notifications={notifications}
+                loading={notificationsLoading}
+                openTaskId={selectedTask?.id ?? null}
+                projects={projects}
+                onNotificationClick={handleNotificationClick}
+                onOpenProject={openInProject}
+                onMarkAllRead={handleMarkAllRead}
+              />
+              {selectedTask && (
+                <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
+              )}
+              {selectedTask && (
+                <TaskDetailPanel
+                  key={selectedTask.id}
+                  task={selectedTask}
+                  projectMembers={projectMembers}
+                  headings={headings}
+                  availableTags={availableTags}
+                  comments={comments}
+                  commentsLoading={commentsLoading}
+                  followers={followers}
+                  activity={activity}
+                  currentUserId={currentUserId}
+                  onFollowerAdd={handleFollowerAdd}
+                  onFollowerRemove={handleFollowerRemove}
+                  onSubtaskAdd={handleSubtaskAdd}
+                  onSubtaskSelect={setSelectedTaskId}
+                  parentTaskName={parentTask?.name ?? null}
+                  onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
+                  onClose={() => setSelectedTaskId(null)}
+                  onTaskUpdate={handleTaskUpdate}
+                  onTaskDelete={handleTaskDelete}
+                  onTagAdd={handleTagAdd}
+                  onTagRemove={handleTagRemove}
+                  onNewTag={handleNewTag}
+                  onCommentAdd={handleCommentAdd}
+                  onCommentEdit={handleCommentEdit}
+                  onCommentDelete={handleCommentDelete}
+                  onCommentLike={handleCommentLike}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
