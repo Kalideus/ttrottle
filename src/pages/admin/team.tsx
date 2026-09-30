@@ -278,7 +278,28 @@ export default function TeamAdminPage() {
                     <span>{project.icon}</span>
                     <span className="font-medium text-slate-900">{project.name}</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {!project.is_private && (
+                      <select
+                        aria-label={`Add someone to ${project.name}`}
+                        value=""
+                        disabled={status === 'saving'}
+                        onChange={(e) => {
+                          const userId = e.target.value;
+                          if (userId) void callAdmin('add-members', { userId, projectIds: [project.id], role: 'member' }).catch(() => {});
+                        }}
+                        className="rounded-lg border border-sky-300 px-2 py-1 text-sm text-sky-700 hover:bg-sky-50"
+                      >
+                        <option value="">+ Add person…</option>
+                        {profiles
+                          .filter((pr) => !members.some((m) => m.project_id === project.id && m.profile_id === pr.id))
+                          .map((pr) => (
+                            <option key={pr.id} value={pr.id}>
+                              {pr.name} ({pr.email})
+                            </option>
+                          ))}
+                      </select>
+                    )}
                     <button
                       onClick={() => setInviteProjectId(project.id)}
                       className="rounded-lg border border-sky-300 px-3 py-1 text-sm text-sky-700 hover:bg-sky-50"
