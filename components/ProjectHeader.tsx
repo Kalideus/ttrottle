@@ -1,12 +1,20 @@
 'use client';
 
 import { ChevronDown, Lock, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ProjectMember } from '@/lib/supabase/queries';
 import { avatarStyle } from '@/lib/avatar';
 
 const PROJECT_COLORS = ['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C', '#5DA283'];
-const PROJECT_ICONS = ['📋', '🎨', '🌐', '📊', '👥', '🚀', '💡', '📱', '🛠️', '📦'];
+// ponytail: a fixed handful covers project names; Win+. / Ctrl+Cmd+Space opens the full OS picker
+const NAME_EMOJIS = [
+  '🚀', '⭐', '🔥', '✅', '📌', '📣', '💡', '🎯',
+  '📅', '📈', '💰', '🛠️', '🎨', '🌐', '📱', '📦',
+  '👥', '🤝', '📝', '🧪', '🐛', '⚡', '🏆', '❤️',
+  '🌏', '🗺️', '🛺', '🌴', '☕', '🍜', '🏖️', '✈️',
+];
+
+const PROJECT_ICONS =['📋', '🎨', '🌐', '📊', '👥', '🚀', '💡', '📱', '🛠️', '📦'];
 
 interface ProjectHeaderProps {
   projectName: string;
@@ -36,6 +44,19 @@ export function ProjectHeader({
   const visibleMembers = members.slice(0, 3);
   const [showEdit, setShowEdit] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  const insertEmoji = (emoji: string) => {
+    const input = nameRef.current;
+    const start = input?.selectionStart ?? nameDraft.length;
+    const end = input?.selectionEnd ?? nameDraft.length;
+    setNameDraft(nameDraft.slice(0, start) + emoji + nameDraft.slice(end));
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
   const myRole = members.find((m) => m.profile_id === currentUserId)?.role;
   const canArchive = !isPrivate && (myRole === 'owner' || myRole === 'admin');
   const canDelete = !isPrivate && myRole === 'owner';
@@ -93,17 +114,49 @@ export function ProjectHeader({
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>Name</span>
-                <input
-                  type="text"
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onBlur={saveName}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { saveName(); setShowEdit(false); }
-                    if (e.key === 'Escape') { setNameDraft(projectName); setShowEdit(false); }
-                  }}
-                  style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', color: 'var(--text)' }}
-                />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    ref={nameRef}
+                    type="text"
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={saveName}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { saveName(); setShowEdit(false); }
+                      if (e.key === 'Escape') { setNameDraft(projectName); setShowEdit(false); }
+                    }}
+                    style={{ flex: 1, minWidth: 0, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', color: 'var(--text)' }}
+                  />
+                  <button
+                    type="button"
+                    title="Insert emoji"
+                    aria-label="Insert emoji"
+                    aria-expanded={showEmoji}
+                    onClick={() => setShowEmoji(!showEmoji)}
+                    style={{ width: '36px', flexShrink: 0, border: '1px solid var(--border)', borderRadius: '6px', background: showEmoji ? 'var(--accent-soft)' : 'var(--surface-alt)', cursor: 'pointer', fontSize: '16px' }}
+                  >
+                    😀
+                  </button>
+                </div>
+                {showEmoji && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '2px', marginTop: '4px' }}>
+                    {NAME_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        aria-label={`Insert ${emoji}`}
+                        // mousedown keeps focus in the name field, so it doesn't blur-save mid-edit
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => insertEmoji(emoji)}
+                        style={{ height: '28px', border: 'none', borderRadius: '5px', background: 'transparent', cursor: 'pointer', fontSize: '16px' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-alt)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

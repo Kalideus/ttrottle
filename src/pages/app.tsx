@@ -816,6 +816,13 @@ export default function AppPage() {
           onSectionChange={setActiveSection}
           onProjectSelect={setActiveProjectId}
           onProjectCreate={handleProjectCreate}
+          onProjectRename={async (projectId, name) => {
+            const { error } = await updateProject(supabase, projectId, { name });
+            // RLS lets only owners/admins rename; a blocked update returns no row
+            if (error) window.alert("Couldn't rename: only the project's owner or an admin can do that.");
+            const { data: projectRows } = await getProjects(supabase);
+            setProjects(projectRows ?? []);
+          }}
           onCreateTask={handleCreateTaskClick}
           onInvite={handleInvite}
         />

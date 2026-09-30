@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ interface SidebarProps {
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectCreate: () => void;
+  onProjectRename: (projectId: string, name: string) => void;
   onCreateTask: () => void;
   onInvite: () => void;
 }
@@ -26,10 +27,20 @@ export function Sidebar({
   onSectionChange,
   onProjectSelect,
   onProjectCreate,
+  onProjectRename,
   onCreateTask,
   onInvite,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState(true);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+
+  const finishRename = (project: Project) => {
+    setRenamingId(null);
+    const name = draft.trim();
+    if (name && name !== project.name) onProjectRename(project.id, name);
+  };
 
   return (
     <div className="app-sidebar">
@@ -74,6 +85,7 @@ export function Sidebar({
               key={project.id}
               className={`sidebar-project-row ${activeProjectId === project.id && activeSection === 'projects' ? 'active' : ''}`}
               onClick={() => {
+                if (renamingId === project.id) return;
                 onSectionChange('projects');
                 onProjectSelect(project.id);
               }}
@@ -82,11 +94,59 @@ export function Sidebar({
                 className="sidebar-project-dot"
                 style={{ backgroundColor: project.color }}
               />
-              <span className="sidebar-project-name">{project.name}</span>
+              {renamingId === project.id ? (
+                <input
+                  className="sidebar-rename-input"
+                  aria-label="Project name"
+                  value={draft}
+                  autoFocus
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={() => finishRename(project)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setRenamingId(null);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="sidebar-project-name">{project.name}</span>
+              )}
               {project.is_private && <Lock size={12} aria-label="Private" style={{ opacity: 0.6 }} />}
-              <div className="sidebar-project-menu" style={{ cursor: 'pointer' }}>
+              <button
+                type="button"
+                className={`sidebar-project-menu ${menuFor === project.id ? 'is-open' : ''}`}
+                aria-label={`Options for ${project.name}`}
+                aria-haspopup="menu"
+                aria-expanded={menuFor === project.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuFor(menuFor === project.id ? null : project.id);
+                }}
+              >
                 <MoreVertical size={16} />
-              </div>
+              </button>
+
+              {menuFor === project.id && (
+                <>
+                  <div className="sidebar-menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
+                  <div className="sidebar-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuFor(null);
+                        setDraft(project.name);
+                        setRenamingId(project.id);
+                      }}
+                    >
+                      <Pencil size={14} /> Rename
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>

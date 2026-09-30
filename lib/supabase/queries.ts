@@ -129,7 +129,14 @@ export async function getProjects(supabase: SupabaseClient) {
     .from('projects')
     .select('*')
     .eq('archived', false)
-    .order('position', { ascending: true })
+
+  // Private project first, then A-Z. `numeric` sorts "2. X" before "10. X",
+  // so people can force an order by numbering names.
+  data?.sort(
+    (a, b) =>
+      Number(!!b.is_private) - Number(!!a.is_private) ||
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  )
 
   return { data, error }
 }
