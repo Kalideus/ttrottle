@@ -32,6 +32,7 @@ interface TaskDetailPanelProps {
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
+  onCommentLike: (commentId: string) => Promise<void>;
 }
 
 function relativeTime(iso: string) {
@@ -70,6 +71,7 @@ export function TaskDetailPanel({
   onCommentAdd,
   onCommentEdit,
   onCommentDelete,
+  onCommentLike,
 }: TaskDetailPanelProps) {
   // A task just created by the "Create" button opens ready to name.
   const isFresh = task.name === 'Untitled task';
@@ -757,7 +759,7 @@ export function TaskDetailPanel({
           onCommentAdd={onCommentAdd}
           onCommentEdit={onCommentEdit}
           onCommentDelete={onCommentDelete}
-          onCommentLike={async () => {}}
+          onCommentLike={onCommentLike}
         />
 
         <div className="detail-description" style={{ marginTop: '20px', paddingTop: '20px' }}>

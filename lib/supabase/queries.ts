@@ -516,7 +516,23 @@ export async function getComments(supabase: SupabaseClient, taskId: string) {
   if (error) return { data: [], error }
 
   const withAuthors = await attachProfilesById(supabase, comments ?? [], 'author_id', 'author')
-  return { data: withAuthors, error: null }
+
+  // Likes are best-effort: if the table is missing (migration 015 not run) comments still load.
+  const ids = withAuthors.map((c: any) => c.id)
+  const { data: likes } = ids.length
+    ? await supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', ids)
+    : { data: [] }
+  const byComment = new Map<string, string[]>()
+  for (const l of likes ?? []) byComment.set(l.comment_id, [...(byComment.get(l.comment_id) ?? []), l.user_id])
+
+  return { data: withAuthors.map((c: any) => ({ ...c, like_user_ids: byComment.get(c.id) ?? [] })), error: null }
+}
+
+export async function setCommentLike(supabase: SupabaseClient, commentId: string, userId: string, liked: boolean) {
+  const q = supabase.from('comment_likes')
+  return liked
+    ? q.upsert({ comment_id: commentId, user_id: userId })
+    : q.delete().eq('comment_id', commentId).eq('user_id', userId)
 }
 
 export async function createComment(

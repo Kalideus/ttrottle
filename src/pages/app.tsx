@@ -30,6 +30,7 @@ import {
   createComment,
   updateComment,
   deleteComment,
+  setCommentLike,
   getHeadings,
   createHeading,
   updateHeading,
@@ -71,8 +72,8 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
     body: c.body,
     createdAt: c.created_at,
     editedAt: c.edited_at ?? undefined,
-    likes: 0,
-    liked: false,
+    likes: c.like_user_ids?.length ?? 0,
+    liked: !!currentUserId && !!c.like_user_ids?.includes(currentUserId),
     isOwn: c.author_id === currentUserId,
   }));
 }
@@ -662,6 +663,22 @@ export default function AppPage() {
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body, editedAt: new Date().toISOString() } : c)));
   };
 
+  const handleCommentLike = async (commentId: string) => {
+    const c = comments.find((x) => x.id === commentId);
+    if (!c || !currentUserId) return;
+    const liked = !c.liked;
+    const apply = (l: boolean) =>
+      setComments((prev) =>
+        prev.map((x) => (x.id === commentId ? { ...x, liked: l, likes: Math.max(0, x.likes + (l ? 1 : -1)) } : x))
+      );
+    apply(liked);
+    const { error } = await setCommentLike(supabase, commentId, currentUserId, liked);
+    if (error) {
+      console.error('Error liking comment:', error);
+      apply(!liked);
+    }
+  };
+
   const handleCommentDelete = async (commentId: string) => {
     await deleteComment(supabase, commentId);
     setComments((prev) => prev.filter((c) => c.id !== commentId));
@@ -817,6 +834,7 @@ export default function AppPage() {
                         onCommentAdd={handleCommentAdd}
                         onCommentEdit={handleCommentEdit}
                         onCommentDelete={handleCommentDelete}
+                        onCommentLike={handleCommentLike}
                       />
                     )}
                   </>
@@ -892,6 +910,7 @@ export default function AppPage() {
                     onCommentAdd={handleCommentAdd}
                     onCommentEdit={handleCommentEdit}
                     onCommentDelete={handleCommentDelete}
+                    onCommentLike={handleCommentLike}
                   />
                 )}
               </div>
