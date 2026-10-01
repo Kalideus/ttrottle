@@ -1268,6 +1268,7 @@ export default function AppPage() {
                 {!loading && activeProjectId ? (
                   <>
                     <TaskTable
+                      members={projectMembers}
                       onTaskHover={prefetchTask}
                       onMakeSubtask={handleMakeSubtask}
                       onPromoteSubtask={handlePromoteSubtask}
@@ -1357,6 +1358,7 @@ export default function AppPage() {
 
               <div className="app-content">
                 <TaskTable
+                  members={projectMembers}
                   onTaskHover={prefetchTask}
                   onMakeSubtask={handleMakeSubtask}
                   onPromoteSubtask={handlePromoteSubtask}

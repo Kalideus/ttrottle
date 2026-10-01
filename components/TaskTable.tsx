@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil } from 'lucide-react';
-import type { Task, Heading } from '@/lib/supabase/queries';
+import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
+import { PeoplePicker } from '@/components/PeoplePicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
@@ -12,6 +13,7 @@ import { openPicker } from '@/lib/openPicker';
 interface TaskTableProps {
   tasks: (Task & { subtasks?: Task[] })[];
   headings: Heading[];
+  members?: ProjectMember[];
   onTaskSelect: (taskId: string) => void;
   selectedTaskId?: string | null;
   currentUserId?: string | null;
@@ -40,13 +42,14 @@ interface TaskTableProps {
   onPromoteSubtask?: (taskId: string, headingId: string | null, position: number) => void;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask }: TaskTableProps) {
+export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
   const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
   const [editingHeadingId, setEditingHeadingId] = useState<string | null>(null);
   const [headingDraft, setHeadingDraft] = useState('');
   const [addingSection, setAddingSection] = useState(false);
@@ -501,7 +504,14 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           </div>
 
           {/* Assignee */}
-          <div className="task-metadata-cell">
+          <div
+            className="task-metadata-cell"
+            style={{ position: 'relative', cursor: 'pointer', zIndex: assigningId === task.id ? 50 : undefined }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAssigningId(task.id);
+            }}
+          >
             {task.assignee ? (
               <div
                 style={{
@@ -521,6 +531,19 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
               </div>
             ) : (
               <div className="empty-cell" data-hint="Assign">👤</div>
+            )}
+            {assigningId === task.id && (
+              <PeoplePicker
+                people={members}
+                selectedId={task.assignee_id}
+                allowNone
+                emptyText="No members yet — invite someone from the project header."
+                onPick={(id) => {
+                  onTaskUpdate(task.id, { assignee_id: id });
+                  setAssigningId(null);
+                }}
+                onClose={() => setAssigningId(null)}
+              />
             )}
           </div>
 
