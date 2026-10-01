@@ -28,9 +28,11 @@ interface TaskTableProps {
   // Bulk-select mode: when set, each row gets a checkbox.
   bulkSelected?: Set<string> | null;
   onBulkToggle?: (taskId: string) => void;
+  /** Pointer resting on a row: lets the parent preload that task's panel. */
+  onTaskHover?: (taskId: string) => void;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -215,6 +217,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
     return (
       <div key={task.id}>
         <div className={`task-row ${isLevel2 ? 'level-2' : ''} ${selectedTaskId === task.id ? 'selected' : ''} ${completingTaskId === task.id ? 'completing' : ''}`}
+          onMouseEnter={() => onTaskHover?.(task.id)}
           onClick={() => {
             onTaskSelect(task.id);
             if (hasSubtasks) toggleTaskExpand(task.id);

@@ -328,41 +328,61 @@ export default function AppPage() {
     };
   }, [currentUserId, supabase, loadNotifications, loadNotificationsBadge]);
 
-  useEffect(() => {
-    if (!selectedTaskId) {
-      setComments([]);
-      return;
-    }
-
-    setCommentsLoading(true);
-    getComments(supabase, selectedTaskId).then(({ data }) => {
-      setComments(mapComments(data ?? [], currentUserId));
-      setCommentsLoading(false);
-    });
-  }, [selectedTaskId, supabase, currentUserId]);
-
-  useEffect(() => {
-    if (!selectedTaskId) {
-      setFollowers([]);
-      return;
-    }
-
-    getFollowers(supabase, selectedTaskId).then(({ data }) => setFollowers(data ?? []));
-  }, [selectedTaskId, supabase]);
-
-  const refreshActivity = async (taskId: string) => {
-    const { data } = await getTaskActivity(supabase, taskId);
-    setActivity(data ?? []);
+  // Task panel extras, cached per task like projects: reopening a task is instant, and resting the
+  // pointer on a row loads them before the click.
+  type TaskExtras = { comments: CommentItem[]; followers: Follower[]; activity: TaskActivity[] };
+  const taskCache = useRef(new Map<string, TaskExtras>());
+  const taskLoads = useRef(new Map<string, Promise<TaskExtras>>());
+  const loadTaskExtras = (id: string, fresh = false): Promise<TaskExtras> => {
+    const inflight = taskLoads.current.get(id);
+    if (inflight && !fresh) return inflight;
+    const load = Promise.all([getComments(supabase, id), getFollowers(supabase, id), getTaskActivity(supabase, id)])
+      .then(([c, f, a]) => {
+        const d = { comments: mapComments(c.data ?? [], latest.current.currentUserId), followers: f.data ?? [], activity: a.data ?? [] };
+        taskCache.current.set(id, d);
+        return d;
+      })
+      .finally(() => {
+        if (taskLoads.current.get(id) === load) taskLoads.current.delete(id);
+      });
+    taskLoads.current.set(id, load);
+    return load;
+  };
+  // waits for the pointer to settle so sweeping across the list doesn't load every row
+  const hoverTimer = useRef<number | undefined>(undefined);
+  const prefetchTask = (id: string) => {
+    window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      if (!taskCache.current.has(id)) void loadTaskExtras(id);
+    }, 150);
   };
 
   useEffect(() => {
+    const apply = (d: TaskExtras) => {
+      setComments(d.comments);
+      setFollowers(d.followers);
+      setActivity(d.activity);
+      setCommentsLoading(false);
+    };
     if (!selectedTaskId) {
-      setActivity([]);
+      apply({ comments: [], followers: [], activity: [] });
       return;
     }
-
-    refreshActivity(selectedTaskId);
-  }, [selectedTaskId, supabase]);
+    let stale = false;
+    const cached = taskCache.current.get(selectedTaskId);
+    if (cached) apply(cached);
+    else {
+      // don't show the previous task's comments while this one loads
+      apply({ comments: [], followers: [], activity: [] });
+      setCommentsLoading(true);
+    }
+    loadTaskExtras(selectedTaskId, !!cached).then((d) => {
+      if (!stale) apply(d);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [selectedTaskId, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? projects[0],
@@ -380,6 +400,10 @@ export default function AppPage() {
     () => (selectedTask?.parent_task_id ? taskPool.find((t) => t.id === selectedTask.parent_task_id) ?? null : null),
     [taskPool, selectedTask]
   );
+
+  const frozenOrder = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] });
+  // bumped by deliberate moves (reorder arrows, drag between headings) so those do re-sort
+  const [resortToken, setResortToken] = useState(0);
 
   const displayedTasks = useMemo(() => {
     let result = [...taskPool];
@@ -416,10 +440,7 @@ export default function AppPage() {
     if (activeSection === 'my-tasks') {
       // My Tasks is always due-date order, overdue-first — not subject to the toolbar's sort picker.
       result.sort((a, b) => (a.due_date ? new Date(a.due_date).getTime() : Infinity) - (b.due_date ? new Date(b.due_date).getTime() : Infinity));
-      return result;
-    }
-
-    result.sort((a, b) => {
+    } else result.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'position') cmp = (a.position ?? 0) - (b.position ?? 0);
       else if (sortField === 'name') cmp = a.name.localeCompare(b.name);
@@ -432,8 +453,20 @@ export default function AppPage() {
       return sortDirection === 'asc' ? cmp : -cmp;
     });
 
+    // Rows don't move while you edit them (changing a date mid-list made the next click land on the wrong task).
+    // The order is re-sorted only when the view itself changes; rows added meanwhile go at the bottom.
+    const viewKey = JSON.stringify([activeSection, activeProjectId, sortField, sortDirection, activeFilters, searchQuery, showCompleted, resortToken]);
+    const prev = frozenOrder.current;
+    if (prev.key === viewKey) {
+      const byId = new Map(result.map((t) => [t.id, t]));
+      const kept = prev.ids.flatMap((id) => byId.get(id) ?? []);
+      const known = new Set(prev.ids);
+      result = [...kept, ...result.filter((t) => !known.has(t.id))];
+    }
+    frozenOrder.current = { key: viewKey, ids: result.map((t) => t.id) };
+
     return result;
-  }, [taskPool, activeFilters, searchQuery, showCompleted, sortField, sortDirection, activeSection]);
+  }, [taskPool, activeFilters, searchQuery, showCompleted, sortField, sortDirection, activeSection, activeProjectId, resortToken]);
 
   const allVisibleTaskIds = useMemo(
     () => displayedTasks.flatMap((t) => [t.id, ...(t.subtasks ?? []).map((s) => s.id)]),
@@ -492,19 +525,26 @@ export default function AppPage() {
       const id = latest.current.selectedTaskId;
       if (!id) return;
       const { data } = await getFollowers(supabase, id);
+      const cached = taskCache.current.get(id);
+      if (cached) cached.followers = data ?? [];
       if (id === latest.current.selectedTaskId) setFollowers(data ?? []);
     },
     activity: async () => {
       const id = latest.current.selectedTaskId;
       if (!id) return;
       const { data } = await getTaskActivity(supabase, id);
+      const cached = taskCache.current.get(id);
+      if (cached) cached.activity = data ?? [];
       if (id === latest.current.selectedTaskId) setActivity(data ?? []);
     },
     comments: async () => {
       const { selectedTaskId: id, currentUserId: uid } = latest.current;
       if (!id) return;
       const { data } = await getComments(supabase, id);
-      if (id === latest.current.selectedTaskId) setComments(mapComments(data ?? [], uid));
+      const comments = mapComments(data ?? [], uid);
+      const cached = taskCache.current.get(id);
+      if (cached) cached.comments = comments;
+      if (id === latest.current.selectedTaskId) setComments(comments);
     },
   };
   type Resync = keyof typeof resyncers;
@@ -648,6 +688,7 @@ export default function AppPage() {
     if ('assignee_id' in updates) optimistic.assignee = projectMembers.find((m) => m.profile_id === updates.assignee_id)?.profile ?? null;
     if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
     patchTask(taskId, (t) => ({ ...t, ...optimistic }));
+    if ('position' in updates) setResortToken((n) => n + 1);
 
     const messages = buildActivityMessages(updates);
     persist(async () => {
@@ -701,6 +742,7 @@ export default function AppPage() {
     if (!a || !b) return;
     patchTask(a.id, (t) => ({ ...t, position: b.position }));
     patchTask(b.id, (t) => ({ ...t, position: a.position }));
+    setResortToken((n) => n + 1);
     persist(() => Promise.all([
       updateTask(supabase, a.id, { position: b.position }).then(must),
       updateTask(supabase, b.id, { position: a.position }).then(must),
@@ -1168,6 +1210,7 @@ export default function AppPage() {
                 {!loading && activeProjectId ? (
                   <>
                     <TaskTable
+                      onTaskHover={prefetchTask}
                       tasks={displayedTasks}
                       headings={headings}
                       onTaskSelect={setSelectedTaskId}
@@ -1253,6 +1296,7 @@ export default function AppPage() {
 
               <div className="app-content">
                 <TaskTable
+                  onTaskHover={prefetchTask}
                   tasks={displayedTasks}
                   headings={[]}
                   flat

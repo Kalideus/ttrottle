@@ -277,6 +277,10 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
     .is('parent_task_id', null)
     .is('deleted_at', null)
     .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+    // without this the embedded subtasks come back in arbitrary order and can shuffle on refresh
+    .order('position', { referencedTable: 'subtasks', ascending: true })
+    .order('created_at', { referencedTable: 'subtasks', ascending: true })
 
   if (tasksError) return { data: [], error: tasksError }
 
