@@ -6,6 +6,7 @@ import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '
 import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
+import { autoGrow } from '@/lib/autoGrow';
 import { avatarStyle } from '@/lib/avatar';
 import { PeoplePicker } from '@/components/PeoplePicker';
 
@@ -671,6 +672,8 @@ export function TaskDetailPanel({
           {isEditingDescription ? (
             <textarea
               autoFocus
+              ref={autoGrow}
+              onInput={(e) => autoGrow(e.currentTarget)}
               className="detail-description-textarea"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

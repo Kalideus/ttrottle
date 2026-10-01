@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
+import { autoGrow } from '@/lib/autoGrow';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
 
@@ -157,6 +158,8 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
           />
           <textarea
             className="ct-notes"
+            ref={autoGrow}
+            onInput={(e) => autoGrow(e.currentTarget)}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Add a description…"

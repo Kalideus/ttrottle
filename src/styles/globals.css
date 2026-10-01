@@ -1351,6 +1351,8 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   font-family: inherit;
   color: var(--text);
   resize: vertical;
+  /* grows with its text (lib/autoGrow); scrolls past this */
+  max-height: 60vh;
 }
 
 .detail-description-textarea::placeholder {
@@ -2211,6 +2213,8 @@ button.project-members:hover { background: var(--surface-alt); }
   line-height: 1.5;
   color: var(--text);
   padding: 2px 0 12px;
+  /* grows with its text (lib/autoGrow) but leaves room for the rest of the modal */
+  max-height: 40vh;
 }
 .ct-props {
   border-top: 1px solid var(--border);
