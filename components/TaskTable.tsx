@@ -48,8 +48,8 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   // closes whichever was open, clicking the open one again closes it.
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
-  const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [priorityMenuId, setPriorityMenuId] = useState<string | null>(null);
   const [editingHeadingId, setEditingHeadingId] = useState<string | null>(null);
   const [headingDraft, setHeadingDraft] = useState('');
   const [addingSection, setAddingSection] = useState(false);
@@ -189,56 +189,36 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   const renderDueDateCell = (task: Task) => {
     const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
     return (
-    <div className="task-metadata-cell" style={{ position: 'relative' }}>
+    <div
+      className="task-metadata-cell"
+      style={{ position: 'relative', cursor: 'pointer' }}
+      // The date input is always there but invisible; clicking the cell opens its calendar
+      // directly (showPicker needs the click itself, so it can't wait for a re-render).
+      onClick={(e) => {
+        e.stopPropagation();
+        openPicker(e.currentTarget.querySelector('input'));
+      }}
+    >
       {task.due_date ? (
         <span
           className="due-date-cell"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditingDueDateId(task.id);
-          }}
-          style={{ cursor: 'pointer', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
+          style={{ color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
         >
           {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
         </span>
       ) : (
-        <div
-          className="empty-cell"
-          style={{ borderRadius: '4px', cursor: 'pointer' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditingDueDateId(task.id);
-          }}
-        >
+        <div className="empty-cell" style={{ borderRadius: '4px' }}>
           📅
         </div>
       )}
-
-      {editingDueDateId === task.id && (
-        <input
-          type="date"
-          autoFocus
-          ref={openPicker}
-          defaultValue={task.due_date ?? ''}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            onTaskUpdate(task.id, { due_date: e.target.value || null });
-            setEditingDueDateId(null);
-          }}
-          onBlur={() => setEditingDueDateId(null)}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 100,
-            marginTop: '4px',
-            padding: '6px',
-            border: '1px solid var(--border)',
-            borderRadius: '4px',
-            background: 'var(--surface)',
-          }}
-        />
-      )}
+      <input
+        type="date"
+        tabIndex={-1}
+        aria-label="Due date"
+        value={task.due_date ?? ''}
+        onChange={(e) => onTaskUpdate(task.id, { due_date: e.target.value || null })}
+        style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+      />
     </div>
     );
   };
@@ -550,13 +530,46 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
           {renderDueDateCell(task)}
 
           {/* Priority */}
-          <div className="task-metadata-cell">
+          <div
+            className="task-metadata-cell"
+            style={{ position: 'relative', cursor: 'pointer', zIndex: priorityMenuId === task.id ? 50 : undefined }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPriorityMenuId(task.id);
+            }}
+          >
             {task.priority ? (
               <span className={`priority-chip priority-${task.priority}`}>
                 {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
               </span>
             ) : (
               <span className="priority-hint" data-hint="Set priority" />
+            )}
+            {priorityMenuId === task.id && (
+              <>
+                <div className="ct-picker-backdrop" onClick={(e) => { e.stopPropagation(); setPriorityMenuId(null); }} />
+                <div className="ct-picker-pop" style={{ width: 140, left: 'auto', right: 0 }} onClick={(e) => e.stopPropagation()}>
+                  {(['high', 'medium', 'low', null] as const).map((opt) => (
+                    <button
+                      key={opt ?? 'none'}
+                      type="button"
+                      className="ct-picker-item"
+                      style={{ width: '100%' }}
+                      aria-selected={task.priority === opt}
+                      onClick={() => {
+                        onTaskUpdate(task.id, { priority: opt });
+                        setPriorityMenuId(null);
+                      }}
+                    >
+                      {opt ? (
+                        <span className={`priority-chip priority-${opt}`}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                      ) : (
+                        <span className="ct-muted">No priority</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
