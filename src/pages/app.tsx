@@ -50,7 +50,9 @@ import {
   touchLastSeen,
   getNotifications,
   getUnreadCount,
-  markNotificationRead,
+  markNotificationsRead,
+  clearNotifications,
+  clearAllNotifications,
   markAllNotificationsRead,
   getTags,
   createTag,
@@ -317,6 +319,8 @@ export default function AppPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` },
         () => {
+          // my own clears/reads still saving would come back stale; the save queue reloads once they land
+          if (saves.pending > 0) return;
           void loadNotificationsBadge();
           // the full list only matters while it's on screen; opening the inbox loads it anyway
           if (inboxOpen.current) void loadNotifications();
@@ -506,6 +510,7 @@ export default function AppPage() {
 
   // What a finished save may have changed; each reloads from the server for whatever is on screen now.
   const resyncers = {
+    notifications: () => Promise.all([loadNotificationsBadge(), inboxOpen.current ? loadNotifications() : null]),
     tasks: () => Promise.all([refreshTasks(), refreshMyTasks()]),
     headings: async () => {
       const id = latest.current.activeProjectId;
@@ -1055,13 +1060,15 @@ export default function AppPage() {
     persist(async () => must(await deleteComment(supabase, commentId)), 'comments', 'tasks');
   };
 
-  const handleNotificationClick = async (notificationId: string) => {
-    const notif = notifications.find((n) => n.id === notificationId);
-    if (notif && !notif.readAt) {
+  // `ids` is one inbox row: a single notification, or a task's grouped run of updates
+  const handleNotificationClick = async (ids: string[]) => {
+    const notif = notifications.find((n) => n.id === ids[0]);
+    const unread = new Set(notifications.filter((n) => ids.includes(n.id) && !n.readAt).map((n) => n.id));
+    if (unread.size) {
       // Slack-style: the item stays in the feed as history, just loses its unread state.
-      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, readAt: new Date().toISOString() } : n)));
-      setNotificationsBadge((c) => Math.max(0, c - 1));
-      persist(async () => must(await markNotificationRead(supabase, notificationId)));
+      setNotifications((prev) => prev.map((n) => (unread.has(n.id) ? { ...n, readAt: new Date().toISOString() } : n)));
+      setNotificationsBadge((c) => Math.max(0, c - unread.size));
+      persist(async () => must(await markNotificationsRead(supabase, [...unread])), 'notifications');
     }
     // Asana-style: stay in the inbox and open the task in the side panel. Loading
     // the task's project in the background is what makes the panel able to find it.
@@ -1085,7 +1092,24 @@ export default function AppPage() {
     const uid = currentUserId;
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setNotificationsBadge(0);
-    persist(async () => must(await markAllNotificationsRead(supabase, uid)));
+    persist(async () => must(await markAllNotificationsRead(supabase, uid)), 'notifications');
+  };
+
+  // Ticking a row off clears it from the inbox.
+  const handleNotificationsClear = (ids: string[]) => {
+    const gone = new Set(ids);
+    const unreadGone = notifications.filter((n) => gone.has(n.id) && !n.readAt).length;
+    setNotifications((prev) => prev.filter((n) => !gone.has(n.id)));
+    setNotificationsBadge((c) => Math.max(0, c - unreadGone));
+    persist(async () => must(await clearNotifications(supabase, ids)), 'notifications');
+  };
+
+  const handleClearAllNotifications = () => {
+    if (!currentUserId) return;
+    const uid = currentUserId;
+    setNotifications([]);
+    setNotificationsBadge(0);
+    persist(async () => must(await clearAllNotifications(supabase, uid)), 'notifications');
   };
 
   return (
@@ -1400,6 +1424,8 @@ export default function AppPage() {
                 onNotificationClick={handleNotificationClick}
                 onOpenProject={openInProject}
                 onMarkAllRead={handleMarkAllRead}
+                onClear={handleNotificationsClear}
+                onClearAll={handleClearAllNotifications}
               />
               {selectedTask && (
                 <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />

@@ -696,11 +696,21 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
   return { data: withPeople, error: null }
 }
 
-export async function markNotificationRead(supabase: SupabaseClient, id: string) {
+// several at once: the inbox groups a task's consecutive updates into one row
+export async function markNotificationsRead(supabase: SupabaseClient, ids: string[]) {
   return supabase
     .from('notifications')
     .update({ read_at: new Date().toISOString() })
-    .eq('id', id)
+    .in('id', ids)
+}
+
+// "Clear" removes notifications for good (RLS: only your own)
+export async function clearNotifications(supabase: SupabaseClient, ids: string[]) {
+  return supabase.from('notifications').delete().in('id', ids)
+}
+
+export async function clearAllNotifications(supabase: SupabaseClient, userId: string) {
+  return supabase.from('notifications').delete().eq('user_id', userId)
 }
 
 export async function markAllNotificationsRead(supabase: SupabaseClient, userId: string) {

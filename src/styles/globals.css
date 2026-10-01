@@ -2346,3 +2346,28 @@ button.project-members:hover { background: var(--surface-alt); }
   .ct-hint { display: none; }
 }
 
+
+/* Inbox header actions (Mark all read, Clear all) */
+.inbox-head-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* the "tick off" circle on each notification: same look as a task checkbox, fills in on hover */
+.inbox-clear {
+  background: transparent;
+  padding: 0;
+  margin-top: 1px;
+}
+.inbox-clear:hover,
+.inbox-clear:focus-visible {
+  background: var(--accent);
+  border-color: var(--accent);
+}

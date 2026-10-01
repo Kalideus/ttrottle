@@ -1,7 +1,10 @@
 'use client';
 
-import { Bell, CheckCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { groupNotifications } from '@/lib/groupNotifications';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 export interface NotificationItem {
   id: string;
@@ -25,9 +28,26 @@ interface InboxProps {
   loading: boolean;
   openTaskId: string | null; // task showing in the side panel, highlighted here
   projects: { id: string; name: string; color: string }[];
-  onNotificationClick: (notificationId: string) => void;
+  // each takes every notification id in the clicked row (a row can be a grouped run of updates)
+  onNotificationClick: (ids: string[]) => void;
   onOpenProject: (projectId: string, taskId?: string | null) => void;
   onMarkAllRead: () => void;
+  onClear: (ids: string[]) => void;
+  onClearAll: () => void;
+}
+
+// "Natalie S", "Natalie S and Tom", "Natalie S and 2 others"
+function actorList(names: string[]) {
+  if (names.length <= 2) return names.join(' and ');
+  return `${names[0]} and ${names.length - 1} others`;
+}
+
+// The detail line of a grouped row: what changed, oldest first so it reads in order.
+function updateSummary(group: NotificationItem[]) {
+  const actors = [...new Set(group.map((n) => n.actorName))];
+  const changes = [...group].reverse().filter((n) => n.detail);
+  if (actors.length === 1) return `${actors[0]} ${[...new Set(changes.map((n) => n.detail))].join(', ')}`;
+  return [...new Set(changes.map((n) => `${n.actorName} ${n.detail}`))].join('; ');
 }
 
 function relativeTime(iso: string) {
@@ -41,8 +61,9 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
-export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead }: InboxProps) {
+export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead, onClear, onClearAll }: InboxProps) {
   const unreadCount = notifications.filter((n) => !n.readAt).length;
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   if (loading) {
     return (
@@ -56,7 +77,7 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
         <Bell size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
-        <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>No notifications yet</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>You&apos;re all caught up</p>
       </div>
     );
   }
@@ -80,26 +101,32 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
             </p>
           )}
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={onMarkAllRead}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--accent)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <CheckCheck size={16} />
-            Mark all read
+        <div style={{ display: 'flex', gap: '16px' }}>
+          {unreadCount > 0 && (
+            <button className="inbox-head-btn" onClick={onMarkAllRead}>
+              <CheckCheck size={16} />
+              Mark all read
+            </button>
+          )}
+          <button className="inbox-head-btn" onClick={() => setConfirmClearAll(true)}>
+            <Trash2 size={15} />
+            Clear all
           </button>
-        )}
+        </div>
       </div>
+
+      {confirmClearAll && (
+        <ConfirmModal
+          title="Clear all notifications?"
+          message={`This removes all ${notifications.length} notification${notifications.length === 1 ? '' : 's'} from your inbox. It can't be undone.`}
+          confirmLabel="Clear all"
+          onConfirm={() => {
+            setConfirmClearAll(false);
+            onClearAll();
+          }}
+          onCancel={() => setConfirmClearAll(false)}
+        />
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div className="inbox-grid inbox-grid-head" aria-hidden>
@@ -109,7 +136,12 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
           <span className="inbox-col">Due date</span>
           <span className="inbox-col">Priority</span>
         </div>
-        {notifications.map((notif) => {
+        {groupNotifications(notifications).map((group) => {
+          const notif = group[0]; // newest in the row
+          const ids = group.map((n) => n.id);
+          const unread = group.some((n) => !n.readAt);
+          const actors = [...new Set(group.map((n) => n.actorName))];
+          const detail = notif.type === 'updated' ? (group.some((n) => n.detail) ? updateSummary(group) : null) : notif.detail ? `“${notif.detail}”` : null;
           const project = projects.find((p) => p.id === notif.projectId);
           const isOpen = !!notif.taskId && notif.taskId === openTaskId;
           return (
@@ -117,11 +149,11 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
             key={notif.id}
             role="button"
             tabIndex={0}
-            onClick={() => onNotificationClick(notif.id)}
+            onClick={() => onNotificationClick(ids)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onNotificationClick(notif.id);
+                onNotificationClick(ids);
               }
             }}
             style={{
@@ -129,29 +161,43 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
               borderBottom: '1px solid var(--border)',
               borderLeft: `3px solid ${isOpen ? 'var(--accent)' : 'transparent'}`,
               cursor: 'pointer',
-              backgroundColor: isOpen ? 'var(--surface-alt)' : !notif.readAt ? 'var(--accent-soft)' : 'transparent',
+              backgroundColor: isOpen ? 'var(--surface-alt)' : unread ? 'var(--accent-soft)' : 'transparent',
             }}
           >
             <div className="inbox-grid">
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
-              {!notif.readAt && (
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--accent)',
-                    marginTop: '6px',
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-              <div style={{ flex: 1 }}>
+              {/* tick off = clear it from the inbox (and every notification grouped into this row) */}
+              <button
+                type="button"
+                className="task-checkbox inbox-clear"
+                title="Clear"
+                aria-label="Clear notification"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear(ids);
+                }}
+                onKeyDown={(e) => e.stopPropagation()} // Enter/Space on the button shouldn't also open the row
+              >
+                <Check size={11} strokeWidth={3} />
+              </button>
+              {/* always takes its space so rows line up whether or not they're unread */}
+              <div
+                aria-label={unread ? 'Unread' : undefined}
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: unread ? 'var(--accent)' : 'transparent',
+                  marginTop: '6px',
+                  flexShrink: 0,
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p
                   style={{
                     margin: '0 0 4px 0',
                     fontSize: '14px',
-                    fontWeight: notif.readAt ? 400 : 500,
+                    fontWeight: unread ? 500 : 400,
                     color: 'var(--text)',
                   }}
                 >
@@ -160,9 +206,9 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
                   {notif.type === 'assigned' && `${notif.actorName} assigned you "${notif.taskName}"`}
                   {notif.type === 'due_soon' && `"${notif.taskName}" is due soon`}
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
-                  {notif.type === 'updated' && `${notif.actorName} updated "${notif.taskName}"`}
+                  {notif.type === 'updated' && `${actorList(actors)} updated "${notif.taskName}"`}
                 </p>
-                {notif.detail && (
+                {detail && (
                   <p
                     style={{
                       margin: '0 0 4px 0',
@@ -171,10 +217,13 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
                       opacity: 0.85,
                     }}
                   >
-                    {notif.type === 'updated' ? `${notif.actorName} ${notif.detail}` : `“${notif.detail}”`}
+                    {detail}
                   </p>
                 )}
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{relativeTime(notif.createdAt)}</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {relativeTime(notif.createdAt)}
+                  {group.length > 1 && ` · ${group.length} changes`}
+                </span>
               </div>
             </div>
 
