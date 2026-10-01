@@ -19,6 +19,7 @@ import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import { Inbox, type NotificationItem } from '@/components/Inbox';
 import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
+import { createSaveQueue } from '@/lib/saveQueue';
 import {
   getProjects,
   getTasksForProject,
@@ -71,6 +72,12 @@ import {
 } from '@/lib/supabase/queries';
 
 const DAY_MS = 86400000;
+
+// Supabase returns { error } instead of throwing; background saves need a throw to report the failure.
+function must<T extends { error: unknown }>(result: T): T {
+  if (result.error) throw result.error;
+  return result;
+}
 
 // Local-time YYYY-MM-DD, `plusDays` from today (due_date is a plain date, so compare as strings).
 function localYmd(plusDays: number) {
@@ -133,7 +140,6 @@ export default function AppPage() {
   const endCelebration = useCallback(() => setCelebration(null), []);
   // Super-admin bulk select: null = off, a Set = on (possibly empty).
   const [bulk, setBulk] = useState<Set<string> | null>(null);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [allPeople, setAllPeople] = useState<Profile[]>([]);
 
   const supabase = useMemo(() => createClient(), []);
@@ -190,9 +196,32 @@ export default function AppPage() {
 
   // Per-project data. A project seen before renders instantly from cache, then refreshes in the background.
   // ponytail: in-memory only, lost on reload; fine since the refetch always follows.
-  const projectCache = useRef(new Map<string, { tasks: Task[]; members: ProjectMember[]; headings: Heading[] }>());
-  const activeProjectIdRef = useRef(activeProjectId);
-  activeProjectIdRef.current = activeProjectId;
+  type ProjectData = { tasks: Task[]; members: ProjectMember[]; headings: Heading[] };
+  const projectCache = useRef(new Map<string, ProjectData>());
+  const projectLoads = useRef(new Map<string, Promise<ProjectData>>());
+  // Shared by hover-prefetch and opening a project, so a click right after a hover reuses the same request.
+  // `fresh` skips reusing a load that started before the cached copy we're already showing.
+  const loadProject = (id: string, fresh = false): Promise<ProjectData> => {
+    const inflight = projectLoads.current.get(id);
+    if (inflight && !fresh) return inflight;
+    const load = Promise.all([getTasksForProject(supabase, id), getProjectMembers(supabase, id), getHeadings(supabase, id)])
+      .then(([t, m, h]) => {
+        const d = { tasks: (t.data ?? []) as Task[], members: m.data ?? [], headings: h.data ?? [] };
+        projectCache.current.set(id, d);
+        return d;
+      })
+      .finally(() => {
+        if (projectLoads.current.get(id) === load) projectLoads.current.delete(id);
+      });
+    projectLoads.current.set(id, load);
+    return load;
+  };
+  const prefetchProject = (id: string) => {
+    if (!projectCache.current.has(id)) void loadProject(id);
+  };
+  // Current values for code that finishes after a later render (background saves and their resyncs).
+  const latest = useRef({ activeProjectId, selectedTaskId, currentUserId, currentProfile });
+  latest.current = { activeProjectId, selectedTaskId, currentUserId, currentProfile };
   useEffect(() => {
     if (!activeProjectId) return;
     let stale = false;
@@ -205,19 +234,13 @@ export default function AppPage() {
     const cached = projectCache.current.get(activeProjectId);
     if (cached) apply(cached);
 
-    Promise.all([
-      getTasksForProject(supabase, activeProjectId),
-      getProjectMembers(supabase, activeProjectId),
-      getHeadings(supabase, activeProjectId),
-    ]).then(([t, m, h]) => {
-      const d = { tasks: (t.data ?? []) as Task[], members: m.data ?? [], headings: h.data ?? [] };
-      projectCache.current.set(activeProjectId, d);
+    loadProject(activeProjectId, !!cached).then((d) => {
       if (!stale) apply(d); // a quick click to another project must not be overwritten by this slower response
     });
     return () => {
       stale = true;
     };
-  }, [activeProjectId, supabase]);
+  }, [activeProjectId, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -270,10 +293,18 @@ export default function AppPage() {
     void loadNotificationsBadge();
   }, [loadNotificationsBadge, activeSection]);
 
+  const notificationsLoaded = useRef(false);
+  const inboxOpen = useRef(false);
+  inboxOpen.current = activeSection === 'inbox';
+
   useEffect(() => {
     if (activeSection !== 'inbox') return;
-    setNotificationsLoading(true);
-    loadNotifications().finally(() => setNotificationsLoading(false));
+    // reopening shows the last list straight away and refreshes it underneath
+    if (!notificationsLoaded.current) setNotificationsLoading(true);
+    loadNotifications().finally(() => {
+      notificationsLoaded.current = true;
+      setNotificationsLoading(false);
+    });
   }, [activeSection, loadNotifications]);
 
   // Live push: Supabase Realtime on my notification rows. Any insert/update
@@ -287,7 +318,8 @@ export default function AppPage() {
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` },
         () => {
           void loadNotificationsBadge();
-          void loadNotifications();
+          // the full list only matters while it's on screen; opening the inbox loads it anyway
+          if (inboxOpen.current) void loadNotifications();
         }
       )
       .subscribe();
@@ -414,73 +446,166 @@ export default function AppPage() {
   const handleBulkDelete = async () => {
     if (!bulk?.size) return;
     if (!window.confirm(`Delete ${bulk.size} task${bulk.size === 1 ? '' : 's'}? They can be restored from Admin → Deleted tasks.`)) return;
-    setBulkDeleting(true);
-    try {
-      await Promise.all([...bulk].map((id) => deleteTask(supabase, id, currentUserId)));
-      if (selectedTaskId && bulk.has(selectedTaskId)) setSelectedTaskId(null);
-      setBulk(new Set());
-      await refreshTasks();
-    } finally {
-      setBulkDeleting(false);
-    }
+    const ids = new Set(bulk);
+    removeTasks(ids);
+    setBulk(new Set());
+    persist(() => Promise.all([...ids].map((id) => deleteTask(supabase, id, currentUserId).then(must))), 'tasks');
   };
 
   const refreshTasks = async () => {
-    if (!activeProjectId) return;
-    const projectId = activeProjectId;
+    const projectId = latest.current.activeProjectId;
+    if (!projectId) return;
     const { data: taskRows } = await getTasksForProject(supabase, projectId);
     const cached = projectCache.current.get(projectId);
     if (cached) cached.tasks = (taskRows ?? []) as Task[];
-    // the user may have switched project while this was in flight
-    if (projectId === activeProjectIdRef.current) setTasks((taskRows ?? []) as Task[]);
+    // skip if the user switched project, or made newer changes this response predates (their resync follows)
+    if (projectId === latest.current.activeProjectId && saves.pending === 0) setTasks((taskRows ?? []) as Task[]);
   };
 
+  const refreshMyTasks = async () => {
+    const { currentUserId: uid, currentProfile: me } = latest.current;
+    if (!uid) return;
+    const { data } = await getMyTasks(supabase, uid);
+    if (saves.pending === 0) setMyTasks(((data ?? []) as Task[]).map((t) => ({ ...t, assignee: me, heading_id: null })));
+  };
+
+  // What a finished save may have changed; each reloads from the server for whatever is on screen now.
+  const resyncers = {
+    tasks: () => Promise.all([refreshTasks(), refreshMyTasks()]),
+    headings: async () => {
+      const id = latest.current.activeProjectId;
+      if (!id) return;
+      const { data } = await getHeadings(supabase, id);
+      if (id === latest.current.activeProjectId) setHeadings(data ?? []);
+    },
+    members: async () => {
+      const id = latest.current.activeProjectId;
+      if (!id) return;
+      const { data } = await getProjectMembers(supabase, id);
+      if (id === latest.current.activeProjectId) setProjectMembers(data ?? []);
+    },
+    projects: async () => {
+      const { data } = await getProjects(supabase);
+      setProjects(data ?? []);
+    },
+    followers: async () => {
+      const id = latest.current.selectedTaskId;
+      if (!id) return;
+      const { data } = await getFollowers(supabase, id);
+      if (id === latest.current.selectedTaskId) setFollowers(data ?? []);
+    },
+    activity: async () => {
+      const id = latest.current.selectedTaskId;
+      if (!id) return;
+      const { data } = await getTaskActivity(supabase, id);
+      if (id === latest.current.selectedTaskId) setActivity(data ?? []);
+    },
+    comments: async () => {
+      const { selectedTaskId: id, currentUserId: uid } = latest.current;
+      if (!id) return;
+      const { data } = await getComments(supabase, id);
+      if (id === latest.current.selectedTaskId) setComments(mapComments(data ?? [], uid));
+    },
+  };
+  type Resync = keyof typeof resyncers;
+  const resyncRef = useRef(resyncers);
+  resyncRef.current = resyncers;
+
+  // Optimistic saves: handlers update the screen first, then hand the write to persist().
+  // Once the queue drains, everything the writes touched is reloaded, which also undoes a failed write.
+  // ponytail: one global queue; per-task queues if bulk edits ever take noticeably long to settle
+  const [saves] = useState(() =>
+    createSaveQueue<Resync>(
+      (keys) => keys.forEach((k) => void resyncRef.current[k]()),
+      (e) => {
+        console.error('Save failed:', e);
+        window.alert(`Couldn't save that change: ${(e as Error)?.message ?? 'unknown error'}. Showing the latest saved data.`);
+      }
+    )
+  );
+  const persist = (write: () => Promise<unknown>, ...touches: Resync[]) => void saves.add(write, touches);
+
+  // Apply a change to one task wherever it's shown (project list, My tasks, as a subtask).
+  const patchTask = (taskId: string, fn: (t: Task) => Task) => {
+    const p = (t: Task): Task => (t.id === taskId ? fn(t) : t.subtasks ? { ...t, subtasks: t.subtasks.map(p) } : t);
+    setTasks((ts) => ts.map(p));
+    setMyTasks((ts) => ts.map(p));
+  };
+
+  const removeTasks = (ids: Set<string>) => {
+    const drop = (ts: Task[]): Task[] => ts.filter((t) => !ids.has(t.id)).map((t) => (t.subtasks ? { ...t, subtasks: drop(t.subtasks) } : t));
+    setTasks(drop);
+    setMyTasks(drop);
+    if (selectedTaskId && ids.has(selectedTaskId)) setSelectedTaskId(null);
+  };
+
+  const nextPosition = (items: { position?: number | null }[]) => Math.max(-1, ...items.map((t) => t.position ?? 0)) + 1;
+
+  const newTask = (fields: Partial<Task>): Task => ({
+    id: crypto.randomUUID(),
+    project_id: activeProjectId,
+    heading_id: null,
+    parent_task_id: null,
+    name: '',
+    description: null,
+    assignee_id: null,
+    due_date: null,
+    priority: null,
+    completed: false,
+    completed_at: null,
+    position: 0,
+    created_by: currentUserId,
+    created_at: new Date().toISOString(),
+    assignee: null,
+    subtasks: [],
+    tags: [],
+    comment_count: 0,
+    ...fields,
+  });
+
   const handleTaskAdd = async (headingId: string | null, name: string) => {
-    await createTask(supabase, { project_id: activeProjectId, heading_id: headingId, name, created_by: currentUserId });
-    await refreshTasks();
+    const task = newTask({ heading_id: headingId, name, position: nextPosition(tasks) });
+    setTasks((ts) => [...ts, task]);
+    persist(async () => must(await createTask(supabase, { id: task.id, position: task.position, project_id: task.project_id, heading_id: headingId, name, created_by: currentUserId })), 'tasks');
   };
 
   const handleSubtaskAdd = async (parentTaskId: string, name: string) => {
-    await createTask(supabase, { project_id: activeProjectId, parent_task_id: parentTaskId, name, created_by: currentUserId });
-    await refreshTasks();
+    const parent = tasks.find((t) => t.id === parentTaskId);
+    const sub = newTask({ parent_task_id: parentTaskId, name, position: nextPosition(parent?.subtasks ?? []) });
+    patchTask(parentTaskId, (t) => ({ ...t, subtasks: [...(t.subtasks ?? []), sub] }));
+    persist(async () => must(await createTask(supabase, { id: sub.id, position: sub.position, project_id: sub.project_id, parent_task_id: parentTaskId, name, created_by: currentUserId })), 'tasks');
   };
 
   const handleTaskDelete = async (taskId: string) => {
-    await deleteTask(supabase, taskId, currentUserId);
-    if (selectedTaskId === taskId) setSelectedTaskId(null);
-    if (activeSection === 'my-tasks' && currentUserId) {
-      const { data } = await getMyTasks(supabase, currentUserId);
-      setMyTasks(((data ?? []) as Task[]).map((t) => ({ ...t, assignee: currentProfile, heading_id: null })));
-    } else {
-      await refreshTasks();
-    }
+    removeTasks(new Set([taskId]));
+    persist(async () => must(await deleteTask(supabase, taskId, currentUserId)), 'tasks');
   };
 
   const handleFollowerAdd = async (userId: string) => {
     if (!selectedTaskId) return;
-    await addFollower(supabase, selectedTaskId, userId);
-    const { data } = await getFollowers(supabase, selectedTaskId);
-    setFollowers(data ?? []);
-
-    const name = projectMembers.find((m) => m.profile_id === userId)?.profile?.name ?? 'someone';
-    if (currentUserId) await logActivity(supabase, { task_id: selectedTaskId, actor_id: currentUserId, message: `added ${name} as a follower` });
-    await refreshActivity(selectedTaskId);
+    const taskId = selectedTaskId;
+    const profile = projectMembers.find((m) => m.profile_id === userId)?.profile ?? null;
+    setFollowers((fs) => (fs.some((f) => f.user_id === userId) ? fs : [...fs, { task_id: taskId, user_id: userId, created_at: new Date().toISOString(), profile }]));
+    persist(async () => {
+      must(await addFollower(supabase, taskId, userId));
+      if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `added ${profile?.name ?? 'someone'} as a follower` }));
+    }, 'followers', 'activity');
   };
 
   const handleFollowerRemove = async (userId: string) => {
     if (!selectedTaskId) return;
+    const taskId = selectedTaskId;
     const name = followers.find((f) => f.user_id === userId)?.profile?.name
       ?? projectMembers.find((m) => m.profile_id === userId)?.profile?.name
       ?? 'a follower';
-    await removeFollower(supabase, selectedTaskId, userId);
-    const { data } = await getFollowers(supabase, selectedTaskId);
-    setFollowers(data ?? []);
-
-    if (currentUserId) {
-      const message = userId === currentUserId ? 'stopped following the task' : `removed ${name} as a follower`;
-      await logActivity(supabase, { task_id: selectedTaskId, actor_id: currentUserId, message });
-    }
-    await refreshActivity(selectedTaskId);
+    setFollowers((fs) => fs.filter((f) => f.user_id !== userId));
+    persist(async () => {
+      must(await removeFollower(supabase, taskId, userId));
+      if (currentUserId) {
+        const message = userId === currentUserId ? 'stopped following the task' : `removed ${name} as a follower`;
+        must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message }));
+      }
+    }, 'followers', 'activity');
   };
 
   const buildActivityMessages = (updates: Record<string, unknown>): string[] => {
@@ -519,102 +644,100 @@ export default function AppPage() {
   const handleTaskUpdate = async (taskId: string, updates: Record<string, unknown>) => {
     // new key each time so a second completion mid-animation restarts it
     if (updates.completed === true) setCelebration(Date.now());
-    // Optimistic: show the change now; the refetch below replaces it with the server's truth (incl. on failure).
     const optimistic: Partial<Task> = { ...updates };
     if ('assignee_id' in updates) optimistic.assignee = projectMembers.find((m) => m.profile_id === updates.assignee_id)?.profile ?? null;
-    const patch = (t: Task): Task =>
-      t.id === taskId ? { ...t, ...optimistic } : t.subtasks ? { ...t, subtasks: t.subtasks.map(patch) } : t;
-    setTasks((ts) => ts.map(patch));
-    setMyTasks((ts) => ts.map(patch));
+    if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
+    patchTask(taskId, (t) => ({ ...t, ...optimistic }));
 
     const messages = buildActivityMessages(updates);
-    // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
-    await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined);
-
-    const logAndRefreshActivity = async () => {
+    persist(async () => {
+      // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
+      must(await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined));
       if (!currentUserId) return;
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);
       });
-      if (selectedTaskId === taskId && messages.length) await refreshActivity(taskId);
-    };
-
-    const refreshList = async () => {
-      if (activeSection === 'my-tasks' && currentUserId) {
-        const { data } = await getMyTasks(supabase, currentUserId);
-        setMyTasks(((data ?? []) as Task[]).map((t) => ({ ...t, assignee: currentProfile, heading_id: null })));
-      } else {
-        await refreshTasks();
-      }
-    };
-
-    await Promise.all([logAndRefreshActivity(), refreshList()]);
+    }, 'tasks', 'activity');
   };
 
   const handleHeadingRename = async (headingId: string, name: string) => {
-    await updateHeading(supabase, headingId, { name });
-    const { data } = await getHeadings(supabase, activeProjectId);
-    setHeadings(data ?? []);
+    setHeadings((hs) => hs.map((h) => (h.id === headingId ? { ...h, name } : h)));
+    persist(async () => must(await updateHeading(supabase, headingId, { name })), 'headings');
   };
 
+  const addHeadingLocally = (name: string): Heading => {
+    const heading = { id: crypto.randomUUID(), project_id: activeProjectId, name, position: nextPosition(headings), created_at: new Date().toISOString() };
+    setHeadings((hs) => [...hs, heading]);
+    return heading;
+  };
+  const saveHeading = async (h: Heading) => must(await createHeading(supabase, { id: h.id, position: h.position, project_id: h.project_id, name: h.name }));
+
   const handleHeadingAdd = async (name: string) => {
-    await createHeading(supabase, { project_id: activeProjectId, name });
-    const { data } = await getHeadings(supabase, activeProjectId);
-    setHeadings(data ?? []);
+    const heading = addHeadingLocally(name);
+    persist(() => saveHeading(heading), 'headings');
   };
 
   const handleHeadingDelete = async (headingId: string) => {
-    await deleteHeading(supabase, headingId);
-    const { data } = await getHeadings(supabase, activeProjectId);
-    setHeadings(data ?? []);
-    await refreshTasks();
+    setHeadings((hs) => hs.filter((h) => h.id !== headingId));
+    // tasks.heading_id is ON DELETE SET NULL
+    setTasks((ts) => ts.map((t) => (t.heading_id === headingId ? { ...t, heading_id: null } : t)));
+    persist(async () => must(await deleteHeading(supabase, headingId)), 'headings', 'tasks');
   };
 
   const handleNoHeadingRename = async (name: string, taskIds: string[]) => {
-    const { data: heading } = await createHeading(supabase, { project_id: activeProjectId, name });
-    if (heading) {
-      await Promise.all(taskIds.map((id) => updateTask(supabase, id, { heading_id: heading.id })));
-    }
-    const { data } = await getHeadings(supabase, activeProjectId);
-    setHeadings(data ?? []);
-    await refreshTasks();
+    const heading = addHeadingLocally(name);
+    const moved = new Set(taskIds);
+    setTasks((ts) => ts.map((t) => (moved.has(t.id) ? { ...t, heading_id: heading.id } : t)));
+    persist(async () => {
+      await saveHeading(heading);
+      await Promise.all(taskIds.map(async (id) => must(await updateTask(supabase, id, { heading_id: heading.id }))));
+    }, 'headings', 'tasks');
   };
 
   const handleTaskReorder = async (taskId: string, swapWithTaskId: string) => {
     const a = tasks.find((t) => t.id === taskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === taskId);
     const b = tasks.find((t) => t.id === swapWithTaskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === swapWithTaskId);
     if (!a || !b) return;
-    await Promise.all([
-      updateTask(supabase, a.id, { position: b.position }),
-      updateTask(supabase, b.id, { position: a.position }),
-    ]);
-    await refreshTasks();
+    patchTask(a.id, (t) => ({ ...t, position: b.position }));
+    patchTask(b.id, (t) => ({ ...t, position: a.position }));
+    persist(() => Promise.all([
+      updateTask(supabase, a.id, { position: b.position }).then(must),
+      updateTask(supabase, b.id, { position: a.position }).then(must),
+    ]), 'tasks');
   };
 
   const handleTagAdd = async (tag: Tag) => {
     if (!selectedTaskId) return;
-    await addTagToTask(supabase, selectedTaskId, tag.id);
-    if (currentUserId) await logActivity(supabase, { task_id: selectedTaskId, actor_id: currentUserId, message: `added the tag "${tag.name}"` });
-    await refreshTasks();
-    await refreshActivity(selectedTaskId);
+    const taskId = selectedTaskId;
+    patchTask(taskId, (t) => ({ ...t, tags: [...(t.tags ?? []).filter((x) => x.id !== tag.id), tag] }));
+    persist(async () => {
+      must(await addTagToTask(supabase, taskId, tag.id));
+      if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `added the tag "${tag.name}"` }));
+    }, 'tasks', 'activity');
   };
 
   const handleTagRemove = async (tagId: string) => {
     if (!selectedTaskId) return;
+    const taskId = selectedTaskId;
     const tagName = selectedTask?.tags?.find((t) => t.id === tagId)?.name ?? availableTags.find((t) => t.id === tagId)?.name ?? 'a tag';
-    await removeTagFromTask(supabase, selectedTaskId, tagId);
-    if (currentUserId) await logActivity(supabase, { task_id: selectedTaskId, actor_id: currentUserId, message: `removed the tag "${tagName}"` });
-    await refreshTasks();
-    await refreshActivity(selectedTaskId);
+    patchTask(taskId, (t) => ({ ...t, tags: (t.tags ?? []).filter((x) => x.id !== tagId) }));
+    persist(async () => {
+      must(await removeTagFromTask(supabase, taskId, tagId));
+      if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `removed the tag "${tagName}"` }));
+    }, 'tasks', 'activity');
+  };
+
+  // Shows the new tag at once; its insert is queued, so anything tagged with it afterwards saves after it exists.
+  const addTagLocally = (name: string, color: string): Tag => {
+    const tag = { id: crypto.randomUUID(), name, color, created_by: currentUserId, created_at: new Date().toISOString() };
+    setAvailableTags((prev) => [...prev, tag]);
+    persist(async () => must(await createTag(supabase, { id: tag.id, name, color, created_by: currentUserId })));
+    return tag;
   };
 
   const handleNewTag = async (name: string, color: string) => {
-    const { data: tag } = await createTag(supabase, { name, color, created_by: currentUserId });
-    if (tag) {
-      setAvailableTags((prev) => [...prev, tag]);
-      await handleTagAdd(tag);
-    }
+    await handleTagAdd(addTagLocally(name, color));
   };
 
   const handleProjectCreate = async () => {
@@ -622,13 +745,11 @@ export default function AppPage() {
     if (!name || !name.trim()) return;
     const colors = ['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C'];
     const color = colors[Math.floor(Math.random() * colors.length)];
-    const { data } = await createProject(supabase, { name: name.trim(), color, icon: '📋', created_by: currentUserId });
-    if (data) {
-      const { data: projectRows } = await getProjects(supabase);
-      setProjects(projectRows ?? []);
-      setActiveSection('projects');
-      setActiveProjectId(data.id);
-    }
+    const project: Project = { id: crypto.randomUUID(), name: name.trim(), color, icon: '📋', archived: false, position: 0, created_by: currentUserId, created_at: new Date().toISOString() };
+    setProjects((ps) => [...ps, project]);
+    setActiveSection('projects');
+    setActiveProjectId(project.id);
+    persist(async () => must(await createProject(supabase, { id: project.id, name: project.name, color, icon: project.icon, created_by: currentUserId })), 'projects', 'members');
   };
 
   const handleCreateTaskClick = () => {
@@ -663,42 +784,40 @@ export default function AppPage() {
   const submitCreateTask = async ({ tag_ids, new_heading, subtasks, comment, ...fields }: NewTaskInput) => {
     if (!activeProjectId) return;
 
-    let heading_id = fields.heading_id;
-    if (new_heading) {
-      const { data: heading } = await createHeading(supabase, { project_id: activeProjectId, name: new_heading });
-      heading_id = heading?.id ?? null;
-      const { data: headingRows } = await getHeadings(supabase, activeProjectId);
-      setHeadings(headingRows ?? []);
-    }
-
-    const { data } = await createTask(supabase, {
-      ...fields,
-      heading_id,
-      project_id: activeProjectId,
-      created_by: currentUserId,
+    const heading = new_heading ? addHeadingLocally(new_heading) : null;
+    const { follower_ids, ...taskFields } = fields;
+    const task = newTask({
+      ...taskFields,
+      heading_id: heading?.id ?? fields.heading_id,
+      position: nextPosition(tasks),
+      assignee: projectMembers.find((m) => m.profile_id === fields.assignee_id)?.profile ?? null,
+      tags: availableTags.filter((t) => tag_ids.includes(t.id)),
+      comment_count: comment ? 1 : 0,
     });
-    if (data) {
-      await Promise.all(tag_ids.map((tagId) => addTagToTask(supabase, data.id, tagId)));
-      // sequential so subtasks keep the order they were typed in
-      for (const name of subtasks) {
-        await createTask(supabase, { project_id: activeProjectId, parent_task_id: data.id, name, created_by: currentUserId });
-      }
-      if (comment && currentUserId) {
-        await createComment(supabase, { task_id: data.id, author_id: currentUserId, body: comment, mentions: [] });
-      }
-    }
-    await refreshTasks();
-    if (data) {
-      setActiveSection('projects');
-      setSelectedTaskId(data.id);
-    }
+    // positions keep subtasks in the order they were typed
+    task.subtasks = subtasks.map((name, i) => newTask({ name, parent_task_id: task.id, position: i }));
+    setTasks((ts) => [...ts, task]);
+    setActiveSection('projects');
+    setSelectedTaskId(task.id);
+
+    persist(async () => {
+      if (heading) await saveHeading(heading);
+      must(await createTask(supabase, { ...taskFields, follower_ids, id: task.id, position: task.position, heading_id: task.heading_id, project_id: task.project_id, created_by: currentUserId }));
+      await Promise.all([
+        ...tag_ids.map((tagId) => addTagToTask(supabase, task.id, tagId).then(must)),
+        ...(task.subtasks ?? []).map((s) =>
+          createTask(supabase, { id: s.id, position: s.position, project_id: task.project_id, parent_task_id: task.id, name: s.name, created_by: currentUserId }).then(must)
+        ),
+        comment && currentUserId ? createComment(supabase, { task_id: task.id, author_id: currentUserId, body: comment, mentions: [] }).then(must) : null,
+      ]);
+    }, 'tasks', 'headings', 'comments', 'followers');
   };
 
   const handleProjectUpdate = async (updates: { name?: string; color?: string; icon?: string }) => {
     if (!activeProjectId) return;
-    await updateProject(supabase, activeProjectId, updates);
-    const { data: projectRows } = await getProjects(supabase);
-    setProjects(projectRows ?? []);
+    const projectId = activeProjectId;
+    setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, ...updates } : p)));
+    persist(async () => must(await updateProject(supabase, projectId, updates)), 'projects');
   };
 
   const dropToNextProject = (remaining: Project[]) => {
@@ -709,9 +828,9 @@ export default function AppPage() {
   const handleProjectArchive = async () => {
     if (!activeProjectId) return;
     if (!window.confirm('Archive this project? It\'ll disappear from the sidebar; an admin can bring it back later.')) return;
-    await updateProject(supabase, activeProjectId, { archived: true });
-    const { data: projectRows } = await getProjects(supabase);
-    dropToNextProject(projectRows ?? []);
+    const projectId = activeProjectId;
+    dropToNextProject(projects.filter((p) => p.id !== projectId));
+    persist(async () => must(await updateProject(supabase, projectId, { archived: true })), 'projects');
   };
 
   const handleProjectDelete = async (projectId: string = activeProjectId) => {
@@ -771,34 +890,31 @@ export default function AppPage() {
     setAllPeople(data ?? []);
   };
 
-  const reloadMembers = async () => {
-    const { data } = await getProjectMembers(supabase, activeProjectId);
-    setProjectMembers(data ?? []);
-  };
-
   const handleMemberAdd = async (profile: Profile) => {
-    const { error } = await addProjectMember(supabase, activeProjectId, profile);
-    if (error) window.alert(`Couldn't add ${profile.name}: ${error.message}`);
-    await reloadMembers();
+    const projectId = activeProjectId;
+    const now = new Date().toISOString();
+    setProjectMembers((ms) => [...ms, { project_id: projectId, profile_id: profile.id, email: profile.email, role: 'member', invited_at: now, joined_at: now, profile }]);
+    persist(async () => must(await addProjectMember(supabase, projectId, profile)), 'members');
   };
 
   const handleMemberRemove = async (member: ProjectMember) => {
     const name = member.profile?.name ?? member.email;
     if (!window.confirm(`Remove ${name} from this project? They'll lose access to its tasks.`)) return;
-    const { error } = await removeProjectMember(supabase, activeProjectId, member.email);
-    if (error) window.alert(`Couldn't remove ${name}: ${error.message}`);
-    await reloadMembers();
+    const projectId = activeProjectId;
+    setProjectMembers((ms) => ms.filter((m) => m.email !== member.email));
+    persist(async () => must(await removeProjectMember(supabase, projectId, member.email)), 'members');
   };
 
   const handleProfileSave = async (updates: { name: string; initials: string; avatar_color: string; avatar_url: string | null }) => {
-    if (!currentUserId) return;
-    const { data } = await updateProfile(supabase, currentUserId, updates);
-    if (data) setCurrentProfile(data);
-    // other people's avatars (members, comments) carry the old profile; reload members so mine updates there too
-    if (activeProjectId) {
-      const { data: members } = await getProjectMembers(supabase, activeProjectId);
-      setProjectMembers(members ?? []);
-    }
+    if (!currentUserId || !currentProfile) return;
+    const me = { ...currentProfile, ...updates };
+    setCurrentProfile(me);
+    // my avatar also shows in the member list
+    setProjectMembers((ms) => ms.map((m) => (m.profile_id === currentUserId ? { ...m, profile: me } : m)));
+    persist(async () => {
+      const { data } = must(await updateProfile(supabase, currentUserId, updates));
+      if (data) setCurrentProfile(data);
+    }, 'members');
   };
 
   // ponytail: each upload gets a new file name (no stale browser cache); old photos stay in the bucket, clean up if storage ever matters
@@ -829,14 +945,16 @@ export default function AppPage() {
 
   const handleCommentAdd = async (body: string, mentions: string[]) => {
     if (!selectedTaskId || !currentUserId) return;
-    await createComment(supabase, { task_id: selectedTaskId, author_id: currentUserId, body, mentions });
-    const { data } = await getComments(supabase, selectedTaskId);
-    setComments(mapComments(data ?? [], currentUserId));
+    const taskId = selectedTaskId;
+    const [comment] = mapComments([{ id: crypto.randomUUID(), author_id: currentUserId, author: currentProfile, body, created_at: new Date().toISOString() }], currentUserId);
+    setComments((prev) => [...prev, comment]);
+    patchTask(taskId, (t) => ({ ...t, comment_count: (t.comment_count ?? 0) + 1 }));
+    persist(async () => must(await createComment(supabase, { id: comment.id, task_id: taskId, author_id: currentUserId, body, mentions })), 'comments', 'followers', 'tasks');
   };
 
   const handleCommentEdit = async (commentId: string, body: string) => {
-    await updateComment(supabase, commentId, { body });
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body, editedAt: new Date().toISOString() } : c)));
+    persist(async () => must(await updateComment(supabase, commentId, { body })), 'comments');
   };
 
   const handleCommentLike = async (commentId: string) => {
@@ -856,17 +974,18 @@ export default function AppPage() {
   };
 
   const handleCommentDelete = async (commentId: string) => {
-    await deleteComment(supabase, commentId);
     setComments((prev) => prev.filter((c) => c.id !== commentId));
+    if (selectedTaskId) patchTask(selectedTaskId, (t) => ({ ...t, comment_count: Math.max(0, (t.comment_count ?? 0) - 1) }));
+    persist(async () => must(await deleteComment(supabase, commentId)), 'comments', 'tasks');
   };
 
   const handleNotificationClick = async (notificationId: string) => {
     const notif = notifications.find((n) => n.id === notificationId);
     if (notif && !notif.readAt) {
-      await markNotificationRead(supabase, notificationId);
       // Slack-style: the item stays in the feed as history, just loses its unread state.
       setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, readAt: new Date().toISOString() } : n)));
       setNotificationsBadge((c) => Math.max(0, c - 1));
+      persist(async () => must(await markNotificationRead(supabase, notificationId)));
     }
     // Asana-style: stay in the inbox and open the task in the side panel. Loading
     // the task's project in the background is what makes the panel able to find it.
@@ -887,9 +1006,10 @@ export default function AppPage() {
 
   const handleMarkAllRead = async () => {
     if (!currentUserId) return;
-    await markAllNotificationsRead(supabase, currentUserId);
+    const uid = currentUserId;
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setNotificationsBadge(0);
+    persist(async () => must(await markAllNotificationsRead(supabase, uid)));
   };
 
   return (
@@ -939,9 +1059,7 @@ export default function AppPage() {
           tags={availableTags}
           onCreateTag={async (name) => {
             const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-            const { data: tag } = await createTag(supabase, { name, color, created_by: currentUserId });
-            if (tag) setAvailableTags((prev) => [...prev, tag]);
-            return tag ?? null;
+            return addTagLocally(name, color);
           }}
           onCreate={submitCreateTask}
           onClose={() => setShowCreateTask(false)}
@@ -978,14 +1096,13 @@ export default function AppPage() {
             setActiveSection(section);
           }}
           onProjectSelect={setActiveProjectId}
+          onProjectHover={prefetchProject}
           onProjectCreate={handleProjectCreate}
           onProjectDelete={handleProjectDelete}
-          onProjectRename={async (projectId, name) => {
-            const { error } = await updateProject(supabase, projectId, { name });
-            // RLS lets only owners/admins rename; a blocked update returns no row
-            if (error) window.alert("Couldn't rename: only the project's owner or a manager can do that.");
-            const { data: projectRows } = await getProjects(supabase);
-            setProjects(projectRows ?? []);
+          onProjectRename={(projectId, name) => {
+            setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, name } : p)));
+            // RLS lets only owners/admins rename; a blocked update errors and the resync restores the old name
+            persist(async () => must(await updateProject(supabase, projectId, { name })), 'projects');
           }}
           onCreateTask={handleCreateTaskClick}
           onInvite={handleInvite}
@@ -1034,8 +1151,8 @@ export default function AppPage() {
                       <button type="button" className="bulk-btn" onClick={() => setBulk(new Set())} disabled={bulk.size === 0}>
                         Clear
                       </button>
-                      <button type="button" className="bulk-btn is-danger" onClick={handleBulkDelete} disabled={bulk.size === 0 || bulkDeleting}>
-                        {bulkDeleting ? 'Deleting…' : `Delete ${bulk.size || ''}`}
+                      <button type="button" className="bulk-btn is-danger" onClick={handleBulkDelete} disabled={bulk.size === 0}>
+                        {`Delete ${bulk.size || ''}`}
                       </button>
                       <button type="button" className="bulk-btn" onClick={() => setBulk(null)}>Done</button>
                     </>

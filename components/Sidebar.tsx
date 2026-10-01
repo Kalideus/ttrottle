@@ -12,6 +12,7 @@ interface SidebarProps {
   notificationsBadge?: number;
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
+  onProjectHover?: (projectId: string) => void;
   onProjectCreate: () => void;
   onProjectRename: (projectId: string, name: string) => void;
   onProjectDelete: (projectId: string) => void;
@@ -27,6 +28,7 @@ export function Sidebar({
   notificationsBadge = 0,
   onSectionChange,
   onProjectSelect,
+  onProjectHover,
   onProjectCreate,
   onProjectRename,
   onProjectDelete,
@@ -85,6 +87,7 @@ export function Sidebar({
           {(projects || []).map((project) => (
             <div
               key={project.id}
+              onMouseEnter={() => onProjectHover?.(project.id)}
               className={`sidebar-project-row ${activeProjectId === project.id && activeSection === 'projects' ? 'active' : ''}`}
               onClick={() => {
                 if (renamingId === project.id) return;

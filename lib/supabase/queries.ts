@@ -158,7 +158,7 @@ export async function getProjects(supabase: SupabaseClient) {
 
 export async function createProject(
   supabase: SupabaseClient,
-  { name, color, icon, created_by }: { name: string; color: string; icon: string; created_by?: string | null }
+  { name, color, icon, created_by, id }: { name: string; color: string; icon: string; created_by?: string | null; id?: string }
 ) {
   const { data: existing } = await supabase
     .from('projects')
@@ -171,7 +171,7 @@ export async function createProject(
 
   const result = await supabase
     .from('projects')
-    .insert({ name, color, icon, position: nextPosition, archived: false, created_by: created_by ?? null })
+    .insert({ ...(id && { id }), name, color, icon, position: nextPosition, archived: false, created_by: created_by ?? null })
     .select()
     .single()
 
@@ -217,20 +217,22 @@ export async function getHeadings(supabase: SupabaseClient, projectId: string) {
 
 export async function createHeading(
   supabase: SupabaseClient,
-  { project_id, name }: { project_id: string; name: string }
+  { project_id, name, id, position }: { project_id: string; name: string; id?: string; position?: number }
 ) {
-  const { data: existing } = await supabase
-    .from('headings')
-    .select('position')
-    .eq('project_id', project_id)
-    .order('position', { ascending: false })
-    .limit(1)
-
-  const nextPosition = existing?.[0]?.position != null ? Number(existing[0].position) + 1 : 0
+  let nextPosition = position
+  if (nextPosition == null) {
+    const { data: existing } = await supabase
+      .from('headings')
+      .select('position')
+      .eq('project_id', project_id)
+      .order('position', { ascending: false })
+      .limit(1)
+    nextPosition = existing?.[0]?.position != null ? Number(existing[0].position) + 1 : 0
+  }
 
   return supabase
     .from('headings')
-    .insert({ project_id, name, position: nextPosition })
+    .insert({ ...(id && { id }), project_id, name, position: nextPosition })
     .select()
     .single()
 }
@@ -289,7 +291,7 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   })
 
   // The three lookups only depend on the task rows, so fetch them in parallel.
-  const empty = Promise.resolve({ data: [] as any[] })
+  const empty = Promise.resolve({ data: null })
   const [{ data: counts }, { data: profiles }, { data: taskTagRows }] = await Promise.all([
     taskIds.length ? supabase.rpc('get_comment_counts', { task_ids: taskIds }) : empty,
     assigneeIds.size ? supabase.from('profiles').select('*').in('id', Array.from(assigneeIds)) : empty,
@@ -353,7 +355,11 @@ export async function createTask(
     priority,
     created_by,
     follower_ids,
+    id,
+    position,
   }: {
+    id?: string
+    position?: number
     project_id?: string
     heading_id?: string | null
     parent_task_id?: string | null
@@ -378,21 +384,24 @@ export async function createTask(
     project_id: project_id ?? null,
   }
 
+  // id/position may be chosen by the caller so an optimistic row on screen is the real one
+  if (id) payload.id = id
+  if (position != null) payload.position = position
+
   const result = await supabase.from('tasks').insert(payload).select().single()
 
   if (result.data) {
-    if (created_by) {
-      await supabase.from('followers').upsert({ task_id: result.data.id, user_id: created_by }, { onConflict: 'task_id,user_id', ignoreDuplicates: true })
-    }
-    if (follower_ids?.length) {
-      await supabase.from('followers').upsert(
-        follower_ids.map((user_id) => ({ task_id: result.data.id, user_id })),
-        { onConflict: 'task_id,user_id', ignoreDuplicates: true }
-      )
-    }
-    if (assignee_id) {
-      await notifyAssignee(supabase, { taskId: result.data.id, assigneeId: assignee_id, actorId: created_by ?? null })
-    }
+    // creator, chosen followers and the assignee all follow the task: one upsert
+    const followerIds = Array.from(new Set([created_by, assignee_id, ...(follower_ids ?? [])].filter(Boolean))) as string[]
+    await Promise.all([
+      followerIds.length &&
+        supabase.from('followers').upsert(
+          followerIds.map((user_id) => ({ task_id: result.data.id, user_id })),
+          { onConflict: 'task_id,user_id', ignoreDuplicates: true }
+        ),
+      assignee_id && created_by && assignee_id !== created_by &&
+        supabase.from('notifications').insert({ user_id: assignee_id, task_id: result.data.id, type: 'assigned', actor_id: created_by }),
+    ])
   }
 
   return result
@@ -567,14 +576,17 @@ export async function createComment(
     author_id,
     body,
     mentions,
+    id,
   }: {
     task_id: string
     author_id: string
     body: string
     mentions?: string[]
+    id?: string
   }
 ) {
   const insertPayload = {
+    ...(id && { id }),
     task_id,
     author_id,
     body,
@@ -588,55 +600,24 @@ export async function createComment(
     .single()
 
   if (result.data) {
-    const { data: authorProfile } = await supabase.from('profiles').select('*').eq('id', author_id).single()
+    // independent of each other: the follower list excludes the author, so it doesn't wait on the author's upsert
+    const [{ data: authorProfile }, , { data: followers }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', author_id).single(),
+      supabase.from('followers').upsert({ task_id, user_id: author_id }, { onConflict: 'task_id,user_id', ignoreDuplicates: true }),
+      supabase.from('followers').select('user_id').eq('task_id', task_id).neq('user_id', author_id),
+    ])
     ;(result.data as Record<string, unknown>).author = authorProfile ?? null
 
-    await supabase.from('followers').upsert({ task_id, user_id: author_id }, { onConflict: 'task_id,user_id', ignoreDuplicates: true })
-
-    const { data: followers } = await supabase
-      .from('followers')
-      .select('user_id')
-      .eq('task_id', task_id)
-      .neq('user_id', author_id)
-
     const snippet = body.length > 140 ? `${body.slice(0, 140)}…` : body
+    const row = (user_id: string, type: string) => ({ user_id, task_id, type, actor_id: author_id, comment_id: result.data.id, detail: snippet })
 
-    if (followers?.length) {
-      const notifications = followers.map((f) => ({
-        user_id: f.user_id,
-        task_id,
-        type: 'comment',
-        actor_id: author_id,
-        comment_id: result.data.id,
-        detail: snippet,
-      }))
+    // followers get a 'comment' notification; mentioned non-followers get a 'mention' one
+    const followerIds = new Set((followers ?? []).map((f) => f.user_id))
+    const mentionOnly = (mentions ?? []).filter((uid) => uid !== author_id && !followerIds.has(uid))
+    const notifications = [...[...followerIds].map((uid) => row(uid, 'comment')), ...mentionOnly.map((uid) => row(uid, 'mention'))]
+    if (notifications.length) {
       const { error: notifyError } = await supabase.from('notifications').insert(notifications)
-      if (notifyError) console.error('Failed to notify followers of comment:', notifyError)
-    }
-
-    const mentionUsers = (mentions ?? []).filter((uid) => uid !== author_id)
-    if (mentionUsers.length) {
-      const { data: existingFollowers } = await supabase
-        .from('followers')
-        .select('user_id')
-        .eq('task_id', task_id)
-
-      const followerIds = new Set((existingFollowers ?? []).map((f) => f.user_id))
-      const filteredMentions = mentionUsers.filter((uid) => !followerIds.has(uid))
-
-      if (filteredMentions.length) {
-        const notifyRows = filteredMentions.map((uid) => ({
-          user_id: uid,
-          task_id,
-          type: 'mention',
-          actor_id: author_id,
-          comment_id: result.data.id,
-          detail: snippet,
-        }))
-
-        const { error: notifyError } = await supabase.from('notifications').insert(notifyRows)
-        if (notifyError) console.error('Failed to notify mentioned users:', notifyError)
-      }
+      if (notifyError) console.error('Failed to notify followers/mentions of comment:', notifyError)
     }
   }
 
@@ -665,9 +646,9 @@ export async function getTags(supabase: SupabaseClient) {
 
 export async function createTag(
   supabase: SupabaseClient,
-  { name, color, created_by }: { name: string; color: string; created_by: string | null }
+  { name, color, created_by, id }: { name: string; color: string; created_by: string | null; id?: string }
 ) {
-  return supabase.from('tags').insert({ name, color, created_by }).select().single()
+  return supabase.from('tags').insert({ ...(id && { id }), name, color, created_by }).select().single()
 }
 
 export async function addTagToTask(supabase: SupabaseClient, taskId: string, tagId: string) {
@@ -697,14 +678,18 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
 
   if (error) return { data: [], error }
 
-  const withActors = await attachProfilesById(supabase, notifications ?? [], 'actor_id', 'actor')
-  // flatten the task's assignee id so it can be resolved to a profile like the actor
-  const withAssigneeId = withActors.map((n) => ({
+  // actors and task assignees resolved in one profile lookup
+  const rows = notifications ?? []
+  const assigneeOf = (n: { task?: { assignee_id?: string | null } | null }) => n.task?.assignee_id ?? null
+  const ids = Array.from(new Set(rows.flatMap((n) => [n.actor_id, assigneeOf(n)]).filter(Boolean))) as string[]
+  const { data: profiles } = ids.length ? await supabase.from('profiles').select('*').in('id', ids) : { data: [] }
+  const byId = new Map(((profiles ?? []) as Profile[]).map((p) => [p.id, p]))
+  const withPeople = rows.map((n) => ({
     ...n,
-    task_assignee_id: (n.task as { assignee_id?: string | null } | null)?.assignee_id ?? null,
+    actor: byId.get(n.actor_id) ?? null,
+    task_assignee: byId.get(assigneeOf(n) ?? '') ?? null,
   }))
-  const withAssignees = await attachProfilesById(supabase, withAssigneeId, 'task_assignee_id', 'task_assignee')
-  return { data: withAssignees, error: null }
+  return { data: withPeople, error: null }
 }
 
 export async function markNotificationRead(supabase: SupabaseClient, id: string) {
