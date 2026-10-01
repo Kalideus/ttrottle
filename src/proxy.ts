@@ -22,8 +22,10 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data } = await supabase.auth.getUser()
-  const isLoggedIn = !!data.user
+  // getClaims verifies the JWT locally (no auth-server round trip) when the project uses asymmetric signing keys,
+  // and falls back to a server check otherwise; it refreshes an expired session like getUser did.
+  const { data } = await supabase.auth.getClaims()
+  const isLoggedIn = !!data?.claims
   const pathname = request.nextUrl.pathname
 
   if (
@@ -41,5 +43,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // static images don't need an auth check
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 }

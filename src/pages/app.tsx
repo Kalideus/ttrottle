@@ -191,6 +191,8 @@ export default function AppPage() {
   // Per-project data. A project seen before renders instantly from cache, then refreshes in the background.
   // ponytail: in-memory only, lost on reload; fine since the refetch always follows.
   const projectCache = useRef(new Map<string, { tasks: Task[]; members: ProjectMember[]; headings: Heading[] }>());
+  const activeProjectIdRef = useRef(activeProjectId);
+  activeProjectIdRef.current = activeProjectId;
   useEffect(() => {
     if (!activeProjectId) return;
     let stale = false;
@@ -425,8 +427,12 @@ export default function AppPage() {
 
   const refreshTasks = async () => {
     if (!activeProjectId) return;
-    const { data: taskRows } = await getTasksForProject(supabase, activeProjectId);
-    setTasks((taskRows ?? []) as Task[]);
+    const projectId = activeProjectId;
+    const { data: taskRows } = await getTasksForProject(supabase, projectId);
+    const cached = projectCache.current.get(projectId);
+    if (cached) cached.tasks = (taskRows ?? []) as Task[];
+    // the user may have switched project while this was in flight
+    if (projectId === activeProjectIdRef.current) setTasks((taskRows ?? []) as Task[]);
   };
 
   const handleTaskAdd = async (headingId: string | null, name: string) => {
@@ -513,24 +519,37 @@ export default function AppPage() {
   const handleTaskUpdate = async (taskId: string, updates: Record<string, unknown>) => {
     // new key each time so a second completion mid-animation restarts it
     if (updates.completed === true) setCelebration(Date.now());
+    // Optimistic: show the change now; the refetch below replaces it with the server's truth (incl. on failure).
+    const optimistic: Partial<Task> = { ...updates };
+    if ('assignee_id' in updates) optimistic.assignee = projectMembers.find((m) => m.profile_id === updates.assignee_id)?.profile ?? null;
+    const patch = (t: Task): Task =>
+      t.id === taskId ? { ...t, ...optimistic } : t.subtasks ? { ...t, subtasks: t.subtasks.map(patch) } : t;
+    setTasks((ts) => ts.map(patch));
+    setMyTasks((ts) => ts.map(patch));
+
     const messages = buildActivityMessages(updates);
     // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
     await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined);
 
-    if (currentUserId) {
+    const logAndRefreshActivity = async () => {
+      if (!currentUserId) return;
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);
       });
       if (selectedTaskId === taskId && messages.length) await refreshActivity(taskId);
-    }
+    };
 
-    if (activeSection === 'my-tasks' && currentUserId) {
-      const { data } = await getMyTasks(supabase, currentUserId);
-      setMyTasks(((data ?? []) as Task[]).map((t) => ({ ...t, assignee: currentProfile, heading_id: null })));
-    } else {
-      await refreshTasks();
-    }
+    const refreshList = async () => {
+      if (activeSection === 'my-tasks' && currentUserId) {
+        const { data } = await getMyTasks(supabase, currentUserId);
+        setMyTasks(((data ?? []) as Task[]).map((t) => ({ ...t, assignee: currentProfile, heading_id: null })));
+      } else {
+        await refreshTasks();
+      }
+    };
+
+    await Promise.all([logAndRefreshActivity(), refreshList()]);
   };
 
   const handleHeadingRename = async (headingId: string, name: string) => {

@@ -279,38 +279,36 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   if (tasksError) return { data: [], error: tasksError }
 
   const taskIds = (tasks ?? []).map((task) => task.id)
-  const { data: counts } = taskIds.length
-    ? await supabase.rpc('get_comment_counts', { task_ids: taskIds })
-    : { data: [] }
-
-  const countMap = new Map((counts ?? []).map((row: { task_id: string; count: number }) => [row.task_id, row.count]))
+  // subtasks have tags too
+  const allTaskIds = (tasks ?? []).flatMap((task) => [task.id, ...(task.subtasks ?? []).map((st: Task) => st.id)])
 
   const assigneeIds = new Set<string>()
   ;(tasks ?? []).forEach((task) => {
     if (task.assignee_id) assigneeIds.add(task.assignee_id)
     ;(task.subtasks ?? []).forEach((st: Task) => st.assignee_id && assigneeIds.add(st.assignee_id))
   })
-  const profileMap = new Map<string, Profile>()
-  if (assigneeIds.size) {
-    const { data: profiles } = await supabase.from('profiles').select('*').in('id', Array.from(assigneeIds))
-    ;(profiles ?? []).forEach((p: Profile) => profileMap.set(p.id, p))
-  }
 
-  // Fetched separately (not embedded) so a missing task_tags table can't fail task loading itself.
+  // The three lookups only depend on the task rows, so fetch them in parallel.
+  const empty = Promise.resolve({ data: [] as any[] })
+  const [{ data: counts }, { data: profiles }, { data: taskTagRows }] = await Promise.all([
+    taskIds.length ? supabase.rpc('get_comment_counts', { task_ids: taskIds }) : empty,
+    assigneeIds.size ? supabase.from('profiles').select('*').in('id', Array.from(assigneeIds)) : empty,
+    // Fetched separately (not embedded) so a missing task_tags table can't fail task loading itself.
+    allTaskIds.length ? supabase.from('task_tags').select('task_id, tags(*)').in('task_id', allTaskIds) : empty,
+  ])
+
+  const countMap = new Map((counts ?? []).map((row: { task_id: string; count: number }) => [row.task_id, row.count]))
+  const profileMap = new Map<string, Profile>()
+  ;(profiles ?? []).forEach((p: Profile) => profileMap.set(p.id, p))
+
   const tagsByTask = new Map<string, Tag[]>()
-  if (taskIds.length) {
-    const { data: taskTagRows } = await supabase
-      .from('task_tags')
-      .select('task_id, tags(*)')
-      .in('task_id', taskIds)
-    ;(taskTagRows ?? []).forEach((row: any) => {
-      const tag = row.tags as Tag | null
-      if (!tag) return
-      const existing = tagsByTask.get(row.task_id) ?? []
-      existing.push(tag)
-      tagsByTask.set(row.task_id, existing)
-    })
-  }
+  ;(taskTagRows ?? []).forEach((row: any) => {
+    const tag = row.tags as Tag | null
+    if (!tag) return
+    const existing = tagsByTask.get(row.task_id) ?? []
+    existing.push(tag)
+    tagsByTask.set(row.task_id, existing)
+  })
 
   const normalized = (tasks ?? []).map((task) => ({
     ...task,
@@ -455,8 +453,9 @@ export async function updateTask(
   const result = await supabase.from('tasks').update(nextUpdates).eq('id', id).select().single()
 
   if (result.data) {
-    const { data: authData } = await supabase.auth.getUser()
-    const actorId = authData.user?.id ?? null
+    // local session read, no auth round trip; RLS still verifies the token on every write
+    const { data: authData } = await supabase.auth.getSession()
+    const actorId = authData.session?.user.id ?? null
 
     if ('assignee_id' in updates && updates.assignee_id) {
       await notifyAssignee(supabase, { taskId: id, assigneeId: updates.assignee_id, actorId })
@@ -540,13 +539,14 @@ export async function getComments(supabase: SupabaseClient, taskId: string) {
 
   if (error) return { data: [], error }
 
-  const withAuthors = await attachProfilesById(supabase, comments ?? [], 'author_id', 'author')
-
   // Likes are best-effort: if the table is missing (migration 015 not run) comments still load.
-  const ids = withAuthors.map((c: any) => c.id)
-  const { data: likes } = ids.length
-    ? await supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', ids)
-    : { data: [] }
+  const ids = (comments ?? []).map((c) => c.id)
+  const [withAuthors, { data: likes }] = await Promise.all([
+    attachProfilesById(supabase, comments ?? [], 'author_id', 'author'),
+    ids.length
+      ? supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', ids)
+      : Promise.resolve({ data: [] as { comment_id: string; user_id: string }[] }),
+  ])
   const byComment = new Map<string, string[]>()
   for (const l of likes ?? []) byComment.set(l.comment_id, [...(byComment.get(l.comment_id) ?? []), l.user_id])
 
@@ -777,10 +777,10 @@ export async function getProfiles(supabase: SupabaseClient) {
 }
 
 export async function getCurrentProfile(supabase: SupabaseClient) {
-  const { data: authUser } = await supabase.auth.getUser()
-  if (!authUser.user) return null
+  const { data: auth } = await supabase.auth.getSession()
+  if (!auth.session) return null
 
-  const { data } = await supabase.from('profiles').select('*').eq('id', authUser.user.id).single()
+  const { data } = await supabase.from('profiles').select('*').eq('id', auth.session.user.id).single()
   return data
 }
 
