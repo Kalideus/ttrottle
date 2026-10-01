@@ -35,9 +35,11 @@ interface TaskTableProps {
   showCompleted?: boolean;
   /** Drop a task onto another task to make it that task's subtask. */
   onMakeSubtask?: (taskId: string, parentTaskId: string) => void;
+  /** Drop a subtask on a heading to turn it back into a top-level task there. */
+  onPromoteSubtask?: (taskId: string, headingId: string | null, position: number) => void;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -145,24 +147,38 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
     ...(groupedTasks['__no_heading__']?.length ? ['__no_heading__'] : []),
   ];
 
+  // the dragged row may be a top-level task or a subtask
+  const findTask = (id: string) => tasks.find((t) => t.id === id) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === id);
+
   const canNestInto = (target: Task, targetIsSubtask: boolean) => {
     if (!onMakeSubtask || flat || targetIsSubtask || !draggedTaskId || draggedTaskId === target.id) return false;
-    const dragged = tasks.find((t) => t.id === draggedTaskId);
-    return !!dragged && !dragged.subtasks?.length;
+    const dragged = findTask(draggedTaskId);
+    return !!dragged && !dragged.subtasks?.length && dragged.parent_task_id !== target.id;
+  };
+
+  // Rows where letting go does nothing, so a short or accidental drag can't fall through to the section:
+  // the dragged row itself, and for a subtask, its own parent and any subtask row. A subtask becomes a
+  // top-level task only when dropped on a heading or the section's empty space.
+  const isDeadZone = (target: Task, targetIsSubtask: boolean) => {
+    if (!draggedTaskId) return false;
+    if (draggedTaskId === target.id) return true;
+    const dragged = findTask(draggedTaskId);
+    return !!dragged?.parent_task_id && (targetIsSubtask || dragged.parent_task_id === target.id);
   };
 
   const handleDropOnSection = (targetHeadingId: string) => {
     setDragOverHeadingId(null);
     if (!draggedTaskId) return;
     const targetHeadingIdOrNull = targetHeadingId === '__no_heading__' ? null : targetHeadingId;
-    const draggedTask = tasks.find((t) => t.id === draggedTaskId);
-    if (!draggedTask || draggedTask.heading_id === targetHeadingIdOrNull) {
-      setDraggedTaskId(null);
-      return;
-    }
+    const draggedTask = findTask(draggedTaskId);
     const targetTasks = groupedTasks[targetHeadingId] ?? [];
     const maxPosition = targetTasks.length ? Math.max(...targetTasks.map((t) => t.position)) : -1;
-    onTaskUpdate(draggedTaskId, { heading_id: targetHeadingIdOrNull, position: maxPosition + 1 });
+    if (draggedTask?.parent_task_id) {
+      // a subtask dropped on a heading becomes a top-level task there
+      onPromoteSubtask?.(draggedTask.id, targetHeadingIdOrNull, maxPosition + 1);
+    } else if (draggedTask && draggedTask.heading_id !== targetHeadingIdOrNull) {
+      onTaskUpdate(draggedTaskId, { heading_id: targetHeadingIdOrNull, position: maxPosition + 1 });
+    }
     setDraggedTaskId(null);
   };
 
@@ -238,6 +254,13 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           // onto itself, a task that has its own subtasks, or in My Tasks (which mixes projects).
           // Otherwise the event falls through to the section, which moves the task to that heading.
           onDragOver={(e) => {
+            // rows where letting go does nothing (see isDeadZone) swallow the drop so it can't reach the section
+            if (isDeadZone(task, isLevel2)) {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverHeadingId(null);
+              return;
+            }
             if (!canNestInto(task, isLevel2)) return;
             e.preventDefault();
             e.stopPropagation();
@@ -246,6 +269,12 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           }}
           onDragLeave={() => setDragOverTaskId((prev) => (prev === task.id ? null : prev))}
           onDrop={(e) => {
+            if (isDeadZone(task, isLevel2)) {
+              e.preventDefault();
+              e.stopPropagation();
+              setDraggedTaskId(null);
+              return;
+            }
             if (!canNestInto(task, isLevel2) || !draggedTaskId) return;
             e.preventDefault();
             e.stopPropagation();
@@ -258,7 +287,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
             onTaskSelect(task.id);
             if (hasSubtasks) toggleTaskExpand(task.id);
           }}
-          draggable={!isLevel2}
+          draggable={!(isLevel2 && flat)}
           onDragStart={(e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
@@ -268,7 +297,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
             setDraggedTaskId(null);
             setDragOverTaskId(null);
           }}
-          style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 ? undefined : 'grab' }}
+          style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 && flat ? undefined : 'grab' }}
         >
           <div className="task-row-content">
             {bulkSelected && (

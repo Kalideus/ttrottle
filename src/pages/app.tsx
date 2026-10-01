@@ -739,16 +739,34 @@ export default function AppPage() {
   };
 
   // Dragging a task onto another makes it a subtask (TaskTable only offers this for valid drops).
+  const findAnyTask = (id: string) => tasks.find((t) => t.id === id) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === id);
+  // take a task out of wherever it sits: the top level or a parent's subtasks
+  const detach = (ts: Task[], id: string) =>
+    ts.filter((t) => t.id !== id).map((t) => (t.subtasks?.some((s) => s.id === id) ? { ...t, subtasks: t.subtasks.filter((s) => s.id !== id) } : t));
+
   const handleMakeSubtask = (taskId: string, parentId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = findAnyTask(taskId);
     const parent = tasks.find((t) => t.id === parentId);
-    if (!task || !parent || task.subtasks?.length) return;
+    if (!task || !parent || task.subtasks?.length || task.parent_task_id === parentId) return;
     // subtasks live under their parent, not a heading (same as ones created as subtasks)
     const moved: Task = { ...task, parent_task_id: parentId, heading_id: null, position: nextPosition(parent.subtasks ?? []), subtasks: [] };
-    setTasks((ts) => ts.filter((t) => t.id !== taskId).map((t) => (t.id === parentId ? { ...t, subtasks: [...(t.subtasks ?? []), moved] } : t)));
+    setTasks((ts) => detach(ts, taskId).map((t) => (t.id === parentId ? { ...t, subtasks: [...(t.subtasks ?? []), moved] } : t)));
     persist(async () => {
       must(await updateTask(supabase, taskId, { parent_task_id: parentId, heading_id: null, position: moved.position }));
       if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `made this a subtask of "${parent.name}"` }));
+    }, 'tasks', 'activity');
+  };
+
+  // Dragging a subtask onto a heading turns it back into a top-level task there.
+  const handlePromoteSubtask = (taskId: string, headingId: string | null, position: number) => {
+    const task = findAnyTask(taskId);
+    if (!task?.parent_task_id) return;
+    const parentName = tasks.find((t) => t.id === task.parent_task_id)?.name;
+    setTasks((ts) => [...detach(ts, taskId), { ...task, parent_task_id: null, heading_id: headingId, position, subtasks: [] }]);
+    persist(async () => {
+      must(await updateTask(supabase, taskId, { parent_task_id: null, heading_id: headingId, position }));
+      const message = parentName ? `moved this out of "${parentName}" into its own task` : 'made this a top-level task';
+      if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message }));
     }, 'tasks', 'activity');
   };
 
@@ -1228,6 +1246,7 @@ export default function AppPage() {
                     <TaskTable
                       onTaskHover={prefetchTask}
                       onMakeSubtask={handleMakeSubtask}
+                      onPromoteSubtask={handlePromoteSubtask}
                       showCompleted={showCompleted}
                       tasks={displayedTasks}
                       headings={headings}
@@ -1316,6 +1335,7 @@ export default function AppPage() {
                 <TaskTable
                   onTaskHover={prefetchTask}
                   onMakeSubtask={handleMakeSubtask}
+                  onPromoteSubtask={handlePromoteSubtask}
                   showCompleted={showCompleted}
                   tasks={displayedTasks}
                   headings={[]}
