@@ -450,7 +450,7 @@ export async function logActivity(
 export async function updateTask(
   supabase: SupabaseClient,
   id: string,
-  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'completed' | 'heading_id' | 'position'>>,
+  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
   detail?: string
 ) {
   const nextUpdates: Partial<Task & { completed_at: string | null }> = { ...updates }

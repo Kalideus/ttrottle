@@ -738,6 +738,20 @@ export default function AppPage() {
     }, 'headings', 'tasks');
   };
 
+  // Dragging a task onto another makes it a subtask (TaskTable only offers this for valid drops).
+  const handleMakeSubtask = (taskId: string, parentId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    const parent = tasks.find((t) => t.id === parentId);
+    if (!task || !parent || task.subtasks?.length) return;
+    // subtasks live under their parent, not a heading (same as ones created as subtasks)
+    const moved: Task = { ...task, parent_task_id: parentId, heading_id: null, position: nextPosition(parent.subtasks ?? []), subtasks: [] };
+    setTasks((ts) => ts.filter((t) => t.id !== taskId).map((t) => (t.id === parentId ? { ...t, subtasks: [...(t.subtasks ?? []), moved] } : t)));
+    persist(async () => {
+      must(await updateTask(supabase, taskId, { parent_task_id: parentId, heading_id: null, position: moved.position }));
+      if (currentUserId) must(await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `made this a subtask of "${parent.name}"` }));
+    }, 'tasks', 'activity');
+  };
+
   const handleTaskReorder = async (taskId: string, swapWithTaskId: string) => {
     const a = tasks.find((t) => t.id === taskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === taskId);
     const b = tasks.find((t) => t.id === swapWithTaskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === swapWithTaskId);
@@ -1213,6 +1227,7 @@ export default function AppPage() {
                   <>
                     <TaskTable
                       onTaskHover={prefetchTask}
+                      onMakeSubtask={handleMakeSubtask}
                       showCompleted={showCompleted}
                       tasks={displayedTasks}
                       headings={headings}
@@ -1300,6 +1315,7 @@ export default function AppPage() {
               <div className="app-content">
                 <TaskTable
                   onTaskHover={prefetchTask}
+                  onMakeSubtask={handleMakeSubtask}
                   showCompleted={showCompleted}
                   tasks={displayedTasks}
                   headings={[]}

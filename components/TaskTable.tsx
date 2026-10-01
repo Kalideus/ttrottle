@@ -33,9 +33,11 @@ interface TaskTableProps {
   onTaskHover?: (taskId: string) => void;
   /** Show completed subtasks too (top-level tasks are filtered by the parent). */
   showCompleted?: boolean;
+  /** Drop a task onto another task to make it that task's subtask. */
+  onMakeSubtask?: (taskId: string, parentTaskId: string) => void;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -48,6 +50,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
   const [newSectionName, setNewSectionName] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverHeadingId, setDragOverHeadingId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [undoTask, setUndoTask] = useState<{ id: string; name: string } | null>(null);
   const [confirmTask, setConfirmTask] = useState<Task | null>(null);
@@ -142,6 +145,12 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
     ...(groupedTasks['__no_heading__']?.length ? ['__no_heading__'] : []),
   ];
 
+  const canNestInto = (target: Task, targetIsSubtask: boolean) => {
+    if (!onMakeSubtask || flat || targetIsSubtask || !draggedTaskId || draggedTaskId === target.id) return false;
+    const dragged = tasks.find((t) => t.id === draggedTaskId);
+    return !!dragged && !dragged.subtasks?.length;
+  };
+
   const handleDropOnSection = (targetHeadingId: string) => {
     setDragOverHeadingId(null);
     if (!draggedTaskId) return;
@@ -223,8 +232,28 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
 
     return (
       <div key={task.id}>
-        <div className={`task-row ${isLevel2 ? 'level-2' : ''} ${selectedTaskId === task.id ? 'selected' : ''} ${completingTaskId === task.id ? 'completing' : ''}`}
+        <div className={`task-row ${isLevel2 ? 'level-2' : ''} ${selectedTaskId === task.id ? 'selected' : ''} ${completingTaskId === task.id ? 'completing' : ''} ${dragOverTaskId === task.id ? 'drop-target' : ''}`}
           onMouseEnter={() => onTaskHover?.(task.id)}
+          // Dropping a task onto another makes it a subtask. Not allowed: onto a subtask (two levels max),
+          // onto itself, a task that has its own subtasks, or in My Tasks (which mixes projects).
+          // Otherwise the event falls through to the section, which moves the task to that heading.
+          onDragOver={(e) => {
+            if (!canNestInto(task, isLevel2)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
+            setDragOverHeadingId(null);
+          }}
+          onDragLeave={() => setDragOverTaskId((prev) => (prev === task.id ? null : prev))}
+          onDrop={(e) => {
+            if (!canNestInto(task, isLevel2) || !draggedTaskId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onMakeSubtask?.(draggedTaskId, task.id);
+            setExpandedTaskId(task.id); // show where it landed
+            setDragOverTaskId(null);
+            setDraggedTaskId(null);
+          }}
           onClick={() => {
             onTaskSelect(task.id);
             if (hasSubtasks) toggleTaskExpand(task.id);
@@ -235,7 +264,10 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
             e.dataTransfer.effectAllowed = 'move';
             setDraggedTaskId(task.id);
           }}
-          onDragEnd={() => setDraggedTaskId(null)}
+          onDragEnd={() => {
+            setDraggedTaskId(null);
+            setDragOverTaskId(null);
+          }}
           style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 ? undefined : 'grab' }}
         >
           <div className="task-row-content">
