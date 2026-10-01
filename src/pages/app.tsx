@@ -1213,6 +1213,7 @@ export default function AppPage() {
                   <>
                     <TaskTable
                       onTaskHover={prefetchTask}
+                      showCompleted={showCompleted}
                       tasks={displayedTasks}
                       headings={headings}
                       onTaskSelect={setSelectedTaskId}
@@ -1299,6 +1300,7 @@ export default function AppPage() {
               <div className="app-content">
                 <TaskTable
                   onTaskHover={prefetchTask}
+                  showCompleted={showCompleted}
                   tasks={displayedTasks}
                   headings={[]}
                   flat

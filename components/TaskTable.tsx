@@ -31,9 +31,11 @@ interface TaskTableProps {
   onBulkToggle?: (taskId: string) => void;
   /** Pointer resting on a row: lets the parent preload that task's panel. */
   onTaskHover?: (taskId: string) => void;
+  /** Show completed subtasks too (top-level tasks are filtered by the parent). */
+  showCompleted?: boolean;
 }
 
-export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover }: TaskTableProps) {
+export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -476,7 +478,11 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
         {/* Subtasks — level-2 tasks can't have their own subtasks, so this never recurses further */}
         {!isLevel2 && (hasSubtasks || addingSubtaskTo === task.id) && isExpanded && (
           <>
-            {task.subtasks?.map((subtask) => renderTask(subtask, task.subtasks!, true))}
+            {(() => {
+              // completed subtasks follow the "Show completed" toggle; the n/m count above still includes them
+              const visible = (task.subtasks ?? []).filter((st) => showCompleted || !st.completed);
+              return visible.map((subtask) => renderTask(subtask, visible, true));
+            })()}
             {addingSubtaskTo === task.id ? (
               <div style={{ padding: '8px 24px 8px calc(24px + 28px + 28px)' }}>
                 <AddTaskForm
