@@ -475,6 +475,8 @@ export default function AppPage() {
 
   // leave select mode when switching project
   useEffect(() => setBulk(null), [activeProjectId]);
+  // every project and view opens with completed tasks hidden; "Show completed" is a per-visit choice
+  useEffect(() => setShowCompleted(false), [activeProjectId, activeSection]);
 
   const handleBulkDelete = async () => {
     if (!bulk?.size) return;
