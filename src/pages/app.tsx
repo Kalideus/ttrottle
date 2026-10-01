@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
@@ -182,21 +182,40 @@ export default function AppPage() {
 
       // functional update: a shared task link may already have chosen the project
       if (nextProjects.length > 0) setActiveProjectId((current) => current || nextProjects[0].id);
-
-      if (activeProjectId) {
-        const { data: taskRows } = await getTasksForProject(supabase, activeProjectId);
-        setTasks((taskRows ?? []) as Task[]);
-        const { data: memberRows } = await getProjectMembers(supabase, activeProjectId);
-        setProjectMembers(memberRows ?? []);
-        const { data: headingRows } = await getHeadings(supabase, activeProjectId);
-        setHeadings(headingRows ?? []);
-      }
-
-      setLoading(false);
+      else setLoading(false);
     };
 
     void load();
-  }, [activeProjectId, router, supabase]);
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-project data. A project seen before renders instantly from cache, then refreshes in the background.
+  // ponytail: in-memory only, lost on reload; fine since the refetch always follows.
+  const projectCache = useRef(new Map<string, { tasks: Task[]; members: ProjectMember[]; headings: Heading[] }>());
+  useEffect(() => {
+    if (!activeProjectId) return;
+    let stale = false;
+    const apply = (d: { tasks: Task[]; members: ProjectMember[]; headings: Heading[] }) => {
+      setTasks(d.tasks);
+      setProjectMembers(d.members);
+      setHeadings(d.headings);
+      setLoading(false);
+    };
+    const cached = projectCache.current.get(activeProjectId);
+    if (cached) apply(cached);
+
+    Promise.all([
+      getTasksForProject(supabase, activeProjectId),
+      getProjectMembers(supabase, activeProjectId),
+      getHeadings(supabase, activeProjectId),
+    ]).then(([t, m, h]) => {
+      const d = { tasks: (t.data ?? []) as Task[], members: m.data ?? [], headings: h.data ?? [] };
+      projectCache.current.set(activeProjectId, d);
+      if (!stale) apply(d); // a quick click to another project must not be overwritten by this slower response
+    });
+    return () => {
+      stale = true;
+    };
+  }, [activeProjectId, supabase]);
 
   useEffect(() => {
     if (!currentUserId) return;
