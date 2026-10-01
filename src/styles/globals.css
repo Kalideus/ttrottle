@@ -2002,6 +2002,8 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   box-shadow: 0 0 0 2px var(--text);
 }
 
+.modal-message { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-muted, var(--text)); overflow-wrap: anywhere; }
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

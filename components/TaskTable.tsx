@@ -6,6 +6,7 @@ import type { Task, Heading } from '@/lib/supabase/queries';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface TaskTableProps {
   tasks: (Task & { subtasks?: Task[] })[];
@@ -47,6 +48,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
   const [dragOverHeadingId, setDragOverHeadingId] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [undoTask, setUndoTask] = useState<{ id: string; name: string } | null>(null);
+  const [confirmTask, setConfirmTask] = useState<Task | null>(null);
   const [openMenuTaskId, setOpenMenuTaskId] = useState<string | null>(null);
   const [addingSubtaskTo, setAddingSubtaskTo] = useState<string | null>(null);
   const [editingTaskNameId, setEditingTaskNameId] = useState<string | null>(null);
@@ -79,8 +81,11 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
       return;
     }
 
-    if (!window.confirm(`Mark "${task.name}" as complete?`)) return;
+    setConfirmTask(task);
+  };
 
+  const completeTask = (task: Task) => {
+    setConfirmTask(null);
     setCompletingTaskId(task.id);
     setTimeout(() => {
       setCompletingTaskId(null);
@@ -501,6 +506,16 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
     );
   };
 
+  const confirmDialog = confirmTask && (
+    <ConfirmModal
+      title="Complete task?"
+      message={`Mark "${confirmTask.name}" as complete?`}
+      confirmLabel="Complete"
+      onConfirm={() => completeTask(confirmTask)}
+      onCancel={() => setConfirmTask(null)}
+    />
+  );
+
   const undoToast = undoTask && (
     <div className="undo-toast">
       <span>Task completed</span>
@@ -564,6 +579,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
           )}
         </div>
         {undoToast}
+        {confirmDialog}
       </div>
     );
   }
@@ -738,6 +754,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
         )}
       </div>
       {undoToast}
+      {confirmDialog}
     </div>
   );
 }
