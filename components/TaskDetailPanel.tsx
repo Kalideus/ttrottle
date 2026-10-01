@@ -7,6 +7,8 @@ import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { autoGrow } from '@/lib/autoGrow';
+import { FormatToolbar, formatKeyDown } from '@/components/FormatToolbar';
+import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
 import { PeoplePicker } from '@/components/PeoplePicker';
 
@@ -82,6 +84,7 @@ export function TaskDetailPanel({
   const [title, setTitle] = useState(isFresh ? '' : task.name);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [description, setDescription] = useState(task.description ?? '');
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
   const [showDueDateMenu, setShowDueDateMenu] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
@@ -670,9 +673,14 @@ export function TaskDetailPanel({
         <div className="detail-description">
           <div className="detail-description-label">Description</div>
           {isEditingDescription ? (
+            <>
+            <FormatToolbar target={descriptionRef} />
             <textarea
               autoFocus
-              ref={autoGrow}
+              ref={(el) => {
+                descriptionRef.current = el;
+                autoGrow(el);
+              }}
               onInput={(e) => autoGrow(e.currentTarget)}
               className="detail-description-textarea"
               value={description}
@@ -685,10 +693,13 @@ export function TaskDetailPanel({
                 } else if (e.key === 'Escape') {
                   setDescription(task.description ?? '');
                   setIsEditingDescription(false);
+                } else {
+                  formatKeyDown(e);
                 }
               }}
               placeholder="Add a description…"
             />
+            </>
           ) : (
             <div
               onClick={() => setIsEditingDescription(true)}
@@ -706,7 +717,7 @@ export function TaskDetailPanel({
                 wordBreak: 'break-word',
               }}
             >
-              {description || 'Add a description…'}
+              {description ? <Markdown text={description} /> : 'Add a description…'}
             </div>
           )}
         </div>

@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { autoGrow } from '@/lib/autoGrow';
+import { FormatToolbar, formatKeyDown } from './FormatToolbar';
+import { Markdown } from './Markdown';
 
 export interface CommentItem {
   id: string;
@@ -86,7 +89,6 @@ export function Comments({
   loading = false,
 }: CommentsProps) {
   const [composerValue, setComposerValue] = useState('');
-  const [composerRows, setComposerRows] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -94,6 +96,10 @@ export function Comments({
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const editRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Grow with the text (wrapped lines too), and shrink back after sending
+  useEffect(() => autoGrow(composerRef.current), [composerValue]);
 
   const mentionMatches = mention
     ? mentionableUsers
@@ -109,8 +115,6 @@ export function Comments({
   const handleComposerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setComposerValue(value);
-    const lines = value.split('\n').length;
-    setComposerRows(Math.min(Math.max(lines, 1), 6));
     updateMentionState(value, e.target.selectionStart);
   };
 
@@ -135,7 +139,6 @@ export function Comments({
     try {
       await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
       setComposerValue('');
-      setComposerRows(1);
       setMention(null);
     } finally {
       setIsSubmitting(false);
@@ -148,7 +151,10 @@ export function Comments({
       void submitComment();
       return;
     }
-    if (!mention || !mentionMatches.length) return;
+    if (!mention || !mentionMatches.length) {
+      formatKeyDown(e);
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveMentionIndex((i) => (i + 1) % mentionMatches.length);
@@ -227,8 +233,16 @@ export function Comments({
                     </div>
 
                     {editingId === comment.id ? (
+                      <>
+                      <FormatToolbar target={editRef} />
                       <textarea
                         autoFocus
+                        ref={(el) => {
+                          editRef.current = el;
+                          autoGrow(el);
+                        }}
+                        onInput={(e) => autoGrow(e.currentTarget)}
+                        onKeyDown={formatKeyDown}
                         value={editingValue}
                         onChange={(e) => setEditingValue(e.target.value)}
                         style={{
@@ -240,8 +254,10 @@ export function Comments({
                           fontFamily: 'inherit',
                           color: 'var(--text)',
                           marginBottom: '8px',
+                          maxHeight: '40vh',
                         }}
                       />
+                      </>
                     ) : (
                       <div
                         style={{
@@ -253,7 +269,7 @@ export function Comments({
                           wordBreak: 'break-word',
                         }}
                       >
-                        {renderBody(comment.body, mentionableUsers)}
+                        <Markdown text={comment.body} plain={(s) => renderBody(s, mentionableUsers)} />
                       </div>
                     )}
 
@@ -372,6 +388,7 @@ export function Comments({
         </div>
 
         <form onSubmit={handleSubmit}>
+          <FormatToolbar target={composerRef} />
           <div style={{ position: 'relative' }}>
             <textarea
               ref={composerRef}
@@ -380,7 +397,7 @@ export function Comments({
               onSelect={(e) => updateMentionState(composerValue, e.currentTarget.selectionStart)}
               onKeyDown={handleComposerKeyDown}
               onBlur={() => setTimeout(() => setMention(null), 150)}
-              rows={composerRows}
+              rows={1}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -391,6 +408,7 @@ export function Comments({
                 color: 'var(--text)',
                 resize: 'vertical',
                 marginBottom: '8px',
+                maxHeight: '40vh',
               }}
               placeholder="Add a comment…"
             />

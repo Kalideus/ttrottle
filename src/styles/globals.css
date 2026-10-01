@@ -2371,3 +2371,19 @@ button.project-members:hover { background: var(--surface-alt); }
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* Formatting toolbar + markdown-lite rendering (components/FormatToolbar, components/Markdown) */
+.fmt-toolbar { display: flex; gap: 2px; margin-bottom: 4px; }
+.fmt-toolbar button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 24px; border: none; border-radius: 4px;
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.fmt-toolbar button:hover { background: var(--surface-alt); color: var(--text); }
+.md ul, .md ol { margin: 2px 0; padding-left: 22px; white-space: normal; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
+  background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;
+}

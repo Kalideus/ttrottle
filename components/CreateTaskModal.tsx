@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { autoGrow } from '@/lib/autoGrow';
+import { formatKeyDown } from '@/components/FormatToolbar';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
 
@@ -162,6 +163,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
             onInput={(e) => autoGrow(e.currentTarget)}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={formatKeyDown}
             placeholder="Add a description…"
             aria-label="Description"
             rows={3}
