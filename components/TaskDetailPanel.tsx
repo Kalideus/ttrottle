@@ -7,6 +7,7 @@ import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { autoGrow } from '@/lib/autoGrow';
+import { openPicker } from '@/lib/openPicker';
 import { FormatToolbar, formatKeyDown } from '@/components/FormatToolbar';
 import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
@@ -455,6 +456,7 @@ export function TaskDetailPanel({
                   <input
                     type="date"
                     autoFocus
+                    ref={openPicker}
                     defaultValue={task.due_date ?? ''}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {

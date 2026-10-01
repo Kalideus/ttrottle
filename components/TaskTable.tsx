@@ -7,6 +7,7 @@ import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { openPicker } from '@/lib/openPicker';
 
 interface TaskTableProps {
   tasks: (Task & { subtasks?: Task[] })[];
@@ -214,6 +215,7 @@ export function TaskTable({ tasks, headings, onTaskSelect, selectedTaskId, curre
         <input
           type="date"
           autoFocus
+          ref={openPicker}
           defaultValue={task.due_date ?? ''}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => {

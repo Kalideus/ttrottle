@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { autoGrow } from '@/lib/autoGrow';
+import { openPicker } from '@/lib/openPicker';
 import { formatKeyDown } from '@/components/FormatToolbar';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
@@ -207,7 +208,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
 
             <label className="ct-row">
               <span className="ct-label">Due date</span>
-              <input className="ct-control" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <input className="ct-control" type="date" onClick={(e) => openPicker(e.currentTarget)} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
 
             <div className="ct-row">
