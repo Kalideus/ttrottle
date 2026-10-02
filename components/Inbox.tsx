@@ -128,7 +128,7 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
         />
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div className="inbox-scroll" style={{ flex: 1, overflowY: 'auto' }}>
         <div className="inbox-grid inbox-grid-head" aria-hidden>
           <span>Notification</span>
           <span className="inbox-col-project">Project</span>

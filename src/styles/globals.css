@@ -794,7 +794,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
   padding: 0 24px;
   gap: 0;
@@ -833,7 +833,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   cursor: pointer;
@@ -875,7 +875,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -1123,7 +1123,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   height: 50px;
   padding: 0 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 140px) minmax(112px, 140px) minmax(96px, 140px);
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -2043,7 +2043,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 /* Same column rhythm as the task table: wide text column, then fixed metadata columns */
 .inbox-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px 110px 120px 120px;
+  grid-template-columns: minmax(0, 1fr) 200px 80px 90px 100px;
   align-items: center;
   column-gap: 16px;
 }
@@ -2067,7 +2067,9 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 }
 .inbox-project-chip:hover { background: var(--surface-alt); }
 .inbox-project-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 900px) {
+/* the inbox can be squeezed by the open task panel, so this follows its own width, not the window */
+.inbox-scroll { container-type: inline-size; }
+@container (max-width: 800px) {
   /* narrow: text on top, metadata in a row underneath */
   .inbox-grid { grid-template-columns: repeat(4, auto); justify-content: start; row-gap: 8px; }
   .inbox-grid > :first-child { grid-column: 1 / -1; }
