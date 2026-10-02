@@ -198,7 +198,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
     const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
     return (
     <div
-      className="task-metadata-cell"
+      className="task-metadata-cell task-cell-due"
       style={{ position: 'relative', cursor: 'pointer' }}
       // The date input is always there but invisible; clicking the cell opens its calendar
       // directly (showPicker needs the click itself, so it can't wait for a re-render).
@@ -496,7 +496,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
 
           {/* Assignee */}
           <div
-            className="task-metadata-cell"
+            className="task-metadata-cell task-cell-assignee"
             style={{ position: 'relative', cursor: 'pointer', zIndex: assigningId === task.id ? 50 : undefined }}
             onClick={(e) => {
               e.stopPropagation();
@@ -542,7 +542,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
 
           {/* Priority */}
           <div
-            className="task-metadata-cell"
+            className="task-metadata-cell task-cell-priority"
             style={{ position: 'relative', cursor: 'pointer', zIndex: priorityMenuId === task.id ? 50 : undefined }}
             onClick={(e) => {
               e.stopPropagation();

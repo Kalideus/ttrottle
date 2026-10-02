@@ -2390,20 +2390,28 @@ button.project-members:hover { background: var(--surface-alt); }
   background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;
 }
 
-/* Narrow table (TaskTable's is-stacked, e.g. task panel open): name on top, project + details underneath */
+/* Narrow table (TaskTable's is-stacked, e.g. task panel open): name on top, a quieter details line underneath.
+   Due date and priority get fixed slots so they line up row to row; empty values stay hidden until hover. */
 .task-project-cell { display: none; }
 .is-stacked .table-header { display: none; }
 .is-stacked .task-row {
   height: auto;
   padding-top: 8px;
   padding-bottom: 8px;
-  grid-template-columns: repeat(4, auto) 1fr;
-  justify-content: start;
-  column-gap: 16px;
-  row-gap: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
 }
-.is-stacked .task-row > .task-row-content { grid-column: 1 / -1; }
-/* doubles as the indent that lines the details up under the task name */
-.is-stacked .task-row > .task-project-cell { display: flex; align-items: center; padding-left: 64px; }
+.is-stacked .task-row > .task-row-content { flex-basis: 100%; }
 .is-stacked .task-project-inline { display: none; }
-.is-stacked .task-row > .task-metadata-cell { border-left: none; padding: 0; height: auto; justify-content: flex-start; }
+.is-stacked .task-row > .task-metadata-cell { border-left: none; padding: 0; height: 26px; justify-content: flex-start; }
+/* the margin lines the details up under the task name */
+.is-stacked .task-cell-due { order: 1; width: 52px; margin-left: 64px; }
+.is-stacked .task-cell-priority { order: 2; width: 64px; }
+.is-stacked .task-cell-assignee { order: 3; }
+.is-stacked .task-row > .task-project-cell { display: flex; order: 4; }
+.is-stacked .priority-chip { font-size: 12px; padding: 2px 8px; }
+.is-stacked .task-row:not(:hover) .empty-cell,
+.is-stacked .task-row:not(:hover) .priority-hint { visibility: hidden; }
