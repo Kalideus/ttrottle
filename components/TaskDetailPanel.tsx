@@ -1,6 +1,6 @@
 'use client';
 
-import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2 } from 'lucide-react';
+import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
@@ -30,6 +30,8 @@ interface TaskDetailPanelProps {
   parentTaskName: string | null;
   onParentSelect: () => void;
   onClose: () => void;
+  /** Shown outside the task's project (My tasks): jump to the task there. */
+  onOpenInProject?: () => void;
   onTaskUpdate: (taskId: string, updates: Record<string, unknown>) => Promise<void>;
   onTaskDelete: (taskId: string) => Promise<void>;
   onTagAdd: (tag: Tag) => void;
@@ -69,6 +71,7 @@ export function TaskDetailPanel({
   parentTaskName,
   onParentSelect,
   onClose,
+  onOpenInProject,
   onTaskUpdate,
   onTaskDelete,
   onTagAdd,
@@ -156,6 +159,11 @@ export function TaskDetailPanel({
         </button>
 
         <div className="detail-panel-actions" style={{ position: 'relative' }}>
+          {onOpenInProject && (
+            <button className="detail-panel-menu-btn" title="Open in project" aria-label="Open in project" onClick={onOpenInProject}>
+              <ExternalLink size={18} />
+            </button>
+          )}
           {task.project_id && (
             <button
               className="detail-panel-menu-btn"

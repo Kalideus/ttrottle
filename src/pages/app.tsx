@@ -617,8 +617,9 @@ export default function AppPage() {
   };
 
   const handleSubtaskAdd = async (parentTaskId: string, name: string) => {
-    const parent = tasks.find((t) => t.id === parentTaskId);
-    const sub = newTask({ parent_task_id: parentTaskId, name, position: nextPosition(parent?.subtasks ?? []) });
+    // from My tasks the parent may belong to any project, so the subtask goes in the parent's project
+    const parent = [...tasks, ...myTasks].find((t) => t.id === parentTaskId);
+    const sub = newTask({ parent_task_id: parentTaskId, name, position: nextPosition(parent?.subtasks ?? []), project_id: parent?.project_id ?? activeProjectId });
     patchTask(parentTaskId, (t) => ({ ...t, subtasks: [...(t.subtasks ?? []), sub] }));
     persist(async () => must(await createTask(supabase, { id: sub.id, position: sub.position, project_id: sub.project_id, parent_task_id: parentTaskId, name, created_by: currentUserId })), 'tasks');
   };
@@ -1370,7 +1371,7 @@ export default function AppPage() {
                   selectedTaskId={selectedTaskId}
                   currentUserId={currentUserId}
                   onTaskAdd={async () => window.alert('Open a project to add tasks there.')}
-                  onSubtaskAdd={async () => window.alert('Open a project to add subtasks there.')}
+                  onSubtaskAdd={handleSubtaskAdd}
                   onTaskUpdate={handleTaskUpdate}
                   onTaskDelete={handleTaskDelete}
                   onHeadingRename={async () => {}}
@@ -1396,7 +1397,8 @@ export default function AppPage() {
                     currentUserId={currentUserId}
                     onFollowerAdd={handleFollowerAdd}
                     onFollowerRemove={handleFollowerRemove}
-                    onSubtaskAdd={async () => window.alert('Open the task from its project to add subtasks there.')}
+                    onSubtaskAdd={handleSubtaskAdd}
+                    onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
                     onSubtaskSelect={setSelectedTaskId}
                     parentTaskName={parentTask?.name ?? null}
                     onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}

@@ -532,14 +532,21 @@ export async function getMyTasks(supabase: SupabaseClient, userId: string) {
     .from('tasks')
     .select(`
       *,
-      project:projects!tasks_project_id_fkey(id, name, color)
+      project:projects!tasks_project_id_fkey(id, name, color),
+      subtasks:tasks!parent_task_id(*)
     `)
     .eq('assignee_id', userId)
     .eq('completed', false)
     .is('deleted_at', null)
     .order('due_date', { ascending: true })
+    .order('position', { referencedTable: 'subtasks', ascending: true })
+    .order('created_at', { referencedTable: 'subtasks', ascending: true })
 
-  return { data, error }
+  // ponytail: subtasks come without assignee profiles here; join them like getTasksForProject if avatars are wanted
+  return {
+    data: (data ?? []).map((t) => ({ ...t, subtasks: (t.subtasks ?? []).filter((st: Task) => !st.deleted_at) })),
+    error,
+  }
 }
 
 export async function getComments(supabase: SupabaseClient, taskId: string) {
