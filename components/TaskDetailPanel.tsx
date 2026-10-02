@@ -138,6 +138,21 @@ export function TaskDetailPanel({
     setIsEditingTitle(false);
   };
 
+  // Clicking outside the panel or onto another task unmounts it before the textarea/input blur fires,
+  // so an edit still open at that point is saved on the way out.
+  const unsaved = useRef({ task, onTaskUpdate, title, description, isEditingTitle, isEditingDescription });
+  unsaved.current = { task, onTaskUpdate, title, description, isEditingTitle, isEditingDescription };
+  useEffect(
+    () => () => {
+      const u = unsaved.current;
+      const updates: Record<string, unknown> = {};
+      if (u.isEditingTitle && u.title.trim() && u.title !== u.task.name) updates.name = u.title;
+      if (u.isEditingDescription && u.description !== (u.task.description ?? '')) updates.description = u.description;
+      if (Object.keys(updates).length) u.onTaskUpdate(u.task.id, updates);
+    },
+    []
+  );
+
   const handleSaveDescription = () => {
     if (description !== (task.description ?? '')) {
       onTaskUpdate(task.id, { description });
