@@ -2415,5 +2415,11 @@ button.project-members:hover { background: var(--surface-alt); }
 .is-stacked .priority-chip { font-size: 12px; padding: 2px 8px; }
 .is-stacked .task-row:not(:hover) .empty-cell,
 .is-stacked .task-row:not(:hover) .priority-hint { visibility: hidden; }
-/* My tasks (flat): every top-level task is yours, so the avatar is noise; subtasks can be anyone's */
+/* My tasks (flat): every task is yours, so no Assignee column. Stacked subtasks keep their avatar (could be anyone's). */
+.is-flat .table-header-cell:nth-child(2),
+.is-flat:not(.is-stacked) .task-cell-assignee,
 .is-stacked.is-flat .task-row:not(.level-2) > .task-cell-assignee { display: none; }
+.is-flat .table-header,
+.is-flat .task-row,
+.is-flat .section-header,
+.is-flat .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px) minmax(96px, 140px); }
