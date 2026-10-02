@@ -441,19 +441,21 @@ export default function AppPage() {
       });
     }
 
+    // Due date and priority break each other's ties: same day → highest priority first, and vice versa.
+    // ponytail: fixed pairing, add a "then by" picker if other combinations are wanted
+    const byDue = (a: Task, b: Task) => (a.due_date ? new Date(a.due_date).getTime() : Infinity) - (b.due_date ? new Date(b.due_date).getTime() : Infinity);
+    const rank = { high: 0, medium: 1, low: 2 };
+    const byPriority = (a: Task, b: Task) => (a.priority ? rank[a.priority] : 3) - (b.priority ? rank[b.priority] : 3);
     if (activeSection === 'my-tasks') {
       // My Tasks is always due-date order, overdue-first — not subject to the toolbar's sort picker.
-      result.sort((a, b) => (a.due_date ? new Date(a.due_date).getTime() : Infinity) - (b.due_date ? new Date(b.due_date).getTime() : Infinity));
+      result.sort((a, b) => byDue(a, b) || byPriority(a, b));
     } else result.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'position') cmp = (a.position ?? 0) - (b.position ?? 0);
       else if (sortField === 'name') cmp = a.name.localeCompare(b.name);
       else if (sortField === 'created_at') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      else if (sortField === 'due_date') cmp = (a.due_date ? new Date(a.due_date).getTime() : Infinity) - (b.due_date ? new Date(b.due_date).getTime() : Infinity);
-      else if (sortField === 'priority') {
-        const rank = { high: 0, medium: 1, low: 2 };
-        cmp = (rank[a.priority ?? 'low']) - (rank[b.priority ?? 'low']);
-      }
+      else if (sortField === 'due_date') cmp = byDue(a, b) || byPriority(a, b);
+      else if (sortField === 'priority') cmp = byPriority(a, b) || byDue(a, b);
       return sortDirection === 'asc' ? cmp : -cmp;
     });
 
