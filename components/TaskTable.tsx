@@ -49,11 +49,11 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
-  // Below this width (e.g. with the task panel open) each row stacks: name on top, project + details underneath.
+  // Below this width (e.g. with the task panel open) rows drop to just name + due date.
   // Measured on the table itself, not the window, since the panel is what squeezes it.
-  const [stacked, setStacked] = useState(false);
+  const [compact, setCompact] = useState(false);
   const watchWidth = useCallback((el: HTMLDivElement) => {
-    const ro = new ResizeObserver(([entry]) => setStacked(entry.contentRect.width < 1200));
+    const ro = new ResizeObserver(([entry]) => setCompact(entry.contentRect.width < 1000));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -238,7 +238,6 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
     const siblingIndex = siblings.findIndex((t) => t.id === task.id);
     const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : null;
     const nextSibling = siblingIndex >= 0 && siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : null;
-    // shown inline after the name, or on the second line when the table is stacked
     const projectChip = task.project ? (
       <span
         style={{
@@ -492,8 +491,6 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
             </div>
           </div>
 
-          <div className="task-project-cell">{projectChip}</div>
-
           {/* Assignee */}
           <div
             className="task-metadata-cell task-cell-assignee"
@@ -641,7 +638,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
 
   if (tasks.length === 0 && headings.length === 0) {
     return (
-      <div className={`app-table-area ${stacked ? 'is-stacked' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
+      <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
         <div className="table-header">
           <div className="table-header-cell">Name</div>
           <div className="table-header-cell">Assignee</div>
@@ -701,7 +698,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   }
 
   return (
-    <div className={`app-table-area ${stacked ? 'is-stacked' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
+    <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
       <div className="table-header">
         <div className="table-header-cell">Name</div>
         <div className="table-header-cell">Assignee</div>

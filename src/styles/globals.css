@@ -2390,36 +2390,18 @@ button.project-members:hover { background: var(--surface-alt); }
   background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;
 }
 
-/* Narrow table (TaskTable's is-stacked, e.g. task panel open): name on top, a quieter details line underneath.
-   Due date and priority get fixed slots so they line up row to row; empty values stay hidden until hover. */
-.task-project-cell { display: none; }
-.is-stacked .table-header { display: none; }
-.is-stacked .task-row {
-  height: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 12px;
-  row-gap: 2px;
-}
-.is-stacked .task-row > .task-row-content { flex-basis: 100%; }
-.is-stacked .task-project-inline { display: none; }
-.is-stacked .task-row > .task-metadata-cell { border-left: none; padding: 0; height: 26px; justify-content: flex-start; }
-/* the margin lines the details up under the task name */
-.is-stacked .task-cell-due { order: 1; width: 52px; margin-left: 64px; }
-.is-stacked .task-cell-priority { order: 2; width: 64px; }
-.is-stacked .task-cell-assignee { order: 3; }
-.is-stacked .task-row > .task-project-cell { display: flex; order: 4; }
-.is-stacked .priority-chip { font-size: 12px; padding: 2px 8px; }
-.is-stacked .task-row:not(:hover) .empty-cell,
-.is-stacked .task-row:not(:hover) .priority-hint { visibility: hidden; }
-/* My tasks (flat): every task is yours, so no Assignee column. Stacked subtasks keep their avatar (could be anyone's). */
+/* Narrow table (TaskTable's is-compact, e.g. task panel open): one row per task, just name + due date */
+.is-compact .table-header,
+.is-compact .task-row,
+.is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px); }
+.is-compact .table-header-cell:nth-child(2),
+.is-compact .table-header-cell:nth-child(4),
+.is-compact .task-cell-assignee,
+.is-compact .task-cell-priority,
+.is-compact .task-project-inline { display: none; }
+/* My tasks (flat): every task is yours, so no Assignee column */
 .is-flat .table-header-cell:nth-child(2),
-.is-flat:not(.is-stacked) .task-cell-assignee,
-.is-stacked.is-flat .task-row:not(.level-2) > .task-cell-assignee { display: none; }
-.is-flat .table-header,
-.is-flat .task-row,
-.is-flat .section-header,
-.is-flat .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px) minmax(96px, 140px); }
+.is-flat .task-cell-assignee { display: none; }
+.is-flat:not(.is-compact) .table-header,
+.is-flat:not(.is-compact) .task-row,
+.is-flat:not(.is-compact) .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px) minmax(96px, 140px); }
