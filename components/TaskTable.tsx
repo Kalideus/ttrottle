@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil } from 'lucide-react';
+import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
 import { PeoplePicker } from '@/components/PeoplePicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
@@ -481,6 +481,22 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
                       >
                         <Plus size={14} />
                         Add subtask
+                      </button>
+                    )}
+                    {/* same as dragging it onto its section; not in My Tasks, which mixes projects */}
+                    {isLevel2 && !flat && onPromoteSubtask && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuTaskId(null);
+                          const parent = tasks.find((t) => t.id === task.parent_task_id);
+                          const section = groupedTasks[parent?.heading_id || '__no_heading__'] ?? [];
+                          onPromoteSubtask(task.id, parent?.heading_id ?? null, section.length ? Math.max(...section.map((t) => t.position)) + 1 : 0);
+                        }}
+                        style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}
+                      >
+                        <CornerLeftUp size={14} />
+                        Make it a task
                       </button>
                     )}
                     <button
