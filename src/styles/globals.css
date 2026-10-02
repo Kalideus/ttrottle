@@ -2415,3 +2415,5 @@ button.project-members:hover { background: var(--surface-alt); }
 .is-stacked .priority-chip { font-size: 12px; padding: 2px 8px; }
 .is-stacked .task-row:not(:hover) .empty-cell,
 .is-stacked .task-row:not(:hover) .priority-hint { visibility: hidden; }
+/* My tasks (flat): every top-level task is yours, so the avatar is noise; subtasks can be anyone's */
+.is-stacked.is-flat .task-row:not(.level-2) > .task-cell-assignee { display: none; }

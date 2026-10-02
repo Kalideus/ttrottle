@@ -641,7 +641,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
 
   if (tasks.length === 0 && headings.length === 0) {
     return (
-      <div className={`app-table-area ${stacked ? 'is-stacked' : ''}`} ref={watchWidth}>
+      <div className={`app-table-area ${stacked ? 'is-stacked' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
         <div className="table-header">
           <div className="table-header-cell">Name</div>
           <div className="table-header-cell">Assignee</div>
@@ -701,7 +701,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   }
 
   return (
-    <div className={`app-table-area ${stacked ? 'is-stacked' : ''}`} ref={watchWidth}>
+    <div className={`app-table-area ${stacked ? 'is-stacked' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
       <div className="table-header">
         <div className="table-header-cell">Name</div>
         <div className="table-header-cell">Assignee</div>
