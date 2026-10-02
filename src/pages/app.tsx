@@ -1369,6 +1369,7 @@ export default function AppPage() {
                   tasks={displayedTasks}
                   headings={[]}
                   flat
+                  onOpenProject={openInProject}
                   onTaskSelect={setSelectedTaskId}
                   selectedTaskId={selectedTaskId}
                   currentUserId={currentUserId}
@@ -1451,6 +1452,7 @@ export default function AppPage() {
                   onFollowerAdd={handleFollowerAdd}
                   onFollowerRemove={handleFollowerRemove}
                   onSubtaskAdd={handleSubtaskAdd}
+                  onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
                   onSubtaskSelect={setSelectedTaskId}
                   parentTaskName={parentTask?.name ?? null}
                   onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}

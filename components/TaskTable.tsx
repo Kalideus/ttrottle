@@ -40,9 +40,11 @@ interface TaskTableProps {
   onMakeSubtask?: (taskId: string, parentTaskId: string) => void;
   /** Drop a subtask on a heading to turn it back into a top-level task there. */
   onPromoteSubtask?: (taskId: string, headingId: string | null, position: number) => void;
+  /** My Tasks: clicking a task's project chip opens it there. */
+  onOpenProject?: (projectId: string, taskId: string) => void;
 }
 
-export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask }: TaskTableProps) {
+export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -240,7 +242,17 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
     const nextSibling = siblingIndex >= 0 && siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : null;
     const projectChip = task.project ? (
       <span
+        role={onOpenProject ? 'button' : undefined}
+        title={onOpenProject ? `Open in ${task.project.name}` : undefined}
+        onClick={
+          onOpenProject &&
+          ((e) => {
+            e.stopPropagation();
+            onOpenProject(task.project_id, task.id);
+          })
+        }
         style={{
+          cursor: onOpenProject ? 'pointer' : undefined,
           fontSize: '11px',
           fontWeight: 500,
           padding: '2px 8px',
