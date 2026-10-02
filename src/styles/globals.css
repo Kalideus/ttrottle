@@ -2389,3 +2389,21 @@ button.project-members:hover { background: var(--surface-alt); }
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
   background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;
 }
+
+/* Narrow table (TaskTable's is-stacked, e.g. task panel open): name on top, project + details underneath */
+.task-project-cell { display: none; }
+.is-stacked .table-header { display: none; }
+.is-stacked .task-row {
+  height: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  grid-template-columns: repeat(4, auto) 1fr;
+  justify-content: start;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+.is-stacked .task-row > .task-row-content { grid-column: 1 / -1; }
+/* doubles as the indent that lines the details up under the task name */
+.is-stacked .task-row > .task-project-cell { display: flex; align-items: center; padding-left: 64px; }
+.is-stacked .task-project-inline { display: none; }
+.is-stacked .task-row > .task-metadata-cell { border-left: none; padding: 0; height: auto; justify-content: flex-start; }
