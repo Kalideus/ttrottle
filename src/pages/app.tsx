@@ -711,7 +711,8 @@ export default function AppPage() {
     if ('assignee_id' in updates) optimistic.assignee = projectMembers.find((m) => m.profile_id === updates.assignee_id)?.profile ?? null;
     if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
     patchTask(taskId, (t) => ({ ...t, ...optimistic }));
-    if ('position' in updates) setResortToken((n) => n + 1);
+    // My Tasks is due-date ordered, so a new date moves the row to its place straight away
+    if ('position' in updates || ('due_date' in updates && activeSection === 'my-tasks')) setResortToken((n) => n + 1);
 
     const messages = buildActivityMessages(updates);
     persist(async () => {
