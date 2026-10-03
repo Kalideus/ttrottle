@@ -123,6 +123,18 @@ export default function AppPage() {
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [comments, setComments] = useState<CommentItem[]>([]);
+  // comment a notification click wants scrolled into view once the panel's comments load
+  const [focusCommentId, setFocusCommentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusCommentId) return;
+    const el = document.getElementById(`comment-${focusCommentId}`);
+    if (!el) return; // not rendered yet (or deleted) -- retries when comments change
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('comment-flash');
+    void el.offsetWidth; // restart the animation if it's the same comment again
+    el.classList.add('comment-flash');
+    setFocusCommentId(null);
+  }, [focusCommentId, comments]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
@@ -279,6 +291,7 @@ export default function AppPage() {
         taskName: n.task?.name ?? 'a task',
         taskId: n.task?.id ?? null,
         projectId: n.task?.project_id ?? null,
+        commentId: n.comment_id ?? null,
         dueDate: n.task?.due_date ?? null,
         priority: n.task?.priority ?? null,
         completed: !!n.task?.completed,
@@ -1078,7 +1091,17 @@ export default function AppPage() {
     if (notif?.projectId && notif?.taskId) {
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
+      setFocusCommentId(notif.commentId ?? null);
     }
+  };
+
+  // right-click on an inbox row
+  const handleNotificationsMarkRead = (ids: string[], read: boolean) => {
+    const changing = new Set(notifications.filter((n) => ids.includes(n.id) && !n.readAt === read).map((n) => n.id));
+    if (!changing.size) return;
+    setNotifications((prev) => prev.map((n) => (changing.has(n.id) ? { ...n, readAt: read ? new Date().toISOString() : null } : n)));
+    setNotificationsBadge((c) => Math.max(0, c + (read ? -changing.size : changing.size)));
+    persist(async () => must(await markNotificationsRead(supabase, [...changing], read)), 'notifications');
   };
 
   // stable identity so GlobalSearch's debounce effect doesn't re-run every render
@@ -1431,6 +1454,7 @@ export default function AppPage() {
                 onNotificationClick={handleNotificationClick}
                 onOpenProject={openInProject}
                 onMarkAllRead={handleMarkAllRead}
+                onMarkRead={handleNotificationsMarkRead}
                 onClear={handleNotificationsClear}
                 onClearAll={handleClearAllNotifications}
               />

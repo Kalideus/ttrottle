@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, Check, CheckCheck, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
 import { groupNotifications } from '@/lib/groupNotifications';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -12,6 +12,7 @@ export interface NotificationItem {
   taskName: string;
   taskId?: string | null;
   projectId?: string | null;
+  commentId?: string | null; // comment/mention rows jump straight to the comment
   // current state of the task, so people can orient themselves at a glance
   dueDate?: string | null;
   priority?: 'low' | 'medium' | 'high' | null;
@@ -32,6 +33,7 @@ interface InboxProps {
   onNotificationClick: (ids: string[]) => void;
   onOpenProject: (projectId: string, taskId?: string | null) => void;
   onMarkAllRead: () => void;
+  onMarkRead: (ids: string[], read: boolean) => void;
   onClear: (ids: string[]) => void;
   onClearAll: () => void;
 }
@@ -61,9 +63,10 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
-export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead, onClear, onClearAll }: InboxProps) {
+export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead, onMarkRead, onClear, onClearAll }: InboxProps) {
   const unreadCount = notifications.filter((n) => !n.readAt).length;
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; ids: string[]; unread: boolean } | null>(null);
 
   if (loading) {
     return (
@@ -150,6 +153,10 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
             role="button"
             tabIndex={0}
             onClick={() => onNotificationClick(ids)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, ids, unread });
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -283,6 +290,43 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
           );
         })}
       </div>
+
+      {menu && (
+        <>
+          <div
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu(null);
+            }}
+            style={{ position: 'fixed', inset: 0, zIndex: 90 }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: menu.y,
+              left: menu.x,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              minWidth: '160px',
+              zIndex: 100,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}
+          >
+            <button
+              onClick={() => {
+                onMarkRead(menu.ids, menu.unread);
+                setMenu(null);
+              }}
+              style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {menu.unread ? <MailOpen size={14} /> : <Mail size={14} />}
+              {menu.unread ? 'Mark as read' : 'Mark as unread'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -201,6 +201,7 @@ export function Comments({
               {comments.map((comment) => (
                 <div
                   key={comment.id}
+                  id={`comment-${comment.id}`}
                   style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}
                   onMouseEnter={() => setHoveredCommentId(comment.id)}
                   onMouseLeave={() => setHoveredCommentId(null)}

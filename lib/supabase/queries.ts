@@ -704,10 +704,10 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
 }
 
 // several at once: the inbox groups a task's consecutive updates into one row
-export async function markNotificationsRead(supabase: SupabaseClient, ids: string[]) {
+export async function markNotificationsRead(supabase: SupabaseClient, ids: string[], read = true) {
   return supabase
     .from('notifications')
-    .update({ read_at: new Date().toISOString() })
+    .update({ read_at: read ? new Date().toISOString() : null })
     .in('id', ids)
 }
 

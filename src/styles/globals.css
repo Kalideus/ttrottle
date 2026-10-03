@@ -2405,3 +2405,13 @@ button.project-members:hover { background: var(--surface-alt); }
 .is-flat:not(.is-compact) .table-header,
 .is-flat:not(.is-compact) .task-row,
 .is-flat:not(.is-compact) .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px) minmax(96px, 140px); }
+
+/* inbox click lands on a comment: brief highlight so the eye finds it */
+.comment-flash {
+  animation: comment-flash 2s ease-out;
+  border-radius: 6px;
+}
+@keyframes comment-flash {
+  0%, 30% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
