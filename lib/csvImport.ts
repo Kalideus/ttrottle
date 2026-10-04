@@ -7,6 +7,7 @@ export type NewTaskSpec = {
   assignee_id?: string | null
   due_date?: string | null
   priority?: 'low' | 'medium' | 'high' | null
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
   completed?: boolean
   section: string | null
   tag_ids?: string[]

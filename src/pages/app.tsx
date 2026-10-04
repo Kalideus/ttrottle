@@ -705,6 +705,9 @@ export default function AppPage() {
       const heading = headings.find((h) => h.id === (updates.heading_id as string | null));
       messages.push(heading ? `moved the task to "${heading.name}"` : 'moved the task to (no heading)');
     }
+    if ('repeat' in updates) {
+      messages.push(updates.repeat ? `set the task to repeat ${updates.repeat}` : 'stopped the task repeating');
+    }
     if ('completed' in updates) {
       messages.push(updates.completed ? 'marked the task complete' : 'marked the task incomplete');
     }

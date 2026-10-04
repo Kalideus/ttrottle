@@ -1,6 +1,6 @@
 'use client';
 
-import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink } from 'lucide-react';
+import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
@@ -496,6 +496,24 @@ export function TaskDetailPanel({
                 </div>
               )}
             </div>
+            {/* subtasks don't repeat on their own; they're copied with their parent */}
+            {!task.parent_task_id && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
+                <Repeat size={14} />
+                <select
+                  aria-label="Repeat"
+                  value={task.repeat ?? ''}
+                  onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
+                  style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}
+                >
+                  <option value="">Doesn&apos;t repeat</option>
+                  <option value="daily">Repeats daily</option>
+                  <option value="weekly">Repeats weekly</option>
+                  <option value="monthly">Repeats monthly</option>
+                  <option value="yearly">Repeats yearly</option>
+                </select>
+              </label>
+            )}
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>

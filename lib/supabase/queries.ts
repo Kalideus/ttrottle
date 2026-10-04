@@ -31,6 +31,7 @@ export type Task = {
   assignee_id: string | null
   due_date: string | null
   priority: 'low' | 'medium' | 'high' | null
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
   completed: boolean
   completed_at: string | null
   position: number
@@ -224,6 +225,8 @@ export async function createProjectWithContent(
     assignee_id: t.assignee_id ?? null,
     due_date: t.due_date ?? null,
     priority: t.priority ?? null,
+    // only sent when set, so import/duplicate keep working on a database without migration 025
+    ...(!parent_task_id && t.repeat && { repeat: t.repeat }),
     completed: !!t.completed,
     completed_at: t.completed ? now : null,
     position,
@@ -264,6 +267,7 @@ export function projectToPlan(
     assignee_id: assignees ? t.assignee_id : null,
     due_date: dueDates ? t.due_date : null,
     priority: t.priority,
+    repeat: t.repeat,
     completed: completion && t.completed,
     section: (t.heading_id && section.get(t.heading_id)) || null,
     tag_ids: (t.tags ?? []).map((tag) => tag.id),
@@ -529,7 +533,7 @@ export async function logActivity(
 export async function updateTask(
   supabase: SupabaseClient,
   id: string,
-  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
+  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'repeat' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
   detail?: string
 ) {
   const nextUpdates: Partial<Task & { completed_at: string | null }> = { ...updates }
