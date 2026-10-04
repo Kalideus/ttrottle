@@ -58,6 +58,7 @@ declare
   base date := coalesce(new.due_date, current_date);  -- no due date: one period from today
   next_due date;
   new_id uuid := gen_random_uuid();
+  next_task tasks%rowtype;
 begin
   if new.repeat is null or new.parent_task_id is not null or new.deleted_at is not null
      or not new.completed or old.completed then
@@ -69,12 +70,16 @@ begin
     next_due := next_repeat_date(next_due, new.repeat);
   end loop;
 
-  insert into tasks (id, project_id, heading_id, name, description, assignee_id, due_date, priority, repeat, position, created_by)
-  values (
-    new_id, new.project_id, new.heading_id, new.name, new.description, new.assignee_id, next_due, new.priority, new.repeat,
-    (select coalesce(max(position), -1) + 1 from tasks where project_id = new.project_id and parent_task_id is null),
-    auth.uid()
-  );
+  -- copy the whole row, so columns added later (e.g. 026's due_locked) carry over without touching this
+  next_task := new;
+  next_task.id := new_id;
+  next_task.due_date := next_due;
+  next_task.completed := false;
+  next_task.completed_at := null;
+  next_task.position := (select coalesce(max(position), -1) + 1 from tasks where project_id = new.project_id and parent_task_id is null);
+  next_task.created_by := auth.uid();
+  next_task.created_at := now();
+  insert into tasks select next_task.*;
 
   -- subtasks come along reset to not done, their dates shifted by the same amount
   insert into tasks (project_id, parent_task_id, name, description, assignee_id, due_date, priority, position, created_by)

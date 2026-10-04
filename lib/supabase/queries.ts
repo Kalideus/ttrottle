@@ -33,6 +33,7 @@ export type Task = {
   due_date: string | null
   priority: 'low' | 'medium' | 'high' | null
   repeat?: Repeat | null
+  due_locked?: boolean
   completed: boolean
   completed_at: string | null
   position: number
@@ -57,6 +58,9 @@ export type Comment = {
   created_at: string
   edited_at: string | null
   deleted_at: string | null
+  // extension request on a locked due date (migration 026)
+  requested_due_date?: string | null
+  request_status?: 'pending' | 'approved' | 'declined' | null
 }
 
 export type Tag = {
@@ -534,7 +538,7 @@ export async function logActivity(
 export async function updateTask(
   supabase: SupabaseClient,
   id: string,
-  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'repeat' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
+  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'repeat' | 'due_locked' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
   detail?: string
 ) {
   const nextUpdates: Partial<Task & { completed_at: string | null }> = { ...updates }
@@ -671,12 +675,14 @@ export async function createComment(
     author_id,
     body,
     mentions,
+    requested_due_date,
     id,
   }: {
     task_id: string
     author_id: string
     body: string
     mentions?: string[]
+    requested_due_date?: string
     id?: string
   }
 ) {
@@ -686,6 +692,7 @@ export async function createComment(
     author_id,
     body,
     mentions: mentions ?? [],
+    ...(requested_due_date && { requested_due_date, request_status: 'pending' }),
   }
 
   const result = await supabase
@@ -946,4 +953,15 @@ export async function getAllProjectMembersAdmin(supabase: SupabaseClient) {
 
 export async function getAllProfilesAdmin(supabase: SupabaseClient) {
   return supabase.from('profiles').select('*').order('name', { ascending: true })
+}
+
+// Manager's answer to an extension request; the date itself moves via updateTask (migration 026 guards both)
+export async function answerExtensionRequest(supabase: SupabaseClient, commentId: string, approve: boolean) {
+  return supabase.from('comments').update({ request_status: approve ? 'approved' : 'declined' }).eq('id', commentId)
+}
+
+// project_id → my role, for the manager-only controls (lock a due date, answer extension requests)
+export async function getMyProjectRoles(supabase: SupabaseClient, userId: string) {
+  const { data } = await supabase.from('project_members').select('project_id, role').eq('profile_id', userId)
+  return new Map((data ?? []).map((r) => [r.project_id as string, r.role as ProjectMember['role']]))
 }

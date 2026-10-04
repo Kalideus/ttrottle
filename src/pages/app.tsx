@@ -28,6 +28,8 @@ import {
   getTasksForProject,
   createProject,
   createProjectWithContent,
+  getMyProjectRoles,
+  answerExtensionRequest,
   projectToPlan,
   updateProject,
   deleteProject,
@@ -106,6 +108,8 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
     likes: c.like_user_ids?.length ?? 0,
     liked: !!currentUserId && !!c.like_user_ids?.includes(currentUserId),
     isOwn: c.author_id === currentUserId,
+    requestedDueDate: c.requested_due_date ?? null,
+    requestStatus: c.request_status ?? null,
   }));
 }
 
@@ -154,6 +158,8 @@ export default function AppPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // project_id → my role there; drives the manager-only due-date lock and extension answers
+  const [myRoles, setMyRoles] = useState<Map<string, ProjectMember['role']>>(new Map());
   const [duplicateFrom, setDuplicateFrom] = useState<Project | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -706,6 +712,9 @@ export default function AppPage() {
       const heading = headings.find((h) => h.id === (updates.heading_id as string | null));
       messages.push(heading ? `moved the task to "${heading.name}"` : 'moved the task to (no heading)');
     }
+    if ('due_locked' in updates) {
+      messages.push(updates.due_locked ? 'locked the due date' : 'unlocked the due date');
+    }
     if ('repeat' in updates) {
       // repeat is top-level only, so tasks + myTasks covers it
       const due = [...tasks, ...myTasks].find((t) => t.id === taskId)?.due_date ?? null;
@@ -1097,6 +1106,43 @@ export default function AppPage() {
     persist(async () => must(await createComment(supabase, { id: comment.id, task_id: taskId, author_id: currentUserId, body, mentions })), 'comments', 'followers', 'tasks');
   };
 
+  // reloaded with the project list, so a project just created or joined counts straight away
+  useEffect(() => {
+    if (currentUserId) getMyProjectRoles(supabase, currentUserId).then(setMyRoles);
+  }, [currentUserId, projects, supabase]);
+  const canManage = (projectId: string | undefined) => {
+    const role = projectId ? myRoles.get(projectId) : undefined;
+    return !!currentProfile?.is_super_admin || role === 'owner' || role === 'admin';
+  };
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  // A request on a locked due date is a comment carrying the wanted date; managers get notified by the database (026).
+  const handleExtensionRequest = (date: string, reason: string) => {
+    if (!selectedTaskId || !currentUserId) return;
+    const taskId = selectedTaskId;
+    const body = reason || 'Could the due date move?';
+    const [comment] = mapComments([{ id: crypto.randomUUID(), author_id: currentUserId, author: currentProfile, body, created_at: new Date().toISOString(), requested_due_date: date, request_status: 'pending' }], currentUserId);
+    setComments((prev) => [...prev, comment]);
+    patchTask(taskId, (t) => ({ ...t, comment_count: (t.comment_count ?? 0) + 1 }));
+    persist(async () => {
+      must(await createComment(supabase, { id: comment.id, task_id: taskId, author_id: currentUserId, body, requested_due_date: date }));
+      await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `asked for an extension to ${formatDate(date)}` });
+    }, 'comments', 'followers', 'tasks', 'activity');
+  };
+
+  const handleRequestAnswer = (commentId: string, approve: boolean) => {
+    const c = comments.find((x) => x.id === commentId);
+    if (!selectedTaskId || !currentUserId || !c?.requestedDueDate) return;
+    const taskId = selectedTaskId;
+    setComments((prev) => prev.map((x) => (x.id === commentId ? { ...x, requestStatus: approve ? 'approved' : 'declined' } : x)));
+    persist(async () => {
+      must(await answerExtensionRequest(supabase, commentId, approve));
+      await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `${approve ? 'approved' : 'declined'} ${c.authorName}'s extension request` });
+    }, 'comments', 'activity');
+    // logs "set the due date to …" itself
+    if (approve) void handleTaskUpdate(taskId, { due_date: c.requestedDueDate });
+  };
+
   const handleCommentEdit = async (commentId: string, body: string) => {
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body, editedAt: new Date().toISOString() } : c)));
     persist(async () => must(await updateComment(supabase, commentId, { body })), 'comments');
@@ -1347,6 +1393,7 @@ export default function AppPage() {
                 {!loading && activeProjectId ? (
                   <>
                     <TaskTable
+                      canManage={(projectId: string) => canManage(projectId)}
                       members={projectMembers}
                       onTaskHover={prefetchTask}
                       onMakeSubtask={handleMakeSubtask}
@@ -1408,6 +1455,9 @@ export default function AppPage() {
                         onCommentEdit={handleCommentEdit}
                         onCommentDelete={handleCommentDelete}
                         onCommentLike={handleCommentLike}
+                        canManage={canManage(selectedTask?.project_id)}
+                        onExtensionRequest={handleExtensionRequest}
+                        onRequestAnswer={handleRequestAnswer}
                       />
                     )}
                   </>
@@ -1437,6 +1487,7 @@ export default function AppPage() {
 
               <div className="app-content">
                 <TaskTable
+                  canManage={(projectId: string) => canManage(projectId)}
                   members={projectMembers}
                   onTaskHover={prefetchTask}
                   onMakeSubtask={handleMakeSubtask}
@@ -1491,6 +1542,9 @@ export default function AppPage() {
                     onCommentEdit={handleCommentEdit}
                     onCommentDelete={handleCommentDelete}
                     onCommentLike={handleCommentLike}
+                    canManage={canManage(selectedTask?.project_id)}
+                    onExtensionRequest={handleExtensionRequest}
+                    onRequestAnswer={handleRequestAnswer}
                   />
                 )}
               </div>
@@ -1543,6 +1597,9 @@ export default function AppPage() {
                   onCommentEdit={handleCommentEdit}
                   onCommentDelete={handleCommentDelete}
                   onCommentLike={handleCommentLike}
+                  canManage={canManage(selectedTask?.project_id)}
+                  onExtensionRequest={handleExtensionRequest}
+                  onRequestAnswer={handleRequestAnswer}
                 />
               )}
             </div>

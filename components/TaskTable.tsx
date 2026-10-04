@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp } from 'lucide-react';
+import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
 import { PeoplePicker } from '@/components/PeoplePicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
@@ -42,9 +42,11 @@ interface TaskTableProps {
   onPromoteSubtask?: (taskId: string, headingId: string | null, position: number) => void;
   /** My Tasks: clicking a task's project chip opens it there. */
   onOpenProject?: (projectId: string, taskId: string) => void;
+  // may this user move a locked due date (project manager)? Others see the date read-only.
+  canManage?: (projectId: string) => boolean;
 }
 
-export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject }: TaskTableProps) {
+export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -198,15 +200,17 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
 
   const renderDueDateCell = (task: Task) => {
     const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
+    const readOnly = !!task.due_locked && !canManage(task.project_id);
     return (
     <div
       className="task-metadata-cell task-cell-due"
-      style={{ position: 'relative', cursor: 'pointer' }}
+      title={task.due_locked ? (readOnly ? 'Locked by a manager. Open the task to request an extension' : 'Due date locked') : undefined}
+      style={{ position: 'relative', cursor: readOnly ? 'default' : 'pointer' }}
       // The date input is always there but invisible; clicking the cell opens its calendar
       // directly (showPicker needs the click itself, so it can't wait for a re-render).
       onClick={(e) => {
         e.stopPropagation();
-        openPicker(e.currentTarget.querySelector('input'));
+        if (!readOnly) openPicker(e.currentTarget.querySelector('input'));
       }}
     >
       {task.due_date ? (
@@ -215,6 +219,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
           style={{ color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
         >
           {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+          {task.due_locked && <Lock size={11} aria-label="Locked" style={{ marginLeft: 4, verticalAlign: -1, opacity: 0.7 }} />}
         </span>
       ) : (
         <div className="empty-cell" style={{ borderRadius: '4px' }}>

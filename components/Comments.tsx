@@ -20,6 +20,8 @@ export interface CommentItem {
   likes: number;
   liked: boolean;
   isOwn: boolean;
+  requestedDueDate?: string | null;
+  requestStatus?: 'pending' | 'approved' | 'declined' | null;
 }
 
 interface CommentsProps {
@@ -30,6 +32,9 @@ interface CommentsProps {
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
+  // project managers answer extension requests on a locked due date
+  canAnswerRequests?: boolean;
+  onRequestAnswer?: (commentId: string, approve: boolean) => void;
   loading?: boolean;
 }
 
@@ -86,6 +91,8 @@ export function Comments({
   onCommentEdit,
   onCommentDelete,
   onCommentLike,
+  canAnswerRequests = false,
+  onRequestAnswer,
   loading = false,
 }: CommentsProps) {
   const [composerValue, setComposerValue] = useState('');
@@ -271,6 +278,23 @@ export function Comments({
                         }}
                       >
                         <Markdown text={comment.body} plain={(s) => renderBody(s, mentionableUsers)} />
+                      </div>
+                    )}
+
+                    {comment.requestedDueDate && (
+                      <div className={`extension-request is-${comment.requestStatus ?? 'pending'}`}>
+                        <span>
+                          📅 Asked to move the due date to{' '}
+                          <b>{new Date(comment.requestedDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
+                          {' · '}
+                          {comment.requestStatus === 'approved' ? 'Approved' : comment.requestStatus === 'declined' ? 'Declined' : 'Waiting for a manager'}
+                        </span>
+                        {comment.requestStatus === 'pending' && canAnswerRequests && onRequestAnswer && (
+                          <span style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="modal-btn primary" onClick={() => onRequestAnswer(comment.id, true)}>Approve</button>
+                            <button type="button" className="modal-btn ghost" onClick={() => onRequestAnswer(comment.id, false)}>Decline</button>
+                          </span>
+                        )}
                       </div>
                     )}
 

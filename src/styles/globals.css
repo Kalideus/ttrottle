@@ -2415,3 +2415,22 @@ button.project-members:hover { background: var(--surface-alt); }
   0%, 30% { background: var(--accent-soft); }
   100% { background: transparent; }
 }
+
+/* extension request on a locked due date (Comments) */
+.extension-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  font-size: 13px;
+  color: var(--text);
+}
+.extension-request .modal-btn { height: 28px; padding: 0 12px; }
+.extension-request.is-pending { border-color: var(--accent); }
+.extension-request.is-declined { color: var(--text-muted); }

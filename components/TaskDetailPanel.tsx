@@ -1,6 +1,6 @@
 'use client';
 
-import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat } from 'lucide-react';
+import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
 import { repeatOptions } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
@@ -42,6 +42,10 @@ interface TaskDetailPanelProps {
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
+  // owner/admin of the task's project, or super admin: may lock the due date and answer extension requests
+  canManage?: boolean;
+  onExtensionRequest?: (date: string, reason: string) => void;
+  onRequestAnswer?: (commentId: string, approve: boolean) => void;
 }
 
 function relativeTime(iso: string) {
@@ -82,6 +86,9 @@ export function TaskDetailPanel({
   onCommentEdit,
   onCommentDelete,
   onCommentLike,
+  canManage = false,
+  onExtensionRequest,
+  onRequestAnswer,
 }: TaskDetailPanelProps) {
   // A task just created by the "Create" button opens ready to name.
   const isFresh = task.name === 'Untitled task';
@@ -130,6 +137,8 @@ export function TaskDetailPanel({
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
   const currentHeading = headings.find((h) => h.id === task.heading_id);
   const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
+  const dateReadOnly = !!task.due_locked && !canManage;
+  const [extension, setExtension] = useState<{ date: string; reason: string } | null>(null);
   const followableMembers = projectMembers.filter((m) => m.profile_id && !followers.some((f) => f.user_id === m.profile_id));
 
   const handleSaveTitle = () => {
@@ -449,14 +458,28 @@ export function TaskDetailPanel({
         {/* Due Date & Priority */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label className="detail-field-label">
+            <div className="detail-field-label" style={{ display: 'flex', alignItems: 'center' }}>
               <Calendar size={16} style={{ display: 'inline', marginRight: '4px' }} />
               Due date
-            </label>
+              {canManage ? (
+                <button
+                  type="button"
+                  title={task.due_locked ? 'Locked: only managers can change it. Click to unlock' : 'Lock the date so only managers can change it'}
+                  aria-pressed={!!task.due_locked}
+                  onClick={() => onTaskUpdate(task.id, { due_locked: !task.due_locked })}
+                  style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: task.due_locked ? 'var(--accent)' : 'var(--text-muted)' }}
+                >
+                  {task.due_locked ? <Lock size={14} /> : <Unlock size={14} />}
+                </button>
+              ) : (
+                task.due_locked && <Lock size={14} aria-label="Locked by a manager" style={{ marginLeft: 6, color: 'var(--accent)' }} />
+              )}
+            </div>
             <div
               className="detail-field-value"
-              onClick={() => setShowDueDateMenu(!showDueDateMenu)}
-              style={{ cursor: 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
+              onClick={() => !dateReadOnly && setShowDueDateMenu(!showDueDateMenu)}
+              title={dateReadOnly ? 'A manager has locked this date' : undefined}
+              style={{ cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
             >
               {task.due_date
                 ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -497,6 +520,35 @@ export function TaskDetailPanel({
                 </div>
               )}
             </div>
+            {dateReadOnly && onExtensionRequest && !task.completed && (
+              extension ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!extension.date) return;
+                    onExtensionRequest(extension.date, extension.reason.trim());
+                    setExtension(null);
+                  }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}
+                >
+                  <input type="date" required autoFocus value={extension.date} min={task.due_date ?? undefined}
+                    onChange={(e) => setExtension({ ...extension, date: e.target.value })}
+                    style={{ padding: 6, border: '1px solid var(--border)', borderRadius: 4 }} />
+                  <input placeholder="Why? (optional)" value={extension.reason}
+                    onChange={(e) => setExtension({ ...extension, reason: e.target.value })}
+                    style={{ padding: 6, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
+                  <span style={{ display: 'flex', gap: 6 }}>
+                    <button type="submit" className="modal-btn primary" style={{ height: 28, padding: '0 12px' }}>Send request</button>
+                    <button type="button" className="modal-btn ghost" style={{ height: 28, padding: '0 12px' }} onClick={() => setExtension(null)}>Cancel</button>
+                  </span>
+                </form>
+              ) : (
+                <button type="button" onClick={() => setExtension({ date: '', reason: '' })}
+                  style={{ marginTop: 6, border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontSize: 13 }}>
+                  Request an extension
+                </button>
+              )
+            )}
             {/* subtasks don't repeat on their own; they're copied with their parent */}
             {!task.parent_task_id && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
@@ -776,6 +828,8 @@ export function TaskDetailPanel({
           onCommentEdit={onCommentEdit}
           onCommentDelete={onCommentDelete}
           onCommentLike={onCommentLike}
+          canAnswerRequests={canManage}
+          onRequestAnswer={onRequestAnswer}
         />
 
         <div className="detail-description" style={{ marginTop: '20px', paddingTop: '20px' }}>
