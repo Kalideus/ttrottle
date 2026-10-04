@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2 } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 
 interface SidebarProps {
@@ -14,6 +14,8 @@ interface SidebarProps {
   onProjectSelect: (projectId: string) => void;
   onProjectHover?: (projectId: string) => void;
   onProjectCreate: () => void;
+  onProjectImport: () => void;
+  onProjectDuplicate: (projectId: string) => void;
   onProjectRename: (projectId: string, name: string) => void;
   onProjectDelete: (projectId: string) => void;
   onCreateTask: () => void;
@@ -30,6 +32,8 @@ export function Sidebar({
   onProjectSelect,
   onProjectHover,
   onProjectCreate,
+  onProjectImport,
+  onProjectDuplicate,
   onProjectRename,
   onProjectDelete,
   onCreateTask,
@@ -78,6 +82,9 @@ export function Sidebar({
       <div>
         <div className="sidebar-projects-header">
           <span>Projects</span>
+          <button className="sidebar-projects-header-plus" title="Import project from CSV" onClick={onProjectImport} style={{ marginLeft: 'auto' }}>
+            <Upload size={14} />
+          </button>
           <button className="sidebar-projects-header-plus" title="Add project" onClick={onProjectCreate}>
             <Plus size={16} />
           </button>
@@ -148,6 +155,16 @@ export function Sidebar({
                       }}
                     >
                       <Pencil size={14} /> Rename
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuFor(null);
+                        onProjectDuplicate(project.id);
+                      }}
+                    >
+                      <Copy size={14} /> Duplicate
                     </button>
                     {!project.is_private && (
                       <button

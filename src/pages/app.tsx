@@ -5,6 +5,8 @@ import { useRouter } from 'next/router';
 import { TopBar } from '@/components/TopBar';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
+import { ProjectImportModal, ProjectDuplicateModal } from '@/components/ProjectImportModal';
+import type { NewTaskSpec } from '@/lib/csvImport';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { MembersModal } from '@/components/MembersModal';
@@ -24,6 +26,8 @@ import {
   getProjects,
   getTasksForProject,
   createProject,
+  createProjectWithContent,
+  projectToPlan,
   updateProject,
   deleteProject,
   createTask,
@@ -148,6 +152,8 @@ export default function AppPage() {
   const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [duplicateFrom, setDuplicateFrom] = useState<Project | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
@@ -852,6 +858,38 @@ export default function AppPage() {
     persist(async () => must(await createProject(supabase, { id: project.id, name: project.name, color, icon: project.icon, created_by: currentUserId })), 'projects', 'members');
   };
 
+  // Import and Duplicate write the whole project before showing it (unlike the optimistic single creates),
+  // so a failure shows in the dialog instead of leaving half a project on screen.
+  const openNewProject = (project: Project) => {
+    setProjects((ps) => [...ps, project]);
+    setActiveSection('projects');
+    setActiveProjectId(project.id);
+    void resyncRef.current.projects();
+  };
+
+  const openImport = async () => {
+    setShowImport(true);
+    const { data } = await getProfiles(supabase);
+    setAllPeople(data ?? []);
+  };
+
+  const handleProjectImport = async (name: string, plan: { sections: string[]; tasks: NewTaskSpec[] }) => {
+    const colors = ['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C'];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    openNewProject(await createProjectWithContent(supabase, { name, color, icon: '📋', created_by: currentUserId!, ...plan }));
+    setShowImport(false);
+  };
+
+  const handleProjectDuplicate = async (name: string, opts: { assignees: boolean; dueDates: boolean; completion: boolean; members: boolean }) => {
+    const source = duplicateFrom!;
+    const [t, h, m] = await Promise.all([getTasksForProject(supabase, source.id), getHeadings(supabase, source.id), getProjectMembers(supabase, source.id)]);
+    if (t.error || h.error) throw t.error ?? h.error;
+    const plan = projectToPlan(h.data ?? [], (t.data ?? []) as Task[], opts);
+    const member_ids = opts.members ? (m.data ?? []).map((pm) => pm.profile_id).filter((id): id is string => !!id) : [];
+    openNewProject(await createProjectWithContent(supabase, { name, color: source.color, icon: source.icon, created_by: currentUserId!, member_ids, ...plan }));
+    setDuplicateFrom(null);
+  };
+
   const handleCreateTaskClick = () => {
     if (!activeProjectId) {
       window.alert('Create or open a project first, then add tasks to it.');
@@ -1180,6 +1218,8 @@ export default function AppPage() {
       {showInvite && (
         <InviteModal onInvite={submitInvite} onClose={() => setShowInvite(false)} />
       )}
+      {showImport && <ProjectImportModal people={allPeople} onImport={handleProjectImport} onClose={() => setShowImport(false)} />}
+      {duplicateFrom && <ProjectDuplicateModal sourceName={duplicateFrom.name} onDuplicate={handleProjectDuplicate} onClose={() => setDuplicateFrom(null)} />}
 
       {showCreateTask && (
         <CreateTaskModal
@@ -1227,6 +1267,8 @@ export default function AppPage() {
           onProjectSelect={setActiveProjectId}
           onProjectHover={prefetchProject}
           onProjectCreate={handleProjectCreate}
+          onProjectImport={openImport}
+          onProjectDuplicate={(id) => setDuplicateFrom(projects.find((p) => p.id === id) ?? null)}
           onProjectDelete={handleProjectDelete}
           onProjectRename={(projectId, name) => {
             setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, name } : p)));

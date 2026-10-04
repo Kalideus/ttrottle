@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { NewTaskSpec } from '@/lib/csvImport'
 
 export type Project = {
   id: string
@@ -191,6 +192,84 @@ export async function createProject(
   }
 
   return result
+}
+
+// Import / duplicate: a new project with its sections, tasks and subtasks in a handful of bulk inserts.
+// Assignees (and `member_ids`) are added as members so they can see it. Throws on the first failed write;
+// the half-built project is then left for the user to delete rather than guessed at.
+export async function createProjectWithContent(
+  supabase: SupabaseClient,
+  { name, color, icon, created_by, sections, tasks, member_ids = [] }:
+    { name: string; color: string; icon: string; created_by: string; sections: string[]; tasks: NewTaskSpec[]; member_ids?: string[] }
+) {
+  const must = <T,>(r: { data: T; error: unknown }) => {
+    if (r.error) throw r.error
+    return r.data
+  }
+  const project = must(await createProject(supabase, { name, color, icon, created_by })) as Project
+
+  const headingIds = new Map(sections.map((s) => [s, crypto.randomUUID()]))
+  if (sections.length) {
+    must(await supabase.from('headings').insert(sections.map((s, position) => ({ id: headingIds.get(s), project_id: project.id, name: s, position }))))
+  }
+
+  const now = new Date().toISOString()
+  const row = (t: NewTaskSpec, position: number, parent_task_id: string | null) => ({
+    id: crypto.randomUUID(),
+    project_id: project.id,
+    heading_id: parent_task_id ? null : (t.section && headingIds.get(t.section)) || null,
+    parent_task_id,
+    name: t.name,
+    description: t.description ?? null,
+    assignee_id: t.assignee_id ?? null,
+    due_date: t.due_date ?? null,
+    priority: t.priority ?? null,
+    completed: !!t.completed,
+    completed_at: t.completed ? now : null,
+    position,
+    created_by,
+  })
+  const top = tasks.map((t, i) => ({ spec: t, row: row(t, i, null) }))
+  // subtasks in a second insert: the tasks trigger checks their parent already exists
+  const subs = top.flatMap(({ spec, row: parent }) => (spec.subtasks ?? []).map((s, i) => ({ spec: s, row: row(s, i, parent.id) })))
+  const all = [...top, ...subs]
+  if (top.length) must(await supabase.from('tasks').insert(top.map((t) => t.row)))
+  if (subs.length) must(await supabase.from('tasks').insert(subs.map((t) => t.row)))
+
+  // ponytail: no "assigned" notifications, a 200-row import would flood everyone's inbox
+  const followers = all.flatMap(({ row: r }) => [...new Set([created_by, r.assignee_id].filter(Boolean))].map((user_id) => ({ task_id: r.id, user_id })))
+  const taskTags = all.flatMap(({ spec, row: r }) => (spec.tag_ids ?? []).map((tag_id) => ({ task_id: r.id, tag_id })))
+  const extraMembers = [...new Set([...member_ids, ...all.map((t) => t.row.assignee_id)])].filter((id): id is string => !!id && id !== created_by)
+  const { data: profiles } = extraMembers.length ? await supabase.from('profiles').select('id, email').in('id', extraMembers) : { data: [] }
+  await Promise.all([
+    followers.length && supabase.from('followers').insert(followers).then(must),
+    taskTags.length && supabase.from('task_tags').insert(taskTags).then(must),
+    profiles?.length &&
+      supabase.from('project_members').insert(profiles.map((p) => ({ project_id: project.id, profile_id: p.id, email: p.email, role: 'member', joined_at: now }))).then(must),
+  ])
+
+  return project
+}
+
+// A project's content as a plan for createProjectWithContent (the Duplicate dialog's options decide what carries over).
+export function projectToPlan(
+  headings: Heading[],
+  tasks: Task[],
+  { assignees, dueDates, completion }: { assignees: boolean; dueDates: boolean; completion: boolean }
+): { sections: string[]; tasks: NewTaskSpec[] } {
+  const section = new Map(headings.map((h) => [h.id, h.name]))
+  const spec = (t: Task): NewTaskSpec => ({
+    name: t.name,
+    description: t.description,
+    assignee_id: assignees ? t.assignee_id : null,
+    due_date: dueDates ? t.due_date : null,
+    priority: t.priority,
+    completed: completion && t.completed,
+    section: (t.heading_id && section.get(t.heading_id)) || null,
+    tag_ids: (t.tags ?? []).map((tag) => tag.id),
+    subtasks: (t.subtasks ?? []).filter((s) => !s.deleted_at).map(spec),
+  })
+  return { sections: [...headings].sort((a, b) => a.position - b.position).map((h) => h.name), tasks: tasks.map(spec) }
 }
 
 export async function updateProject(
