@@ -111,6 +111,8 @@ export default function AppPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [headings, setHeadings] = useState<Heading[]>([]);
+  // headings always display A→Z (numeric-aware, so "2." sorts before "10."); position is just creation order
+  const sortedHeadings = useMemo(() => [...headings].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })), [headings]);
   const [activeProjectId, setActiveProjectId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FilterValue[]>([]);
@@ -1182,7 +1184,7 @@ export default function AppPage() {
       {showCreateTask && (
         <CreateTaskModal
           members={projectMembers}
-          headings={headings}
+          headings={sortedHeadings}
           tags={availableTags}
           onCreateTag={async (name) => {
             const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
@@ -1301,7 +1303,7 @@ export default function AppPage() {
                       onPromoteSubtask={handlePromoteSubtask}
                       showCompleted={showCompleted}
                       tasks={displayedTasks}
-                      headings={headings}
+                      headings={sortedHeadings}
                       onTaskSelect={setSelectedTaskId}
                       selectedTaskId={selectedTaskId}
                       currentUserId={currentUserId}
@@ -1333,7 +1335,7 @@ export default function AppPage() {
                         key={selectedTask.id}
                         task={selectedTask}
                         projectMembers={projectMembers}
-                        headings={headings}
+                        headings={sortedHeadings}
                         availableTags={availableTags}
                         comments={comments}
                         commentsLoading={commentsLoading}
@@ -1467,7 +1469,7 @@ export default function AppPage() {
                   key={selectedTask.id}
                   task={selectedTask}
                   projectMembers={projectMembers}
-                  headings={headings}
+                  headings={sortedHeadings}
                   availableTags={availableTags}
                   comments={comments}
                   commentsLoading={commentsLoading}
