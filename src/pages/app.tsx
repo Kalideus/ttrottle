@@ -1268,6 +1268,7 @@ export default function AppPage() {
           onProjectHover={prefetchProject}
           onProjectCreate={handleProjectCreate}
           onProjectImport={openImport}
+          canCreateProjects={!!currentProfile?.can_create_projects}
           onProjectDuplicate={(id) => setDuplicateFrom(projects.find((p) => p.id === id) ?? null)}
           onProjectDelete={handleProjectDelete}
           onProjectRename={(projectId, name) => {

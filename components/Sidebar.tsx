@@ -14,6 +14,8 @@ interface SidebarProps {
   onProjectSelect: (projectId: string) => void;
   onProjectHover?: (projectId: string) => void;
   onProjectCreate: () => void;
+  // profile's can_create_projects; also what the projects insert policy checks (migration 012)
+  canCreateProjects?: boolean;
   onProjectImport: () => void;
   onProjectDuplicate: (projectId: string) => void;
   onProjectRename: (projectId: string, name: string) => void;
@@ -32,6 +34,7 @@ export function Sidebar({
   onProjectSelect,
   onProjectHover,
   onProjectCreate,
+  canCreateProjects = false,
   onProjectImport,
   onProjectDuplicate,
   onProjectRename,
@@ -82,12 +85,16 @@ export function Sidebar({
       <div>
         <div className="sidebar-projects-header">
           <span>Projects</span>
-          <button className="sidebar-projects-header-plus" title="Import project from CSV" onClick={onProjectImport} style={{ marginLeft: 'auto' }}>
-            <Upload size={14} />
-          </button>
-          <button className="sidebar-projects-header-plus" title="Add project" onClick={onProjectCreate}>
-            <Plus size={16} />
-          </button>
+          {canCreateProjects && (
+            <>
+              <button className="sidebar-projects-header-plus" title="Import project from CSV" onClick={onProjectImport} style={{ marginLeft: 'auto' }}>
+                <Upload size={14} />
+              </button>
+              <button className="sidebar-projects-header-plus" title="Add project" onClick={onProjectCreate}>
+                <Plus size={16} />
+              </button>
+            </>
+          )}
         </div>
 
         <div className="sidebar-projects">
@@ -156,16 +163,18 @@ export function Sidebar({
                     >
                       <Pencil size={14} /> Rename
                     </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuFor(null);
-                        onProjectDuplicate(project.id);
-                      }}
-                    >
-                      <Copy size={14} /> Duplicate
-                    </button>
+                    {canCreateProjects && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuFor(null);
+                          onProjectDuplicate(project.id);
+                        }}
+                      >
+                        <Copy size={14} /> Duplicate
+                      </button>
+                    )}
                     {!project.is_private && (
                       <button
                         type="button"
