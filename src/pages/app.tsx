@@ -7,6 +7,7 @@ import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
 import { ProjectImportModal, ProjectDuplicateModal } from '@/components/ProjectImportModal';
 import type { NewTaskSpec } from '@/lib/csvImport';
+import { repeatLabel, type Repeat } from '@/lib/repeat';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { MembersModal } from '@/components/MembersModal';
@@ -679,7 +680,7 @@ export default function AppPage() {
     }, 'followers', 'activity');
   };
 
-  const buildActivityMessages = (updates: Record<string, unknown>): string[] => {
+  const buildActivityMessages = (updates: Record<string, unknown>, taskId?: string): string[] => {
     const messages: string[] = [];
 
     if ('name' in updates && typeof updates.name === 'string') {
@@ -706,7 +707,10 @@ export default function AppPage() {
       messages.push(heading ? `moved the task to "${heading.name}"` : 'moved the task to (no heading)');
     }
     if ('repeat' in updates) {
-      messages.push(updates.repeat ? `set the task to repeat ${updates.repeat}` : 'stopped the task repeating');
+      // repeat is top-level only, so tasks + myTasks covers it
+      const due = [...tasks, ...myTasks].find((t) => t.id === taskId)?.due_date ?? null;
+      const label = updates.repeat ? repeatLabel(updates.repeat as Repeat, due) : '';
+      messages.push(label ? `set the task to repeat ${label.charAt(0).toLowerCase() + label.slice(1)}` : 'stopped the task repeating');
     }
     if ('completed' in updates) {
       messages.push(updates.completed ? 'marked the task complete' : 'marked the task incomplete');
@@ -725,7 +729,7 @@ export default function AppPage() {
     // My Tasks is due-date ordered, so a new date moves the row to its place straight away
     if ('position' in updates || ('due_date' in updates && activeSection === 'my-tasks')) setResortToken((n) => n + 1);
 
-    const messages = buildActivityMessages(updates);
+    const messages = buildActivityMessages(updates, taskId);
     persist(async () => {
       // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
       must(await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined));

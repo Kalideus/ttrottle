@@ -3,25 +3,53 @@
 -- The next due date steps from the old DUE date (not the day it was ticked),
 -- and skips ahead past any dates already gone, so finishing late never
 -- produces an already-overdue copy. Safe to re-run.
+--
+-- repeat values (lib/repeat.ts labels them):
+--   daily, weekly, yearly
+--   monthly               same day of month; the last day of a month stays the last day
+--   monthly_weekday       same "nth weekday" as the due date, e.g. the 3rd Thursday
+--   monthly_last_weekday  same weekday, last one in the month, e.g. the last Thursday
 
-alter table tasks add column if not exists repeat text
-  check (repeat in ('daily', 'weekly', 'monthly', 'yearly'));
+alter table tasks add column if not exists repeat text;
+alter table tasks drop constraint if exists tasks_repeat_check;
+alter table tasks add constraint tasks_repeat_check
+  check (repeat in ('daily', 'weekly', 'monthly', 'monthly_weekday', 'monthly_last_weekday', 'yearly'));
 
 create or replace function next_repeat_date(d date, r text) returns date
-language sql immutable as $$
-  select case r
-    when 'daily' then d + 1
-    when 'weekly' then d + 7
-    -- the last day of a month stays the last day: 30 Apr -> 31 May, 28 Feb -> 31 Mar.
+language plpgsql immutable as $$
+declare
+  next_month date := (date_trunc('month', d) + interval '1 month')::date;
+  next_month_end date := (date_trunc('month', d) + interval '2 months' - interval '1 day')::date;
+  dow int := extract(dow from d);
+  nth int := (extract(day from d)::int - 1) / 7 + 1;
+  first_dow date;
+begin
+  if r = 'daily' then return d + 1; end if;
+  if r = 'weekly' then return d + 7; end if;
+  if r = 'yearly' then return (d + interval '1 year')::date; end if;
+
+  if r = 'monthly' then
+    -- 30 Apr -> 31 May, 28 Feb -> 31 Mar, 31 Jan -> 28 Feb (Postgres clamps).
     -- ponytail: so a "28th of every month" task drifts to the 31st after February; store the
     -- anchor day if anyone ever needs that.
-    when 'monthly' then case
-      when d = (date_trunc('month', d) + interval '1 month' - interval '1 day')::date
-        then (date_trunc('month', d) + interval '2 months' - interval '1 day')::date
-      else (d + interval '1 month')::date  -- 31 Jan -> 28 Feb (Postgres clamps)
-    end
-    when 'yearly' then (d + interval '1 year')::date
-  end
+    if d = (date_trunc('month', d) + interval '1 month' - interval '1 day')::date then
+      return next_month_end;
+    end if;
+    return (d + interval '1 month')::date;
+  end if;
+
+  -- a 5th weekday doesn't exist every month, so it's treated as "the last"
+  if r = 'monthly_last_weekday' or (r = 'monthly_weekday' and nth = 5) then
+    return next_month_end - ((extract(dow from next_month_end)::int - dow + 7) % 7);
+  end if;
+
+  if r = 'monthly_weekday' then
+    first_dow := next_month + ((dow - extract(dow from next_month)::int + 7) % 7);
+    return first_dow + 7 * (nth - 1);
+  end if;
+
+  return null;
+end
 $$;
 
 create or replace function spawn_repeat() returns trigger
@@ -66,3 +94,14 @@ drop trigger if exists tasks_spawn_repeat on tasks;
 create trigger tasks_spawn_repeat
   before update of completed on tasks
   for each row execute function spawn_repeat();
+
+-- self-check: the editor shows an error here if the date maths is wrong (October 2026 Thursdays: 1, 8, 15, 22, 29)
+do $$ begin
+  assert next_repeat_date('2026-04-30', 'monthly') = '2026-05-31';
+  assert next_repeat_date('2026-01-31', 'monthly') = '2026-02-28';
+  assert next_repeat_date('2026-03-15', 'monthly') = '2026-04-15';
+  assert next_repeat_date('2026-10-15', 'monthly_weekday') = '2026-11-19';
+  assert next_repeat_date('2026-10-29', 'monthly_weekday') = '2026-11-26';
+  assert next_repeat_date('2026-10-29', 'monthly_last_weekday') = '2026-11-26';
+  assert next_repeat_date('2026-12-29', 'weekly') = '2027-01-05';
+end $$;

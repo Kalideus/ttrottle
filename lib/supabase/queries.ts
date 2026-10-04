@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Repeat } from '@/lib/repeat'
 import type { NewTaskSpec } from '@/lib/csvImport'
 
 export type Project = {
@@ -31,7 +32,7 @@ export type Task = {
   assignee_id: string | null
   due_date: string | null
   priority: 'low' | 'medium' | 'high' | null
-  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  repeat?: Repeat | null
   completed: boolean
   completed_at: string | null
   position: number

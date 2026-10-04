@@ -1,13 +1,15 @@
 // CSV → project plan for "Import project". Pure functions, no Supabase, so
 // lib/csvImport.check.mts can run them with plain `node`.
 
+import type { Repeat } from '@/lib/repeat'
+
 export type NewTaskSpec = {
   name: string
   description?: string | null
   assignee_id?: string | null
   due_date?: string | null
   priority?: 'low' | 'medium' | 'high' | null
-  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  repeat?: Repeat | null
   completed?: boolean
   section: string | null
   tag_ids?: string[]
