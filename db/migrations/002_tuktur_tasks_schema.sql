@@ -103,19 +103,4 @@ UPDATE users
 SET initials = SUBSTRING(full_name, 1, 1) || SUBSTRING(full_name, POSITION(' ' IN full_name) + 1, 1)
 WHERE initials IS NULL AND full_name IS NOT NULL;
 
--- Seed some test data
-INSERT INTO users (email, full_name, initials, avatar_url) VALUES
-  ('alice@example.com', 'Alice Brown', 'AB', NULL),
-  ('charlie@example.com', 'Charlie Davis', 'CD', NULL),
-  ('emma@example.com', 'Emma Foster', 'EF', NULL),
-  ('jamie@example.com', 'Jamie Kim', 'JK', NULL)
-ON CONFLICT (email) DO NOTHING;
-
--- Create test projects if they don't exist
-INSERT INTO projects (name, color, icon, position) VALUES
-  ('Marketing Campaign', '#F06A6A', '📱', 0),
-  ('Product Design', '#A970D1', '🎨', 1),
-  ('Website Redesign', '#4ECBC4', '🌐', 2),
-  ('Q4 Planning', '#E8A5C8', '📊', 3),
-  ('Team Onboarding', '#F1BD6C', '👥', 4)
-ON CONFLICT DO NOTHING;
+-- Demo seed data (example users and projects) removed so fresh databases start empty.
