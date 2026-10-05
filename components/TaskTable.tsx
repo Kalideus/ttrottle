@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
-import { PeoplePicker } from '@/components/PeoplePicker';
+import { PeoplePicker, flipIfOffscreen } from '@/components/PeoplePicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
@@ -589,7 +589,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
             {priorityMenuId === task.id && (
               <>
                 <div className="ct-picker-backdrop" onClick={(e) => { e.stopPropagation(); setPriorityMenuId(null); }} />
-                <div className="ct-picker-pop" style={{ width: 140, left: 'auto', right: 0 }} onClick={(e) => e.stopPropagation()}>
+                <div className="ct-picker-pop" ref={flipIfOffscreen} style={{ width: 140, left: 'auto', right: 0 }} onClick={(e) => e.stopPropagation()}>
                   {(['high', 'medium', 'low', null] as const).map((opt) => (
                     <button
                       key={opt ?? 'none'}
