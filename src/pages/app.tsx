@@ -718,8 +718,7 @@ export default function AppPage() {
       messages.push(updates.due_locked ? 'locked the due date' : 'unlocked the due date');
     }
     if ('repeat' in updates) {
-      // repeat is top-level only, so tasks + myTasks covers it
-      const due = [...tasks, ...myTasks].find((t) => t.id === taskId)?.due_date ?? null;
+      const due = [...tasks, ...myTasks].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId)?.due_date ?? null;
       const label = updates.repeat ? repeatLabel(updates.repeat as Repeat, due) : '';
       messages.push(label ? `set the task to repeat ${label.charAt(0).toLowerCase() + label.slice(1)}` : 'stopped the task repeating');
     }

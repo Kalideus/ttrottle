@@ -545,23 +545,21 @@ export function TaskDetailPanel({
                 </button>
               )
             )}
-            {/* subtasks don't repeat on their own; they're copied with their parent */}
-            {!task.parent_task_id && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
-                <Repeat size={14} />
-                <select
-                  aria-label="Repeat"
-                  value={task.repeat ?? ''}
-                  onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
-                  style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}
-                >
-                  <option value="">Doesn&apos;t repeat</option>
-                  {repeatOptions(task.due_date, task.repeat).map((o) => (
-                    <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
-                  ))}
-                </select>
-              </label>
-            )}
+            {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
+              <Repeat size={14} />
+              <select
+                aria-label="Repeat"
+                value={task.repeat ?? ''}
+                onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
+                style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}
+              >
+                <option value="">Doesn&apos;t repeat</option>
+                {repeatOptions(task.due_date, task.repeat).map((o) => (
+                  <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>

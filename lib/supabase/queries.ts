@@ -231,7 +231,7 @@ export async function createProjectWithContent(
     due_date: t.due_date ?? null,
     priority: t.priority ?? null,
     // only sent when set, so import/duplicate keep working on a database without migration 025
-    ...(!parent_task_id && t.repeat && { repeat: t.repeat }),
+    ...(t.repeat && { repeat: t.repeat }),
     completed: !!t.completed,
     completed_at: t.completed ? now : null,
     position,
