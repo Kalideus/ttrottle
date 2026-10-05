@@ -63,7 +63,7 @@ export function InviteModal({ onInvite, onClose }: InviteModalProps) {
             autoFocus
           />
           <span className="modal-field-hint">
-            Send them an email, or get a link to send yourself (skips corporate email link-scanners that can break the emailed one).
+            Emailed invites aren't working yet. Click Get link, then send the link to them yourself (Teams, WhatsApp, your own email).
           </span>
         </label>
 
@@ -91,11 +91,12 @@ export function InviteModal({ onInvite, onClose }: InviteModalProps) {
         )}
 
         <div className="modal-actions">
-          <button className="modal-btn ghost" onClick={() => submit(false)} disabled={!email.trim() || !!busy}>
-            {busy === 'link' ? 'Generating…' : 'Get link'}
+          {/* ponytail: emailed invites are broken; re-enable Send email once they work */}
+          <button className="modal-btn ghost" disabled title="Not working yet: use Get link">
+            Send email
           </button>
-          <button className="modal-btn primary" onClick={() => submit(true)} disabled={!email.trim() || !!busy}>
-            {busy === 'email' ? 'Sending…' : 'Send email'}
+          <button className="modal-btn primary" onClick={() => submit(false)} disabled={!email.trim() || !!busy}>
+            {busy === 'link' ? 'Generating…' : 'Get link'}
           </button>
         </div>
       </div>
