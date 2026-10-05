@@ -1,7 +1,7 @@
 'use client';
 
 import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
-import { repeatOptions } from '@/lib/repeat';
+import { repeatOptions, repeatLabel } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, Project, ProjectMember, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
@@ -407,10 +407,18 @@ export function TaskDetailPanel({
               {task.due_date
                 ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'No due date'}
+              {task.repeat && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
+                  <Repeat size={12} /> {repeatLabel(task.repeat, task.due_date)}
+                </span>
+              )}
 
               {menu === 'dueDate' && (
+                <>
+                <div className="ct-picker-backdrop" style={{ zIndex: 99 }} onClick={(e) => { e.stopPropagation(); setMenu(null); }} />
                 <div
                   ref={flipIfOffscreen}
+                  onClick={(e) => e.stopPropagation()}
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -430,10 +438,8 @@ export function TaskDetailPanel({
                     ref={openPicker}
                     defaultValue={task.due_date ?? ''}
                     onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      onTaskUpdate(task.id, { due_date: e.target.value || null });
-                      setMenu(null);
-                    }}
+                    // stays open so the repeat can be set straight after; click outside to close
+                    onChange={(e) => onTaskUpdate(task.id, { due_date: e.target.value || null })}
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -441,7 +447,23 @@ export function TaskDetailPanel({
                       borderRadius: '4px',
                     }}
                   />
+                  {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>
+                    <Repeat size={14} />
+                    <select
+                      aria-label="Repeat"
+                      value={task.repeat ?? ''}
+                      onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
+                      style={{ flex: 1, padding: 6, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer' }}
+                    >
+                      <option value="">Doesn&apos;t repeat</option>
+                      {repeatOptions(task.due_date, task.repeat).map((o) => (
+                        <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
+                </>
               )}
             </div>
             {dateReadOnly && onExtensionRequest && !task.completed && (
@@ -476,7 +498,7 @@ export function TaskDetailPanel({
           </div>
         </div>
 
-        {/* Priority & Repeat */}
+        {/* Priority & Tags */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <label className="detail-field-label">
@@ -538,35 +560,15 @@ export function TaskDetailPanel({
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label className="detail-field-label">
-              <FieldIcon icon={Repeat} color="#3BA776" />
-              Repeat
-            </label>
-            {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
-            <select
-              aria-label="Repeat"
-              value={task.repeat ?? ''}
-              onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
-              style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', padding: '4px 4px' }}
-            >
-              <option value="">Doesn&apos;t repeat</option>
-              {repeatOptions(task.due_date, task.repeat).map((o) => (
-                <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
-              ))}
-            </select>
+            <label className="detail-field-label"><FieldIcon icon={TagIcon} color="#A970D1" />Tags</label>
+            <TagPicker
+              selectedTags={task.tags ?? []}
+              availableTags={availableTags}
+              onTagAdd={onTagAdd}
+              onTagRemove={onTagRemove}
+              onNewTag={onNewTag}
+            />
           </div>
-        </div>
-
-        {/* Tags */}
-        <div className="detail-field-block">
-          <label className="detail-field-label"><FieldIcon icon={TagIcon} color="#A970D1" />Tags</label>
-          <TagPicker
-            selectedTags={task.tags ?? []}
-            availableTags={availableTags}
-            onTagAdd={onTagAdd}
-            onTagRemove={onTagRemove}
-            onNewTag={onNewTag}
-          />
         </div>
 
         {/* Subtasks — only level-1 tasks (no parent_task_id) can have these */}
