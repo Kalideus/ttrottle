@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { MemberAvatar } from '@/components/PeoplePicker';
+import type { ProjectMember } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 import { autoGrow } from '@/lib/autoGrow';
 import { FormatToolbar, formatKeyDown } from './FormatToolbar';
@@ -28,7 +30,7 @@ export interface CommentItem {
 interface CommentsProps {
   taskId: string;
   comments: CommentItem[];
-  mentionableUsers: { id: string; name: string }[];
+  mentionableUsers: { id: string; name: string; member?: ProjectMember }[];
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
   onCommentEdit: (commentId: string, body: string) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
@@ -437,7 +439,7 @@ export function Comments({
                   border: '1px solid var(--border)',
                   borderRadius: '8px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  minWidth: '180px',
+                  minWidth: '240px',
                   overflow: 'hidden',
                 }}
               >
@@ -452,10 +454,12 @@ export function Comments({
                       selectMention(u);
                     }}
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                       width: '100%',
                       textAlign: 'left',
-                      padding: '8px 12px',
+                      padding: '6px 12px',
                       border: 'none',
                       background: i === activeMentionIndex ? 'var(--surface-alt)' : 'transparent',
                       color: 'var(--text)',
@@ -463,7 +467,11 @@ export function Comments({
                       cursor: 'pointer',
                     }}
                   >
-                    {u.name}
+                    {u.member && <MemberAvatar member={u.member} size={24} />}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontWeight: 500 }}>{u.name}</span>
+                      {u.member && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{u.member.email}</span>}
+                    </span>
                   </button>
                 ))}
               </div>

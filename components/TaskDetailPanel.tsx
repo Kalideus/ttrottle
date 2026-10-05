@@ -748,7 +748,7 @@ export function TaskDetailPanel({
           loading={commentsLoading}
           mentionableUsers={projectMembers
             .filter((m) => m.profile_id)
-            .map((m) => ({ id: m.profile_id as string, name: m.profile?.name ?? m.email }))}
+            .map((m) => ({ id: m.profile_id as string, name: m.profile?.name ?? m.email, member: m }))}
           onCommentAdd={onCommentAdd}
           onCommentEdit={onCommentEdit}
           onCommentDelete={onCommentDelete}
