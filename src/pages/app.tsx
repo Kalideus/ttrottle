@@ -1435,7 +1435,6 @@ export default function AppPage() {
                         key={selectedTask.id}
                         task={selectedTask}
                         projectMembers={projectMembers}
-                        headings={sortedHeadings}
                         availableTags={availableTags}
                         comments={comments}
                         commentsLoading={commentsLoading}
@@ -1521,7 +1520,6 @@ export default function AppPage() {
                     key={selectedTask.id}
                     task={selectedTask}
                     projectMembers={projectMembers}
-                    headings={[]}
                     availableTags={availableTags}
                     comments={comments}
                     commentsLoading={commentsLoading}
@@ -1577,7 +1575,6 @@ export default function AppPage() {
                   key={selectedTask.id}
                   task={selectedTask}
                   projectMembers={projectMembers}
-                  headings={sortedHeadings}
                   availableTags={availableTags}
                   comments={comments}
                   commentsLoading={commentsLoading}

@@ -44,13 +44,27 @@ function actorList(names: string[]) {
   return `${names[0]} and ${names.length - 1} others`;
 }
 
-// The detail line of a grouped row: what changed, oldest first so it reads in order.
-function updateSummary(group: NotificationItem[]) {
-  const actors = [...new Set(group.map((n) => n.actorName))];
-  const changes = [...group].reverse().filter((n) => n.detail);
-  if (actors.length === 1) return `${actors[0]} ${[...new Set(changes.map((n) => n.detail))].join(', ')}`;
-  return [...new Set(changes.map((n) => `${n.actorName} ${n.detail}`))].join('; ');
+// What one notification did, as a phrase after the person's name.
+function phrase(n: NotificationItem) {
+  if (n.type === 'comment') return n.detail ? `commented “${n.detail}”` : 'commented';
+  if (n.type === 'mention') return 'mentioned you';
+  if (n.type === 'assigned') return 'assigned it to you';
+  if (n.type === 'completed') return 'completed it';
+  if (n.type === 'due_soon') return 'it is due soon';
+  return n.detail ?? 'updated it';
 }
+
+// The detail line of a grouped row: everything that happened, oldest first so it reads in order.
+function groupSummary(group: NotificationItem[]) {
+  const items = [...group].reverse();
+  const actors = [...new Set(items.map((n) => n.actorName))];
+  if (actors.length === 1) return `${actors[0]} ${[...new Set(items.map(phrase))].join(', ')}`;
+  return [...new Set(items.map((n) => `${n.actorName} ${phrase(n)}`))].join('; ');
+}
+
+// A grouped row's headline uses its most important notification: a mention beats an edit.
+const RANK: NotificationItem['type'][] = ['mention', 'assigned', 'comment', 'completed', 'due_soon', 'updated'];
+const headOf = (group: NotificationItem[]) => [...group].sort((a, b) => RANK.indexOf(a.type) - RANK.indexOf(b.type))[0];
 
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -64,7 +78,8 @@ function relativeTime(iso: string) {
 }
 
 export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead, onMarkRead, onClear, onClearAll }: InboxProps) {
-  const unreadCount = notifications.filter((n) => !n.readAt).length;
+  const groups = groupNotifications(notifications);
+  const unreadCount = groups.filter((g) => g.some((n) => !n.readAt)).length; // rows, matching what's on screen
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[]; unread: boolean } | null>(null);
 
@@ -139,17 +154,17 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
           <span className="inbox-col">Due date</span>
           <span className="inbox-col">Priority</span>
         </div>
-        {groupNotifications(notifications).map((group) => {
-          const notif = group[0]; // newest in the row
-          const ids = group.map((n) => n.id);
+        {groups.map((group) => {
+          const notif = group.length > 1 ? headOf(group) : group[0];
+          const ids = [notif.id, ...group.filter((n) => n !== notif).map((n) => n.id)]; // headline first: a click jumps to its comment
           const unread = group.some((n) => !n.readAt);
           const actors = [...new Set(group.map((n) => n.actorName))];
-          const detail = notif.type === 'updated' ? (group.some((n) => n.detail) ? updateSummary(group) : null) : notif.detail ? `“${notif.detail}”` : null;
+          const detail = group.length > 1 ? groupSummary(group) : notif.type === 'updated' ? notif.detail && `${notif.actorName} ${notif.detail}` : notif.detail ? `“${notif.detail}”` : null;
           const project = projects.find((p) => p.id === notif.projectId);
           const isOpen = !!notif.taskId && notif.taskId === openTaskId;
           return (
           <div
-            key={notif.id}
+            key={group[0].id}
             role="button"
             tabIndex={0}
             onClick={() => onNotificationClick(ids)}
@@ -228,8 +243,8 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
                   </p>
                 )}
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  {relativeTime(notif.createdAt)}
-                  {group.length > 1 && ` · ${group.length} changes`}
+                  {relativeTime(group[0].createdAt)}
+                  {group.length > 1 && ` · ${group.length} updates`}
                 </span>
               </div>
             </div>

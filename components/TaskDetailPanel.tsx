@@ -1,9 +1,9 @@
 'use client';
 
-import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
+import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
 import { repeatOptions } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
-import type { Task, Project, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
+import type { Task, Project, ProjectMember, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker, hexToRgba } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
@@ -18,7 +18,6 @@ import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 interface TaskDetailPanelProps {
   task: Task;
   projectMembers: ProjectMember[];
-  headings: Heading[];
   availableTags: Tag[];
   comments: CommentItem[];
   commentsLoading: boolean;
@@ -65,7 +64,6 @@ function relativeTime(iso: string) {
 export function TaskDetailPanel({
   task,
   projectMembers,
-  headings,
   availableTags,
   comments,
   commentsLoading,
@@ -102,7 +100,7 @@ export function TaskDetailPanel({
   const [description, setDescription] = useState(task.description ?? '');
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   // one menu open at a time: opening another closes the last
-  const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'heading' | 'follower' | 'options'>(null);
+  const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'follower' | 'options'>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -134,7 +132,6 @@ export function TaskDetailPanel({
 
   const priorityOptions: Array<'high' | 'medium' | 'low'> = ['low', 'medium', 'high'];
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
-  const currentHeading = headings.find((h) => h.id === task.heading_id);
   const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
   const dateReadOnly = !!task.due_locked && !canManage;
   const [extension, setExtension] = useState<{ date: string; reason: string } | null>(null);
@@ -324,67 +321,6 @@ export function TaskDetailPanel({
             style={{ cursor: 'pointer', padding: '8px' }}
           >
             {title}
-          </div>
-        )}
-
-        {/* Heading: a subheading under the title (only in the project view, where headings are loaded) */}
-        {headings.length > 0 && !task.parent_task_id && (
-          <div
-            className="detail-field-value"
-            onClick={() => setMenu(menu === 'heading' ? null : 'heading')}
-            style={{ cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, color: 'var(--text-muted)', fontSize: 14 }}
-          >
-            <List size={14} />
-            {currentHeading ? currentHeading.name : 'No heading'}
-
-            {menu === 'heading' && (
-              <div
-                ref={flipIfOffscreen}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  minWidth: '200px',
-                  zIndex: 100,
-                  marginTop: '4px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                }}
-              >
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTaskUpdate(task.id, { heading_id: null });
-                    setMenu(null);
-                  }}
-                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}
-                >
-                  No heading
-                </div>
-                {headings.map((heading) => (
-                  <div
-                    key={heading.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTaskUpdate(task.id, { heading_id: heading.id });
-                      setMenu(null);
-                    }}
-                    style={{
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      borderBottom: '1px solid var(--border)',
-                      backgroundColor: task.heading_id === heading.id ? 'var(--accent-soft)' : 'transparent',
-                      color: task.heading_id === heading.id ? 'var(--accent)' : 'var(--text)',
-                    }}
-                  >
-                    {heading.name}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
