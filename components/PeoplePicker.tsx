@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ProjectMember } from '@/lib/supabase/queries';
 import { avatarStyle } from '@/lib/avatar';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 // Searchable dropdown of people: type to filter, arrows + Enter to pick,
 // Escape to close. Used for assignee and follower pickers.
@@ -15,11 +16,6 @@ interface PeoplePickerProps {
   emptyText?: string;
   alignRight?: boolean; // open leftwards from the right edge, for triggers near the right side
 }
-
-// ref for a .ct-picker-pop: no room below the trigger, so open upwards instead of running off the screen
-export const flipIfOffscreen = (el: HTMLElement | null) => {
-  if (el && el.getBoundingClientRect().bottom > window.innerHeight) Object.assign(el.style, { top: 'auto', bottom: 'calc(100% + 4px)' });
-};
 
 const nameOf = (m: ProjectMember) => m.profile?.name ?? m.email;
 

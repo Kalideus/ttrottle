@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import type { Tag } from '@/lib/supabase/queries';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 export function hexToRgba(hex: string, alpha: number) {
   const clean = hex.replace('#', '');
@@ -110,6 +111,7 @@ export function TagPicker({
 
       {showDropdown && (
         <div
+          ref={flipIfOffscreen}
           style={{
             position: 'absolute',
             top: '100%',

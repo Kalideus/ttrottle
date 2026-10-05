@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 import { autoGrow } from '@/lib/autoGrow';
 import { FormatToolbar, formatKeyDown } from './FormatToolbar';
 import { Markdown } from './Markdown';
@@ -440,6 +441,7 @@ export function Comments({
 
             {mention && mentionMatches.length > 0 && (
               <div
+                ref={flipIfOffscreen}
                 style={{
                   position: 'absolute',
                   top: '100%',

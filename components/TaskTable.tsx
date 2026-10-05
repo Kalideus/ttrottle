@@ -3,7 +3,8 @@
 import { useCallback, useState } from 'react';
 import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
-import { PeoplePicker, flipIfOffscreen } from '@/components/PeoplePicker';
+import { PeoplePicker } from '@/components/PeoplePicker';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
@@ -449,6 +450,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
                     style={{ position: 'fixed', inset: 0, zIndex: 90 }}
                   />
                   <div
+                    ref={flipIfOffscreen}
                     style={{
                       position: 'absolute',
                       top: '100%',

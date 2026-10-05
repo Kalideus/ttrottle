@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface SidebarProps {
   activeSection: 'my-tasks' | 'inbox' | 'projects';
@@ -151,7 +152,7 @@ export function Sidebar({
               {menuFor === project.id && (
                 <>
                   <div className="sidebar-menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
-                  <div className="sidebar-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                  <div className="sidebar-menu" ref={flipIfOffscreen} role="menu" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       role="menuitem"

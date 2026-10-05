@@ -13,6 +13,7 @@ import { FormatToolbar, formatKeyDown } from '@/components/FormatToolbar';
 import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
 import { PeoplePicker } from '@/components/PeoplePicker';
+import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -481,6 +482,7 @@ export function TaskDetailPanel({
 
               {menu === 'dueDate' && (
                 <div
+                  ref={flipIfOffscreen}
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -582,6 +584,7 @@ export function TaskDetailPanel({
 
               {menu === 'priority' && (
                 <div
+                  ref={flipIfOffscreen}
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -637,6 +640,7 @@ export function TaskDetailPanel({
 
               {menu === 'heading' && (
                 <div
+                  ref={flipIfOffscreen}
                   style={{
                     position: 'absolute',
                     top: '100%',
