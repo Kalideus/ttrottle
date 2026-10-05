@@ -279,6 +279,8 @@ export default function AppPage() {
       // grouping by heading_id would silently drop any task whose heading isn't in an (empty) heading list.
       const withAssignee = (data ?? []).map((t: Task) => ({ ...t, assignee: currentProfile, heading_id: null }));
       setMyTasks(withAssignee as Task[]);
+      // the stale cached list rendered first and froze its order; sort the fresh one
+      if (activeSection === 'my-tasks') setResortToken((n) => n + 1);
     });
   }, [activeSection, currentUserId, currentProfile, supabase]);
 
