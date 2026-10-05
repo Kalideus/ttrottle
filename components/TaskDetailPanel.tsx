@@ -97,19 +97,14 @@ export function TaskDetailPanel({
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [description, setDescription] = useState(task.description ?? '');
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
-  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
-  const [showDueDateMenu, setShowDueDateMenu] = useState(false);
-  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
-  const [showHeadingMenu, setShowHeadingMenu] = useState(false);
-  const [showFollowerMenu, setShowFollowerMenu] = useState(false);
-  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  // one menu open at a time: opening another closes the last
+  const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'heading' | 'follower' | 'options'>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const anyEditorOpen =
-    isEditingTitle || isEditingDescription || showAssigneeMenu || showDueDateMenu ||
-    showPriorityMenu || showHeadingMenu || showFollowerMenu || showOptionsMenu || isAddingSubtask;
+    isEditingTitle || isEditingDescription || menu !== null || isAddingSubtask;
 
   // Esc closes the panel, unless an inline editor / menu is open (Esc cancels that first).
   useEffect(() => {
@@ -209,14 +204,14 @@ export function TaskDetailPanel({
             </button>
           )}
           {linkCopied && <span className="detail-link-copied" role="status">Link copied</span>}
-          <button className="detail-panel-menu-btn" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>
+          <button className="detail-panel-menu-btn" onClick={() => setMenu(menu === 'options' ? null : 'options')}>
             <MoreVertical size={18} />
           </button>
           <button className="detail-panel-close-btn" onClick={onClose}>
             ✕
           </button>
 
-          {showOptionsMenu && (
+          {menu === 'options' && (
             <div
               style={{
                 position: 'absolute',
@@ -233,7 +228,7 @@ export function TaskDetailPanel({
             >
               <button
                 onClick={() => {
-                  setShowOptionsMenu(false);
+                  setMenu(null);
                   // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
                   if (window.confirm(`Delete "${task.name}"? It's recoverable for 90 days, then removed for good.`)) {
                     onTaskDelete(task.id);
@@ -328,7 +323,7 @@ export function TaskDetailPanel({
                 gap: '8px',
                 position: 'relative',
               }}
-              onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
+              onClick={() => setMenu(menu === 'assignee' ? null : 'assignee')}
             >
               {assignedMember ? (
                 <>
@@ -353,7 +348,7 @@ export function TaskDetailPanel({
                 <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>
               )}
 
-              {showAssigneeMenu && (
+              {menu === 'assignee' && (
                 <PeoplePicker
                   people={projectMembers}
                   selectedId={task.assignee_id}
@@ -361,9 +356,9 @@ export function TaskDetailPanel({
                   emptyText="No members yet — invite someone from the project header."
                   onPick={(id) => {
                     onTaskUpdate(task.id, { assignee_id: id });
-                    setShowAssigneeMenu(false);
+                    setMenu(null);
                   }}
-                  onClose={() => setShowAssigneeMenu(false)}
+                  onClose={() => setMenu(null)}
                 />
               )}
             </div>
@@ -421,7 +416,7 @@ export function TaskDetailPanel({
 
             <div style={{ position: 'relative' }}>
               <button
-                onClick={() => setShowFollowerMenu(!showFollowerMenu)}
+                onClick={() => setMenu(menu === 'follower' ? null : 'follower')}
                 style={{
                   padding: '6px 10px',
                   border: '1px solid var(--border)',
@@ -439,7 +434,7 @@ export function TaskDetailPanel({
                 Add follower
               </button>
 
-              {showFollowerMenu && (
+              {menu === 'follower' && (
                 <PeoplePicker
                   people={followableMembers}
                   alignRight
@@ -447,7 +442,7 @@ export function TaskDetailPanel({
                   onPick={(id) => {
                     if (id) onFollowerAdd(id); // stays open so several can be added in a row
                   }}
-                  onClose={() => setShowFollowerMenu(false)}
+                  onClose={() => setMenu(null)}
                 />
               )}
             </div>
@@ -476,7 +471,7 @@ export function TaskDetailPanel({
             </div>
             <div
               className="detail-field-value"
-              onClick={() => !dateReadOnly && setShowDueDateMenu(!showDueDateMenu)}
+              onClick={() => !dateReadOnly && setMenu(menu === 'dueDate' ? null : 'dueDate')}
               title={dateReadOnly ? 'A manager has locked this date' : undefined}
               style={{ cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
             >
@@ -484,7 +479,7 @@ export function TaskDetailPanel({
                 ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'No due date'}
 
-              {showDueDateMenu && (
+              {menu === 'dueDate' && (
                 <div
                   style={{
                     position: 'absolute',
@@ -507,7 +502,7 @@ export function TaskDetailPanel({
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
                       onTaskUpdate(task.id, { due_date: e.target.value || null });
-                      setShowDueDateMenu(false);
+                      setMenu(null);
                     }}
                     style={{
                       width: '100%',
@@ -574,7 +569,7 @@ export function TaskDetailPanel({
             </label>
             <div
               className="detail-field-value"
-              onClick={() => setShowPriorityMenu(!showPriorityMenu)}
+              onClick={() => setMenu(menu === 'priority' ? null : 'priority')}
               style={{ cursor: 'pointer', position: 'relative' }}
             >
               {task.priority ? (
@@ -585,7 +580,7 @@ export function TaskDetailPanel({
                 <span style={{ color: 'var(--text-muted)' }}>No priority</span>
               )}
 
-              {showPriorityMenu && (
+              {menu === 'priority' && (
                 <div
                   style={{
                     position: 'absolute',
@@ -604,7 +599,7 @@ export function TaskDetailPanel({
                       onClick={(e) => {
                         e.stopPropagation();
                         onTaskUpdate(task.id, { priority: opt });
-                        setShowPriorityMenu(false);
+                        setMenu(null);
                       }}
                       style={{
                         padding: '10px 12px',
@@ -635,12 +630,12 @@ export function TaskDetailPanel({
             </label>
             <div
               className="detail-field-value"
-              onClick={() => setShowHeadingMenu(!showHeadingMenu)}
+              onClick={() => setMenu(menu === 'heading' ? null : 'heading')}
               style={{ cursor: 'pointer', position: 'relative' }}
             >
               {currentHeading ? currentHeading.name : <span style={{ color: 'var(--text-muted)' }}>No heading</span>}
 
-              {showHeadingMenu && (
+              {menu === 'heading' && (
                 <div
                   style={{
                     position: 'absolute',
@@ -659,7 +654,7 @@ export function TaskDetailPanel({
                     onClick={(e) => {
                       e.stopPropagation();
                       onTaskUpdate(task.id, { heading_id: null });
-                      setShowHeadingMenu(false);
+                      setMenu(null);
                     }}
                     style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}
                   >
@@ -671,7 +666,7 @@ export function TaskDetailPanel({
                       onClick={(e) => {
                         e.stopPropagation();
                         onTaskUpdate(task.id, { heading_id: heading.id });
-                        setShowHeadingMenu(false);
+                        setMenu(null);
                       }}
                       style={{
                         padding: '10px 12px',
