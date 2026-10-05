@@ -742,12 +742,14 @@ export default function AppPage() {
     persist(async () => {
       // Feeds the follower notification's "detail" line, e.g. "set the due date to 12 Sep 2026".
       must(await updateTask(supabase, taskId, updates as any, messages.join(', ') || undefined));
+      // the new assignee follows the task (creating a task already does this)
+      if (updates.assignee_id) must(await addFollower(supabase, taskId, updates.assignee_id as string));
       if (!currentUserId) return;
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);
       });
-    }, 'tasks', 'activity');
+    }, 'tasks', 'activity', 'followers');
   };
 
   const handleHeadingRename = async (headingId: string, name: string) => {

@@ -445,8 +445,7 @@ export function TaskDetailPanel({
                   alignRight
                   emptyText="Everyone is already following."
                   onPick={(id) => {
-                    if (id) onFollowerAdd(id);
-                    setShowFollowerMenu(false);
+                    if (id) onFollowerAdd(id); // stays open so several can be added in a row
                   }}
                   onClose={() => setShowFollowerMenu(false)}
                 />
