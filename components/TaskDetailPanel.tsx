@@ -327,6 +327,67 @@ export function TaskDetailPanel({
           </div>
         )}
 
+        {/* Heading: a subheading under the title (only in the project view, where headings are loaded) */}
+        {headings.length > 0 && !task.parent_task_id && (
+          <div
+            className="detail-field-value"
+            onClick={() => setMenu(menu === 'heading' ? null : 'heading')}
+            style={{ cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, color: 'var(--text-muted)', fontSize: 14 }}
+          >
+            <List size={14} />
+            {currentHeading ? currentHeading.name : 'No heading'}
+
+            {menu === 'heading' && (
+              <div
+                ref={flipIfOffscreen}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  minWidth: '200px',
+                  zIndex: 100,
+                  marginTop: '4px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                }}
+              >
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTaskUpdate(task.id, { heading_id: null });
+                    setMenu(null);
+                  }}
+                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}
+                >
+                  No heading
+                </div>
+                {headings.map((heading) => (
+                  <div
+                    key={heading.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTaskUpdate(task.id, { heading_id: heading.id });
+                      setMenu(null);
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      borderBottom: '1px solid var(--border)',
+                      backgroundColor: task.heading_id === heading.id ? 'var(--accent-soft)' : 'transparent',
+                      color: task.heading_id === heading.id ? 'var(--accent)' : 'var(--text)',
+                    }}
+                  >
+                    {heading.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Assignee & Followers */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -563,21 +624,6 @@ export function TaskDetailPanel({
                 </button>
               )
             )}
-            {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
-              <Repeat size={14} />
-              <select
-                aria-label="Repeat"
-                value={task.repeat ?? ''}
-                onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
-                style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}
-              >
-                <option value="">Doesn&apos;t repeat</option>
-                {repeatOptions(task.due_date, task.repeat).map((o) => (
-                  <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -640,74 +686,25 @@ export function TaskDetailPanel({
           </div>
         </div>
 
-        {/* Heading & Tags */}
+        {/* Repeat & Tags */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <label className="detail-field-label">
-              <List size={16} style={{ display: 'inline', marginRight: '4px' }} />
-              Heading
+              <Repeat size={16} style={{ display: 'inline', marginRight: '4px' }} />
+              Repeat
             </label>
-            <div
-              className="detail-field-value"
-              onClick={() => setMenu(menu === 'heading' ? null : 'heading')}
-              style={{ cursor: 'pointer', position: 'relative' }}
+            {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
+            <select
+              aria-label="Repeat"
+              value={task.repeat ?? ''}
+              onChange={(e) => onTaskUpdate(task.id, { repeat: e.target.value || null })}
+              style={{ border: 'none', background: 'transparent', color: task.repeat ? 'var(--text)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', padding: '4px 4px' }}
             >
-              {currentHeading ? currentHeading.name : <span style={{ color: 'var(--text-muted)' }}>No heading</span>}
-
-              {menu === 'heading' && (
-                <div
-                  ref={flipIfOffscreen}
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    minWidth: '200px',
-                    zIndex: 100,
-                    marginTop: '4px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTaskUpdate(task.id, { heading_id: null });
-                      setMenu(null);
-                    }}
-                    style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}
-                  >
-                    No heading
-                  </div>
-                  {headings.map((heading) => (
-                    <div
-                      key={heading.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTaskUpdate(task.id, { heading_id: heading.id });
-                        setMenu(null);
-                      }}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        borderBottom: '1px solid var(--border)',
-                        backgroundColor: task.heading_id === heading.id ? 'var(--accent-soft)' : 'transparent',
-                        color: task.heading_id === heading.id ? 'var(--accent)' : 'var(--text)',
-                      }}
-                    >
-                      {heading.name}
-                    </div>
-                  ))}
-                  {headings.length === 0 && (
-                    <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      No sections yet — add one from the task list.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              <option value="">Doesn&apos;t repeat</option>
+              {repeatOptions(task.due_date, task.repeat).map((o) => (
+                <option key={o.value} value={o.value}>Repeats {o.label.charAt(0).toLowerCase() + o.label.slice(1)}</option>
+              ))}
+            </select>
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
