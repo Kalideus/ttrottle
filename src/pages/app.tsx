@@ -1532,6 +1532,7 @@ export default function AppPage() {
                     onFollowerRemove={handleFollowerRemove}
                     onSubtaskAdd={handleSubtaskAdd}
                     onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
+                    project={projects.find((p) => p.id === selectedTask.project_id)}
                     onSubtaskSelect={setSelectedTaskId}
                     parentTaskName={parentTask?.name ?? null}
                     onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
@@ -1587,6 +1588,7 @@ export default function AppPage() {
                   onFollowerRemove={handleFollowerRemove}
                   onSubtaskAdd={handleSubtaskAdd}
                   onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
+                  project={projects.find((p) => p.id === selectedTask.project_id)}
                   onSubtaskSelect={setSelectedTaskId}
                   parentTaskName={parentTask?.name ?? null}
                   onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}

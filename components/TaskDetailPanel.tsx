@@ -3,7 +3,7 @@
 import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
 import { repeatOptions } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
-import type { Task, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
+import type { Task, Project, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
 import { TagPicker } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
@@ -34,6 +34,8 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   /** Shown outside the task's project (My tasks): jump to the task there. */
   onOpenInProject?: () => void;
+  /** The task's project, shown as a coloured label above the title. */
+  project?: Project | null;
   onTaskUpdate: (taskId: string, updates: Record<string, unknown>) => Promise<void>;
   onTaskDelete: (taskId: string) => Promise<void>;
   onTagAdd: (tag: Tag) => void;
@@ -78,6 +80,7 @@ export function TaskDetailPanel({
   onParentSelect,
   onClose,
   onOpenInProject,
+  project,
   onTaskUpdate,
   onTaskDelete,
   onTagAdd,
@@ -246,6 +249,21 @@ export function TaskDetailPanel({
       </div>
 
       <div className="detail-panel-content">
+        {project && (
+          <button
+            type="button"
+            onClick={onOpenInProject}
+            disabled={!onOpenInProject}
+            title={onOpenInProject ? 'Open in project' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: 0, border: 'none', background: 'none',
+              cursor: onOpenInProject ? 'pointer' : 'default', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span aria-hidden style={{ width: 10, height: 10, borderRadius: 3, background: project.color, flexShrink: 0 }} />
+            {project.icon} {project.name}
+          </button>
+        )}
         {parentTaskName && (
           <button
             onClick={onParentSelect}
