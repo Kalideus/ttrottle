@@ -1,11 +1,11 @@
 'use client';
 
-import { X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
+import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, List, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
 import { repeatOptions } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, Project, ProjectMember, Heading, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
-import { TagPicker } from '@/components/TagPicker';
+import { TagPicker, hexToRgba } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { autoGrow } from '@/lib/autoGrow';
 import { openPicker } from '@/lib/openPicker';
@@ -388,11 +388,11 @@ export function TaskDetailPanel({
           </div>
         )}
 
-        {/* Assignee & Followers */}
+        {/* Assignee & Due date */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <label className="detail-field-label">
-              <User size={16} style={{ display: 'inline', marginRight: '4px' }} />
+              <FieldIcon icon={User} color="#4573D2" />
               Assignee
             </label>
             <div
@@ -445,95 +445,8 @@ export function TaskDetailPanel({
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label className="detail-field-label">
-              <Users size={16} style={{ display: 'inline', marginRight: '4px' }} />
-              Followers
-            </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-              {followers.map((f) => (
-                <div
-                  key={f.user_id}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 6px 4px 4px',
-                    borderRadius: '14px',
-                    background: 'var(--surface-alt)',
-                    fontSize: '12px',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: '50%',
-                      ...avatarStyle(f.profile?.avatar_url, f.profile?.avatar_color),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 9,
-                      fontWeight: 600,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {f.profile?.initials ?? f.profile?.email?.slice(0, 2).toUpperCase() ?? '?'}
-                  </div>
-                  {f.profile?.name ?? f.profile?.email ?? 'Unknown'}
-                  {f.user_id === currentUserId && ' (you)'}
-                  <button
-                    onClick={() => onFollowerRemove(f.user_id)}
-                    title="Remove follower"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--text-muted)' }}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-              {followers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No followers yet</span>}
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setMenu(menu === 'follower' ? null : 'follower')}
-                style={{
-                  padding: '6px 10px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  background: 'var(--surface)',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Plus size={13} />
-                Add follower
-              </button>
-
-              {menu === 'follower' && (
-                <PeoplePicker
-                  people={followableMembers}
-                  alignRight
-                  emptyText="Everyone is already following."
-                  onPick={(id) => {
-                    if (id) onFollowerAdd(id); // stays open so several can be added in a row
-                  }}
-                  onClose={() => setMenu(null)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Due Date & Priority */}
-        <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
             <div className="detail-field-label" style={{ display: 'flex', alignItems: 'center' }}>
-              <Calendar size={16} style={{ display: 'inline', marginRight: '4px' }} />
+              <FieldIcon icon={Calendar} color="#E8833A" />
               Due date
               {canManage ? (
                 <button
@@ -625,10 +538,13 @@ export function TaskDetailPanel({
               )
             )}
           </div>
+        </div>
 
+        {/* Priority & Repeat */}
+        <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <label className="detail-field-label">
-              <Flag size={16} style={{ display: 'inline', marginRight: '4px' }} />
+              <FieldIcon icon={Flag} color="#D64545" />
               Priority
             </label>
             <div
@@ -684,13 +600,10 @@ export function TaskDetailPanel({
               )}
             </div>
           </div>
-        </div>
 
-        {/* Repeat & Tags */}
-        <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <label className="detail-field-label">
-              <Repeat size={16} style={{ display: 'inline', marginRight: '4px' }} />
+              <FieldIcon icon={Repeat} color="#3BA776" />
               Repeat
             </label>
             {/* a repeating subtask rolls on to its next date when ticked; see migration 027 */}
@@ -706,17 +619,18 @@ export function TaskDetailPanel({
               ))}
             </select>
           </div>
+        </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <label className="detail-field-label">Tags</label>
-            <TagPicker
-              selectedTags={task.tags ?? []}
-              availableTags={availableTags}
-              onTagAdd={onTagAdd}
-              onTagRemove={onTagRemove}
-              onNewTag={onNewTag}
-            />
-          </div>
+        {/* Tags */}
+        <div className="detail-field-block">
+          <label className="detail-field-label"><FieldIcon icon={TagIcon} color="#A970D1" />Tags</label>
+          <TagPicker
+            selectedTags={task.tags ?? []}
+            availableTags={availableTags}
+            onTagAdd={onTagAdd}
+            onTagRemove={onTagRemove}
+            onNewTag={onNewTag}
+          />
         </div>
 
         {/* Subtasks — only level-1 tasks (no parent_task_id) can have these */}
@@ -840,6 +754,86 @@ export function TaskDetailPanel({
           onCommentDelete={onCommentDelete}
           onCommentLike={onCommentLike}
           canAnswerRequests={canManage}
+          aboveComposer={
+            <div>
+              <label className="detail-field-label"><FieldIcon icon={Users} color="#2BA5A0" />Followers</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                {followers.map((f) => (
+                  <div
+                    key={f.user_id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 6px 4px 4px',
+                      borderRadius: '14px',
+                      background: 'var(--surface-alt)',
+                      fontSize: '12px',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        ...avatarStyle(f.profile?.avatar_url, f.profile?.avatar_color),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 9,
+                        fontWeight: 600,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {f.profile?.initials ?? f.profile?.email?.slice(0, 2).toUpperCase() ?? '?'}
+                    </div>
+                    {f.profile?.name ?? f.profile?.email ?? 'Unknown'}
+                    {f.user_id === currentUserId && ' (you)'}
+                    <button
+                      onClick={() => onFollowerRemove(f.user_id)}
+                      title="Remove follower"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--text-muted)' }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {followers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No followers yet</span>}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setMenu(menu === 'follower' ? null : 'follower')}
+                    style={{
+                      padding: '6px 10px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      background: 'var(--surface)',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <Plus size={13} />
+                    Add follower
+                  </button>
+
+                  {menu === 'follower' && (
+                    <PeoplePicker
+                      people={followableMembers}
+                      emptyText="Everyone is already following."
+                      onPick={(id) => {
+                        if (id) onFollowerAdd(id); // stays open so several can be added in a row
+                      }}
+                      onClose={() => setMenu(null)}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          }
           onRequestAnswer={onRequestAnswer}
         />
 
@@ -860,5 +854,14 @@ export function TaskDetailPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+// A field label's icon in a soft tinted square, so each field has its own colour.
+function FieldIcon({ icon: Icon, color }: { icon: typeof User; color: string }) {
+  return (
+    <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 6, marginRight: 6, verticalAlign: 'middle', background: hexToRgba(color, 0.14), color }}>
+      <Icon size={13} />
+    </span>
   );
 }

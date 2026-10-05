@@ -35,6 +35,8 @@ interface CommentsProps {
   onCommentLike: (commentId: string) => Promise<void>;
   // project managers answer extension requests on a locked due date
   canAnswerRequests?: boolean;
+  /** Shown just above the comment box (the task panel puts its followers here). */
+  aboveComposer?: React.ReactNode;
   onRequestAnswer?: (commentId: string, approve: boolean) => void;
   loading?: boolean;
 }
@@ -93,6 +95,7 @@ export function Comments({
   onCommentDelete,
   onCommentLike,
   canAnswerRequests = false,
+  aboveComposer,
   onRequestAnswer,
   loading = false,
 }: CommentsProps) {
@@ -393,25 +396,7 @@ export function Comments({
       )}
 
       <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: 'var(--accent)',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          >
-            JD
-          </div>
-        </div>
+        {aboveComposer && <div style={{ marginBottom: 12 }}>{aboveComposer}</div>}
 
         <form onSubmit={handleSubmit}>
           <FormatToolbar target={composerRef} />
