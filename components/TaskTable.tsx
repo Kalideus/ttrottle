@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock } from 'lucide-react';
+import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock, MoveRight } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
 import { PeoplePicker } from '@/components/PeoplePicker';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
@@ -183,19 +183,24 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
     return !!dragged?.parent_task_id && (targetIsSubtask || dragged.parent_task_id === target.id);
   };
 
+  // dropping on a section, or picking it from the row menu's "Move to" (touch screens can't drag)
+  const moveToSection = (taskId: string, targetHeadingId: string) => {
+    const targetHeadingIdOrNull = targetHeadingId === '__no_heading__' ? null : targetHeadingId;
+    const task = findTask(taskId);
+    const targetTasks = groupedTasks[targetHeadingId] ?? [];
+    const maxPosition = targetTasks.length ? Math.max(...targetTasks.map((t) => t.position)) : -1;
+    if (task?.parent_task_id) {
+      // a subtask dropped on a heading becomes a top-level task there
+      onPromoteSubtask?.(task.id, targetHeadingIdOrNull, maxPosition + 1);
+    } else if (task && task.heading_id !== targetHeadingIdOrNull) {
+      onTaskUpdate(taskId, { heading_id: targetHeadingIdOrNull, position: maxPosition + 1 });
+    }
+  };
+
   const handleDropOnSection = (targetHeadingId: string) => {
     setDragOverHeadingId(null);
     if (!draggedTaskId) return;
-    const targetHeadingIdOrNull = targetHeadingId === '__no_heading__' ? null : targetHeadingId;
-    const draggedTask = findTask(draggedTaskId);
-    const targetTasks = groupedTasks[targetHeadingId] ?? [];
-    const maxPosition = targetTasks.length ? Math.max(...targetTasks.map((t) => t.position)) : -1;
-    if (draggedTask?.parent_task_id) {
-      // a subtask dropped on a heading becomes a top-level task there
-      onPromoteSubtask?.(draggedTask.id, targetHeadingIdOrNull, maxPosition + 1);
-    } else if (draggedTask && draggedTask.heading_id !== targetHeadingIdOrNull) {
-      onTaskUpdate(draggedTaskId, { heading_id: targetHeadingIdOrNull, position: maxPosition + 1 });
-    }
+    moveToSection(draggedTaskId, targetHeadingId);
     setDraggedTaskId(null);
   };
 
@@ -505,6 +510,39 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
                         <CornerLeftUp size={14} />
                         Make it a task
                       </button>
+                    )}
+                    {/* the drag-and-drop moves, for touch screens; a native select gets the phone's own picker */}
+                    {!flat && (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--border)' }}
+                      >
+                        <MoveRight size={14} />
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const [kind, id] = [e.target.value.slice(0, 2), e.target.value.slice(2)];
+                            setOpenMenuTaskId(null);
+                            if (kind === 's:') moveToSection(task.id, id);
+                            if (kind === 't:') { onMakeSubtask?.(task.id, id); setExpandedTaskId(id); }
+                          }}
+                          style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', color: 'inherit', fontSize: 'inherit', padding: '4px 0', cursor: 'pointer' }}
+                        >
+                          <option value="" disabled>Move to…</option>
+                          <optgroup label="Section">
+                            {[...headings.map((h) => h.id), '__no_heading__'].map((id) => (
+                              <option key={id} value={`s:${id}`}>{id === '__no_heading__' ? '(no heading)' : headingMap.get(id) ?? '(untitled heading)'}</option>
+                            ))}
+                          </optgroup>
+                          {onMakeSubtask && !task.subtasks?.length && (
+                            <optgroup label="Subtask of">
+                              {tasks.filter((t) => t.id !== task.id && t.id !== task.parent_task_id).map((t) => (
+                                <option key={t.id} value={`t:${t.id}`}>{t.name}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      </label>
                     )}
                     <button
                       onClick={(e) => {

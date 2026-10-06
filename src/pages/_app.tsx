@@ -14,6 +14,11 @@ export default function App({ Component, pageProps }: AppProps) {
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#1E1F21" />
+        {/* "Add to Home Screen": opens full-screen with its own icon */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/icon-512.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
         <link rel="icon"type="image/svg+xml" href="/logo.svg" />
       </Head>
       <AuthProvider>

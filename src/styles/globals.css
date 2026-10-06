@@ -2484,3 +2484,22 @@ button.project-members:hover { background: var(--surface-alt); }
   /* iOS zooms into any focused field under 16px */
   input, textarea, select, [contenteditable] { font-size: 16px !important; }
 }
+
+/* Touch screens have no hover: show the controls that otherwise only appear on mouse-over */
+@media (hover: none) {
+  .task-menu, .sidebar-project-menu { opacity: 1; }
+}
+
+/* Phones: bigger tap targets (Apple's guideline is ~44px; these were 14-20px) and room for the iPhone home bar */
+@media (max-width: 720px) {
+  .task-menu, .project-header-menu, .sidebar-project-menu { width: 36px; height: 36px; }
+  .task-reorder-controls button { padding: 3px 6px !important; }
+  .task-disclosure { width: 28px; height: 28px; }
+  .task-row, .add-task-row { min-height: 52px; }
+  .detail-panel-close-btn, .detail-panel-menu-btn, .modal-close { min-width: 40px; min-height: 40px; }
+
+  .app-main { padding-bottom: env(safe-area-inset-bottom); }
+  .app-sidebar { padding-bottom: env(safe-area-inset-bottom); }
+  .modal-overlay { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .undo-toast { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+}

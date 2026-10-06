@@ -43,6 +43,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // static images don't need an auth check
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // static images and the app manifest don't need an auth check
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)'],
 }

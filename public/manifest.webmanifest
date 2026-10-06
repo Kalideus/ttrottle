@@ -1,0 +1,12 @@
+{
+  "name": "ttrottle",
+  "short_name": "ttrottle",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#1E1F21",
+  "theme_color": "#1E1F21",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

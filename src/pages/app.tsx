@@ -168,7 +168,8 @@ export default function AppPage() {
   // on phones the sidebar is a slide-over drawer: start closed, close after picking something
   const isPhone = () => window.matchMedia('(max-width: 720px)').matches;
   const closeSidebarOnPhone = () => { if (isPhone()) setSidebarOpen(false); };
-  useEffect(() => { if (isPhone()) setSidebarOpen(false); }, []);
+  const [phone, setPhone] = useState(false); // set after mount; the server render doesn't know the screen
+  useEffect(() => { if (isPhone()) { setPhone(true); setSidebarOpen(false); } }, []);
   const [celebration, setCelebration] = useState<number | null>(null);
   const endCelebration = useCallback(() => setCelebration(null), []);
   // Super-admin bulk select: null = off, a Set = on (possibly empty).
@@ -941,6 +942,28 @@ export default function AppPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [activeProjectId]);
+
+  // Phones: the back button/gesture closes the task panel or sidebar instead of leaving the app.
+  // Opening one pushes a history entry; back pops it (we tell Next not to route), closing from the UI drops it.
+  // ponytail: one level deep; a task panel and sidebar open together share one entry
+  const phoneOverlay = !phone ? null : selectedTaskId ? 'task' : sidebarOpen ? 'sidebar' : null;
+  useEffect(() => {
+    if (!phoneOverlay) return;
+    window.history.pushState({ ...window.history.state }, '');
+    let popped = false;
+    router.beforePopState(() => {
+      popped = true;
+      if (phoneOverlay === 'task') setSelectedTaskId(null);
+      else setSidebarOpen(false);
+      return false;
+    });
+    return () => {
+      if (popped) return router.beforePopState(() => true);
+      // ignore the pop our own back() causes, then hand back to Next
+      router.beforePopState(() => { router.beforePopState(() => true); return false; });
+      window.history.back();
+    };
+  }, [phoneOverlay]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitCreateTask = async ({ tag_ids, new_heading, subtasks, comment, ...fields }: NewTaskInput) => {
     if (!activeProjectId) return;
