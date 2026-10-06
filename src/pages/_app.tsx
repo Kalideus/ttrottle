@@ -12,7 +12,9 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <div className={brandFont.variable}>
       <Head>
-        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#1E1F21" />
+        <link rel="icon"type="image/svg+xml" href="/logo.svg" />
       </Head>
       <AuthProvider>
         <Component {...pageProps} />

@@ -2434,3 +2434,53 @@ button.project-members:hover { background: var(--surface-alt); }
 .extension-request .modal-btn { height: 28px; padding: 0 12px; }
 .extension-request.is-pending { border-color: var(--accent); }
 .extension-request.is-declined { color: var(--text-muted); }
+
+/* ---- Phones ---- */
+.sidebar-backdrop { display: none; }
+@media (max-width: 720px) {
+  /* dvh: the browser's toolbar doesn't hide the bottom of the app */
+  .app-container { height: 100dvh; }
+  .app-main { position: relative; }
+  /* sidebar slides over the content instead of squeezing it */
+  .app-sidebar {
+    position: absolute; top: 0; bottom: 0; left: 0; z-index: 35;
+    width: min(270px, 85vw);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.25);
+  }
+  .sidebar-backdrop {
+    display: block; position: absolute; inset: 0; z-index: 34;
+    background: rgba(30, 31, 33, 0.42);
+  }
+
+  .app-top-bar { gap: 8px; padding: 0 8px; padding-top: env(safe-area-inset-top); height: calc(52px + env(safe-area-inset-top)); }
+  .topbar-right .topbar-icon-btn { display: none; } /* keyboard shortcuts: no keyboard */
+
+  .project-header { height: 56px; padding: 0 12px; gap: 8px; }
+  .project-header-left { min-width: 0; }
+  .project-name { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .project-members, .project-star-btn { display: none; }
+  .project-share-btn { padding: 0 12px; }
+
+  .app-toolbar { padding: 0 12px; gap: 8px; }
+  .toolbar-actions { gap: 4px; }
+  .toolbar-btn { padding: 0 8px; }
+  .toolbar-search-input { min-width: 0; width: 140px; }
+
+  /* table: drop the priority column (still editable in the task panel), tighten the rest */
+  .table-header, .section-header, .task-row, .add-task-row {
+    grid-template-columns: minmax(0, 1fr) 44px 84px;
+    padding: 0 12px;
+  }
+  .table-header, .table-body { min-width: 0; }
+  .table-header-cell:nth-child(4), .task-cell-priority { display: none; }
+  .table-header-cell:not(:first-child), .task-metadata-cell { padding: 0 4px; }
+  .task-row-content { gap: 8px; }
+  .task-checkbox { width: 22px; height: 22px; }
+
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-card { padding: 18px; max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .inbox-grid-head { padding-left: 12px; padding-right: 12px; }
+
+  /* iOS zooms into any focused field under 16px */
+  input, textarea, select, [contenteditable] { font-size: 16px !important; }
+}

@@ -165,6 +165,10 @@ export default function AppPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // on phones the sidebar is a slide-over drawer: start closed, close after picking something
+  const isPhone = () => window.matchMedia('(max-width: 720px)').matches;
+  const closeSidebarOnPhone = () => { if (isPhone()) setSidebarOpen(false); };
+  useEffect(() => { if (isPhone()) setSidebarOpen(false); }, []);
   const [celebration, setCelebration] = useState<number | null>(null);
   const endCelebration = useCallback(() => setCelebration(null), []);
   // Super-admin bulk select: null = off, a Set = on (possibly empty).
@@ -1319,8 +1323,9 @@ export default function AppPage() {
             // don't carry a task open elsewhere into the inbox's side panel
             if (section === 'inbox') setSelectedTaskId(null);
             setActiveSection(section);
+            closeSidebarOnPhone();
           }}
-          onProjectSelect={setActiveProjectId}
+          onProjectSelect={(id) => { setActiveProjectId(id); closeSidebarOnPhone(); }}
           onProjectHover={prefetchProject}
           onProjectCreate={handleProjectCreate}
           onProjectImport={openImport}
@@ -1335,6 +1340,8 @@ export default function AppPage() {
           onCreateTask={handleCreateTaskClick}
           onInvite={handleInvite}
         />
+
+        {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
 
         <div className="app-workspace">
           {activeSection === 'projects' && (
