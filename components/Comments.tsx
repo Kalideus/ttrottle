@@ -238,7 +238,12 @@ export function Comments({
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', gap: '6px', marginBottom: '4px', alignItems: 'center' }}>
                       <strong style={{ fontSize: '14px' }}>{comment.authorName}</strong>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>now</span>
+                      <time
+                        dateTime={comment.createdAt}
+                        style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+                      >
+                        {new Date(comment.createdAt).toLocaleString()}
+                      </time>
                       {comment.editedAt && (
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                           (edited)

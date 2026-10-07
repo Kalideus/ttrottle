@@ -3,14 +3,29 @@ import { Fragment, type ReactNode } from 'react';
 // Renders the markdown-lite written via FormatToolbar (see lib/format). Builds React nodes, never HTML,
 // so user text can't inject markup. ponytail: no nesting/links/headings; swap for a real parser if needed.
 const INLINE = /(\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\*[^*\s\n][^*\n]*\*)/g;
+const URL = /(https?:\/\/[^\s<>"']+)/gi;
+
+function linkify(text: string, plain: (s: string) => ReactNode) {
+  return text.split(URL).map((part, i) => {
+    if (i % 2 === 0) return <Fragment key={i}>{plain(part)}</Fragment>;
+    const href = part.replace(/[.,!?;:)\]}]+$/, '');
+    const trailing = part.slice(href.length);
+    return (
+      <Fragment key={i}>
+        <a href={href} target="_blank" rel="noopener noreferrer">{plain(href)}</a>
+        {plain(trailing)}
+      </Fragment>
+    );
+  });
+}
 
 function inline(text: string, plain: (s: string) => ReactNode) {
   return text.split(INLINE).map((part, i) => {
-    if (i % 2 === 0) return <Fragment key={i}>{plain(part)}</Fragment>;
-    if (part.startsWith('**')) return <strong key={i}>{plain(part.slice(2, -2))}</strong>;
-    if (part.startsWith('~~')) return <s key={i}>{plain(part.slice(2, -2))}</s>;
+    if (i % 2 === 0) return <Fragment key={i}>{linkify(part, plain)}</Fragment>;
+    if (part.startsWith('**')) return <strong key={i}>{linkify(part.slice(2, -2), plain)}</strong>;
+    if (part.startsWith('~~')) return <s key={i}>{linkify(part.slice(2, -2), plain)}</s>;
     if (part[0] === '`') return <code key={i}>{part.slice(1, -1)}</code>;
-    return <em key={i}>{plain(part.slice(1, -1))}</em>;
+    return <em key={i}>{linkify(part.slice(1, -1), plain)}</em>;
   });
 }
 
