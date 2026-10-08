@@ -23,6 +23,7 @@ import { Inbox, type NotificationItem } from '@/components/Inbox';
 import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
 import { createSaveQueue } from '@/lib/saveQueue';
+import { localYmd, isOverdue, formatDay } from '@/lib/dates';
 import {
   getProjects,
   getTasksForProject,
@@ -37,6 +38,7 @@ import {
   updateTask,
   deleteTask,
   getProjectMembers,
+  getMembersByProject,
   addProjectMember,
   removeProjectMember,
   getProfiles,
@@ -85,12 +87,6 @@ const NOTIFICATIONS_PAGE_SIZE = 50;
 function must<T extends { error: unknown }>(result: T): T {
   if (result.error) throw result.error;
   return result;
-}
-
-// Local-time YYYY-MM-DD, `plusDays` from today (due_date is a plain date, so compare as strings).
-function localYmd(plusDays: number) {
-  const d = new Date(Date.now() + plusDays * DAY_MS);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
@@ -286,6 +282,18 @@ export default function AppPage() {
       if (activeSection === 'my-tasks') setResortToken((n) => n + 1);
     });
   }, [activeSection, currentUserId, currentProfile, supabase]);
+
+  // My tasks spans projects, so its people pickers need each task's own project members,
+  // not the members of whichever project was open last.
+  const [myTaskMembers, setMyTaskMembers] = useState<Map<string, ProjectMember[]>>(new Map());
+  const myTaskProjectIds = useMemo(() => [...new Set(myTasks.map((t) => t.project_id).filter(Boolean))].sort().join(','), [myTasks]);
+  useEffect(() => {
+    if (myTaskProjectIds) getMembersByProject(supabase, myTaskProjectIds.split(',')).then(setMyTaskMembers);
+  }, [myTaskProjectIds, supabase]);
+  const membersFor = (projectId: string | null | undefined) =>
+    !projectId || projectId === activeProjectId ? projectMembers : myTaskMembers.get(projectId) ?? [];
+  const findMember = (userId: unknown) =>
+    projectMembers.find((m) => m.profile_id === userId) ?? [...myTaskMembers.values()].flat().find((m) => m.profile_id === userId);
 
   const loadNotificationsBadge = useCallback(async () => {
     if (!currentUserId) return;
@@ -489,7 +497,7 @@ export default function AppPage() {
           if (filter === 'priority:medium') return task.priority === 'medium';
           if (filter === 'priority:low') return task.priority === 'low';
           if (filter === 'no-due-date') return !task.due_date;
-          if (filter === 'overdue') return task.due_date && new Date(task.due_date) < new Date() && !task.completed;
+          if (filter === 'overdue') return isOverdue(task.due_date, task.completed);
           if (filter === 'due-today') return task.due_date?.slice(0, 10) === localYmd(0);
           if (filter === 'due-7d') return !!task.due_date && task.due_date.slice(0, 10) >= localYmd(0) && task.due_date.slice(0, 10) <= localYmd(7);
           if (filter === 'due-month') return !!task.due_date && task.due_date.slice(0, 10) >= localYmd(0) && task.due_date.slice(0, 7) === localYmd(0).slice(0, 7);
@@ -695,7 +703,7 @@ export default function AppPage() {
   const handleFollowerAdd = async (userId: string) => {
     if (!selectedTaskId) return;
     const taskId = selectedTaskId;
-    const profile = projectMembers.find((m) => m.profile_id === userId)?.profile ?? null;
+    const profile = findMember(userId)?.profile ?? null;
     setFollowers((fs) => (fs.some((f) => f.user_id === userId) ? fs : [...fs, { task_id: taskId, user_id: userId, created_at: new Date().toISOString(), profile }]));
     persist(async () => {
       must(await addFollower(supabase, taskId, userId));
@@ -707,7 +715,7 @@ export default function AppPage() {
     if (!selectedTaskId) return;
     const taskId = selectedTaskId;
     const name = followers.find((f) => f.user_id === userId)?.profile?.name
-      ?? projectMembers.find((m) => m.profile_id === userId)?.profile?.name
+      ?? findMember(userId)?.profile?.name
       ?? 'a follower';
     setFollowers((fs) => fs.filter((f) => f.user_id !== userId));
     persist(async () => {
@@ -730,12 +738,12 @@ export default function AppPage() {
     }
     if ('assignee_id' in updates) {
       const id = updates.assignee_id as string | null;
-      const member = id ? projectMembers.find((m) => m.profile_id === id) : null;
+      const member = id ? findMember(id) : null;
       messages.push(id ? `assigned the task to ${member?.profile?.name ?? member?.email ?? 'someone'}` : 'unassigned the task');
     }
     if ('due_date' in updates) {
       const date = updates.due_date as string | null;
-      messages.push(date ? `set the due date to ${new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'cleared the due date');
+      messages.push(date ? `set the due date to ${formatDay(date)}` : 'cleared the due date');
     }
     if ('priority' in updates) {
       const p = updates.priority as string | null;
@@ -764,7 +772,7 @@ export default function AppPage() {
     // new key each time so a second completion mid-animation restarts it
     if (updates.completed === true) setCelebration(Date.now());
     const optimistic: Partial<Task> = { ...updates };
-    if ('assignee_id' in updates) optimistic.assignee = projectMembers.find((m) => m.profile_id === updates.assignee_id)?.profile ?? null;
+    if ('assignee_id' in updates) optimistic.assignee = findMember(updates.assignee_id)?.profile ?? null;
     if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
     patchTask(taskId, (t) => ({ ...t, ...optimistic }));
     // My Tasks is due-date ordered, so a new date moves the row to its place straight away
@@ -1170,7 +1178,6 @@ export default function AppPage() {
     const role = projectId ? myRoles.get(projectId) : undefined;
     return !!currentProfile?.is_super_admin || role === 'owner' || role === 'admin';
   };
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // A request on a locked due date is a comment carrying the wanted date; managers get notified by the database (026).
   const handleExtensionRequest = (date: string, reason: string) => {
@@ -1182,7 +1189,7 @@ export default function AppPage() {
     patchTask(taskId, (t) => ({ ...t, comment_count: (t.comment_count ?? 0) + 1 }));
     persist(async () => {
       must(await createComment(supabase, { id: comment.id, task_id: taskId, author_id: currentUserId, body, requested_due_date: date }));
-      await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `asked for an extension to ${formatDate(date)}` });
+      await logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message: `asked for an extension to ${formatDay(date)}` });
     }, 'comments', 'followers', 'tasks', 'activity');
   };
 
@@ -1287,6 +1294,47 @@ export default function AppPage() {
     setNotificationsBadge(0);
     persist(async () => must(await clearAllNotifications(supabase, uid)), 'notifications');
   };
+
+  // The task side panel is the same in every section; outside its project it also links back to it.
+  const taskPanel = selectedTask && (
+    <>
+      <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
+      <TaskDetailPanel
+        key={selectedTask.id}
+        task={selectedTask}
+        projectMembers={membersFor(selectedTask.project_id)}
+        availableTags={availableTags}
+        comments={comments}
+        commentsLoading={commentsLoading}
+        followers={followers}
+        activity={activity}
+        currentUserId={currentUserId}
+        onFollowerAdd={handleFollowerAdd}
+        onFollowerRemove={handleFollowerRemove}
+        onSubtaskAdd={handleSubtaskAdd}
+        {...(activeSection !== 'projects' && {
+          onOpenInProject: () => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id),
+          project: projects.find((p) => p.id === selectedTask.project_id),
+        })}
+        onSubtaskSelect={setSelectedTaskId}
+        parentTaskName={parentTask?.name ?? null}
+        onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
+        onClose={() => setSelectedTaskId(null)}
+        onTaskUpdate={handleTaskUpdate}
+        onTaskDelete={handleTaskDelete}
+        onTagAdd={handleTagAdd}
+        onTagRemove={handleTagRemove}
+        onNewTag={handleNewTag}
+        onCommentAdd={handleCommentAdd}
+        onCommentEdit={handleCommentEdit}
+        onCommentDelete={handleCommentDelete}
+        onCommentLike={handleCommentLike}
+        canManage={canManage(selectedTask.project_id)}
+        onExtensionRequest={handleExtensionRequest}
+        onRequestAnswer={handleRequestAnswer}
+      />
+    </>
+  );
 
   return (
     <div className="app-container">
@@ -1452,7 +1500,7 @@ export default function AppPage() {
                   <>
                     <TaskTable
                       canManage={(projectId: string) => canManage(projectId)}
-                      members={projectMembers}
+                      membersFor={membersFor}
                       onTaskHover={prefetchTask}
                       onMakeSubtask={handleMakeSubtask}
                       onPromoteSubtask={handlePromoteSubtask}
@@ -1482,41 +1530,7 @@ export default function AppPage() {
                         })
                       }
                     />
-                    {selectedTask && (
-                      <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
-                    )}
-                    {selectedTask && (
-                      <TaskDetailPanel
-                        key={selectedTask.id}
-                        task={selectedTask}
-                        projectMembers={projectMembers}
-                        availableTags={availableTags}
-                        comments={comments}
-                        commentsLoading={commentsLoading}
-                        followers={followers}
-                        activity={activity}
-                        currentUserId={currentUserId}
-                        onFollowerAdd={handleFollowerAdd}
-                        onFollowerRemove={handleFollowerRemove}
-                        onSubtaskAdd={handleSubtaskAdd}
-                        onSubtaskSelect={setSelectedTaskId}
-                        parentTaskName={parentTask?.name ?? null}
-                        onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
-                        onClose={() => setSelectedTaskId(null)}
-                        onTaskUpdate={handleTaskUpdate}
-                        onTaskDelete={handleTaskDelete}
-                        onTagAdd={handleTagAdd}
-                        onTagRemove={handleTagRemove}
-                        onNewTag={handleNewTag}
-                        onCommentAdd={handleCommentAdd}
-                        onCommentEdit={handleCommentEdit}
-                        onCommentDelete={handleCommentDelete}
-                        onCommentLike={handleCommentLike}
-                        canManage={canManage(selectedTask?.project_id)}
-                        onExtensionRequest={handleExtensionRequest}
-                        onRequestAnswer={handleRequestAnswer}
-                      />
-                    )}
+                    {taskPanel}
                   </>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
@@ -1545,7 +1559,7 @@ export default function AppPage() {
               <div className="app-content">
                 <TaskTable
                   canManage={(projectId: string) => canManage(projectId)}
-                  members={projectMembers}
+                  membersFor={membersFor}
                   onTaskHover={prefetchTask}
                   onMakeSubtask={handleMakeSubtask}
                   onPromoteSubtask={handlePromoteSubtask}
@@ -1567,43 +1581,7 @@ export default function AppPage() {
                   onNoHeadingRename={async () => window.alert('Open a project to add sections there.')}
                   onTaskReorder={async () => {}}
                 />
-                {selectedTask && (
-                  <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
-                )}
-                {selectedTask && (
-                  <TaskDetailPanel
-                    key={selectedTask.id}
-                    task={selectedTask}
-                    projectMembers={projectMembers}
-                    availableTags={availableTags}
-                    comments={comments}
-                    commentsLoading={commentsLoading}
-                    followers={followers}
-                    activity={activity}
-                    currentUserId={currentUserId}
-                    onFollowerAdd={handleFollowerAdd}
-                    onFollowerRemove={handleFollowerRemove}
-                    onSubtaskAdd={handleSubtaskAdd}
-                    onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
-                    project={projects.find((p) => p.id === selectedTask.project_id)}
-                    onSubtaskSelect={setSelectedTaskId}
-                    parentTaskName={parentTask?.name ?? null}
-                    onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
-                    onClose={() => setSelectedTaskId(null)}
-                    onTaskUpdate={handleTaskUpdate}
-                    onTaskDelete={handleTaskDelete}
-                    onTagAdd={handleTagAdd}
-                    onTagRemove={handleTagRemove}
-                    onNewTag={handleNewTag}
-                    onCommentAdd={handleCommentAdd}
-                    onCommentEdit={handleCommentEdit}
-                    onCommentDelete={handleCommentDelete}
-                    onCommentLike={handleCommentLike}
-                    canManage={canManage(selectedTask?.project_id)}
-                    onExtensionRequest={handleExtensionRequest}
-                    onRequestAnswer={handleRequestAnswer}
-                  />
-                )}
+                {taskPanel}
               </div>
             </>
           )}
@@ -1626,43 +1604,7 @@ export default function AppPage() {
                 onClear={handleNotificationsClear}
                 onClearAll={handleClearAllNotifications}
               />
-              {selectedTask && (
-                <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
-              )}
-              {selectedTask && (
-                <TaskDetailPanel
-                  key={selectedTask.id}
-                  task={selectedTask}
-                  projectMembers={projectMembers}
-                  availableTags={availableTags}
-                  comments={comments}
-                  commentsLoading={commentsLoading}
-                  followers={followers}
-                  activity={activity}
-                  currentUserId={currentUserId}
-                  onFollowerAdd={handleFollowerAdd}
-                  onFollowerRemove={handleFollowerRemove}
-                  onSubtaskAdd={handleSubtaskAdd}
-                  onOpenInProject={() => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id)}
-                  project={projects.find((p) => p.id === selectedTask.project_id)}
-                  onSubtaskSelect={setSelectedTaskId}
-                  parentTaskName={parentTask?.name ?? null}
-                  onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
-                  onClose={() => setSelectedTaskId(null)}
-                  onTaskUpdate={handleTaskUpdate}
-                  onTaskDelete={handleTaskDelete}
-                  onTagAdd={handleTagAdd}
-                  onTagRemove={handleTagRemove}
-                  onNewTag={handleNewTag}
-                  onCommentAdd={handleCommentAdd}
-                  onCommentEdit={handleCommentEdit}
-                  onCommentDelete={handleCommentDelete}
-                  onCommentLike={handleCommentLike}
-                  canManage={canManage(selectedTask?.project_id)}
-                  onExtensionRequest={handleExtensionRequest}
-                  onRequestAnswer={handleRequestAnswer}
-                />
-              )}
+              {taskPanel}
             </div>
           )}
         </div>

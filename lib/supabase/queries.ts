@@ -584,11 +584,22 @@ export async function updateTask(
 
 // Soft delete: anyone can delete a task, but it's recoverable for 90 days
 // (see /admin/deleted-tasks and the purge cron) rather than gone for good.
+// Subtasks still live go with it, stamped with the same moment so restoreTask can tell them
+// from ones deleted on their own earlier.
 export async function deleteTask(supabase: SupabaseClient, id: string, deletedBy?: string | null) {
-  return supabase.from('tasks').update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy ?? null }).eq('id', id)
+  return supabase
+    .from('tasks')
+    .update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy ?? null })
+    .or(`id.eq.${id},parent_task_id.eq.${id}`)
+    .is('deleted_at', null)
 }
 
 export async function restoreTask(supabase: SupabaseClient, id: string) {
+  const { data: task } = await supabase.from('tasks').select('deleted_at').eq('id', id).single()
+  if (task?.deleted_at) {
+    const subs = await supabase.from('tasks').update({ deleted_at: null, deleted_by: null }).eq('parent_task_id', id).eq('deleted_at', task.deleted_at)
+    if (subs.error) return subs
+  }
   return supabase.from('tasks').update({ deleted_at: null, deleted_by: null }).eq('id', id)
 }
 
@@ -608,10 +619,14 @@ export async function getDeletedTasks(supabase: SupabaseClient) {
     ;(profiles ?? []).forEach((p: Profile) => deleterMap.set(p.id, p))
   }
 
-  const withDeleter = (data ?? []).map((t) => ({
-    ...t,
-    deletedByProfile: t.deleted_by ? deleterMap.get(t.deleted_by) ?? null : null,
-  }))
+  // subtasks that went with their parent aren't listed: restoring the parent brings them back
+  const deletedAt = new Map((data ?? []).map((t) => [t.id, t.deleted_at]))
+  const withDeleter = (data ?? [])
+    .filter((t) => !t.parent_task_id || deletedAt.get(t.parent_task_id) !== t.deleted_at)
+    .map((t) => ({
+      ...t,
+      deletedByProfile: t.deleted_by ? deleterMap.get(t.deleted_by) ?? null : null,
+    }))
   return { data: withDeleter, error: null }
 }
 
@@ -917,6 +932,19 @@ export async function getProjectMembers(supabase: SupabaseClient, projectId: str
     .order('invited_at', { ascending: true })
 
   return { data: (data ?? []) as ProjectMember[], error }
+}
+
+// Members of several projects in one request, by project: My tasks shows tasks from all of them.
+export async function getMembersByProject(supabase: SupabaseClient, projectIds: string[]) {
+  const { data } = await supabase
+    .from('project_members')
+    .select('*, profile:profiles!project_members_profile_id_fkey(*)')
+    .in('project_id', projectIds)
+    .order('invited_at', { ascending: true })
+
+  const byProject = new Map<string, ProjectMember[]>()
+  for (const m of (data ?? []) as ProjectMember[]) byProject.set(m.project_id, [...(byProject.get(m.project_id) ?? []), m])
+  return byProject
 }
 
 // Adds someone who already has an account straight to a project (no email).

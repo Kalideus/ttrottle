@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Bell, Check, CheckCheck, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { isOverdue, formatDay } from '@/lib/dates';
 import { groupNotifications } from '@/lib/groupNotifications';
 import { ConfirmModal } from '@/components/ConfirmModal';
 
@@ -282,13 +283,13 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
             </div>
             <div className="inbox-col">
               {notif.dueDate && (() => {
-                const overdue = !notif.completed && new Date(notif.dueDate) < new Date();
+                const overdue = isOverdue(notif.dueDate, notif.completed);
                 return (
                   <span
                     title={overdue ? 'Overdue' : 'Due date'}
                     style={{ color: overdue ? '#D64545' : 'var(--text)', fontWeight: overdue ? 600 : 500 }}
                   >
-                    {new Date(notif.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {formatDay(notif.dueDate, false)}
                   </span>
                 );
               })()}

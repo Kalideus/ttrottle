@@ -79,7 +79,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data: recGen, error: recErr } = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo } });
       if (!recGen?.user) return res.status(400).json({ error: recErr?.message ?? genErr?.message ?? 'Could not generate a link' });
       invitedId = recGen.user.id;
-      link = `${origin}/login?token_hash=${recGen.properties?.hashed_token}&type=recovery`;
+      // A recovery link signs whoever opens it in as that person, so the caller only
+      // gets one for an account nobody has ever signed in to (an unfinished invite).
+      // Anyone else is just added to the project; "Forgot password?" is theirs to use.
+      if (!recGen.user.last_sign_in_at) {
+        link = `${origin}/login?token_hash=${recGen.properties?.hashed_token}&type=recovery`;
+      }
     }
   }
 

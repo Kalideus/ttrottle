@@ -12,6 +12,7 @@ import { openPicker } from '@/lib/openPicker';
 import { FormatToolbar, formatKeyDown } from '@/components/FormatToolbar';
 import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
+import { isOverdue, formatDay } from '@/lib/dates';
 import { PeoplePicker } from '@/components/PeoplePicker';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
@@ -132,7 +133,7 @@ export function TaskDetailPanel({
 
   const priorityOptions: Array<'high' | 'medium' | 'low'> = ['low', 'medium', 'high'];
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
-  const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
+  const overdue = isOverdue(task.due_date, task.completed);
   const dateReadOnly = !!task.due_locked && !canManage;
   const [extension, setExtension] = useState<{ date: string; reason: string } | null>(null);
   const followableMembers = projectMembers.filter((m) => m.profile_id && !followers.some((f) => f.user_id === m.profile_id));
@@ -410,12 +411,12 @@ export function TaskDetailPanel({
               className="detail-field-value"
               onClick={() => !dateReadOnly && setMenu(menu === 'dueDate' ? null : 'dueDate')}
               title={dateReadOnly ? 'A manager has locked this date' : undefined}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: overdue ? '#D64545' : undefined, fontWeight: overdue ? 600 : undefined }}
             >
               <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span>
                   {task.due_date
-                    ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    ? formatDay(task.due_date)
                     : 'No due date'}
                 </span>
                 {task.repeat && (

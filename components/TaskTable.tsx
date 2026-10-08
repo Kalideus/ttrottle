@@ -8,13 +8,14 @@ import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
+import { isOverdue, formatDay } from '@/lib/dates';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { openPicker } from '@/lib/openPicker';
 
 interface TaskTableProps {
   tasks: (Task & { subtasks?: Task[] })[];
   headings: Heading[];
-  members?: ProjectMember[];
+  membersFor?: (projectId: string) => ProjectMember[];
   onTaskSelect: (taskId: string) => void;
   selectedTaskId?: string | null;
   currentUserId?: string | null;
@@ -47,7 +48,7 @@ interface TaskTableProps {
   canManage?: (projectId: string) => boolean;
 }
 
-export function TaskTable({ tasks, headings, members = [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -205,7 +206,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
   };
 
   const renderDueDateCell = (task: Task) => {
-    const isOverdue = !!task.due_date && !task.completed && new Date(task.due_date) < new Date();
+    const overdue = isOverdue(task.due_date, task.completed);
     const readOnly = !!task.due_locked && !canManage(task.project_id);
     return (
     <div
@@ -222,9 +223,9 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
       {task.due_date ? (
         <span
           className="due-date-cell"
-          style={{ color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
+          style={{ color: overdue ? '#D64545' : undefined, fontWeight: overdue ? 600 : undefined }}
         >
-          {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+          {formatDay(task.due_date, false)}
           {task.due_locked && <Lock size={11} aria-label="Locked" style={{ marginLeft: 4, verticalAlign: -1, opacity: 0.7 }} />}
         </span>
       ) : (
@@ -595,7 +596,7 @@ export function TaskTable({ tasks, headings, members = [], onTaskSelect, selecte
             )}
             {assigningId === task.id && (
               <PeoplePicker
-                people={members}
+                people={membersFor(task.project_id)}
                 selectedId={task.assignee_id}
                 allowNone
                 emptyText="No members yet — invite someone from the project header."

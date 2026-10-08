@@ -1,18 +1,23 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseClient';
 
-const cronSecret = process.env.CRON_SECRET ?? 'dev-cron-secret';
+const cronSecret = process.env.CRON_SECRET;
 const RETENTION_DAYS = 90;
 
 // Hard-deletes tasks that were soft-deleted more than 90 days ago. See
 // db/migrations/013_soft_delete_tasks.sql and /admin/deleted-tasks.
+// Scheduled in vercel.json: Vercel Cron calls with GET and "Authorization: Bearer <CRON_SECRET>".
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, message: 'Method not allowed.' });
   }
 
-  const secret = req.headers['x-cron-secret'];
-  if (!secret || String(secret) !== cronSecret) {
+  // no fallback secret: an unset CRON_SECRET must not leave a guessable one
+  if (!cronSecret) {
+    return res.status(500).json({ ok: false, message: 'CRON_SECRET is not configured.' });
+  }
+
+  if (req.headers.authorization !== `Bearer ${cronSecret}` && req.headers['x-cron-secret'] !== cronSecret) {
     return res.status(401).json({ ok: false, message: 'Unauthorized.' });
   }
 

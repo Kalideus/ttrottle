@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
+import { formatDay } from '@/lib/dates';
 import { MemberAvatar } from '@/components/PeoplePicker';
 import type { ProjectMember } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
@@ -307,7 +308,7 @@ export function Comments({
                       <div className={`extension-request is-${comment.requestStatus ?? 'pending'}`}>
                         <span>
                           📅 Asked to move the due date to{' '}
-                          <b>{new Date(comment.requestedDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
+                          <b>{formatDay(comment.requestedDueDate)}</b>
                           {' · '}
                           {comment.requestStatus === 'approved' ? 'Approved' : comment.requestStatus === 'declined' ? 'Declined' : 'Waiting for a manager'}
                         </span>
