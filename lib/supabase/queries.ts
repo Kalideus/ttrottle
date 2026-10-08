@@ -12,6 +12,8 @@ export type Project = {
   created_by: string | null
   created_at: string
   is_private?: boolean
+  // takes tickets from people outside the project (migration 031)
+  accepts_tickets?: boolean
 }
 
 export type Heading = {
@@ -47,6 +49,9 @@ export type Task = {
   comment_count?: number
   project?: { id: string; name: string; color: string } | null
   deletedByProfile?: Profile | null
+  // set when the task came in as a ticket: who raised it (migration 031)
+  ticket_by?: string | null
+  requester?: Profile | null
 }
 
 export type Comment = {
@@ -86,7 +91,7 @@ export type Notification = {
   id: string
   user_id: string
   task_id: string
-  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated'
+  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket'
   actor_id: string
   comment_id: string | null
   read_at: string | null
@@ -379,6 +384,8 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   const assigneeIds = new Set<string>()
   ;(tasks ?? []).forEach((task) => {
     if (task.assignee_id) assigneeIds.add(task.assignee_id)
+    // whoever raised a ticket is usually not a project member, so they're looked up here too
+    if (task.ticket_by) assigneeIds.add(task.ticket_by)
     ;(task.subtasks ?? []).forEach((st: Task) => st.assignee_id && assigneeIds.add(st.assignee_id))
   })
 
@@ -407,6 +414,7 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   const normalized = (tasks ?? []).map((task) => ({
     ...task,
     assignee: task.assignee_id ? profileMap.get(task.assignee_id) ?? null : null,
+    requester: task.ticket_by ? profileMap.get(task.ticket_by) ?? null : null,
     subtasks: (task.subtasks ?? [])
       .filter((subtask: Task) => !subtask.deleted_at)
       .map((subtask: Task) => ({
@@ -986,6 +994,45 @@ export async function getAllProfilesAdmin(supabase: SupabaseClient) {
 // Manager's answer to an extension request; the date itself moves via updateTask (migration 026 guards both)
 export async function answerExtensionRequest(supabase: SupabaseClient, commentId: string, approve: boolean) {
   return supabase.from('comments').update({ request_status: approve ? 'approved' : 'declined' }).eq('id', commentId)
+}
+
+// Tickets (migration 031): a request sent to a team's project by someone who isn't in it.
+export type TicketProject = { id: string; name: string; icon: string; color: string }
+
+export type Ticket = {
+  id: string
+  name: string
+  description: string | null
+  due_date: string | null
+  completed: boolean
+  completed_at: string | null
+  deleted_at: string | null
+  created_at: string
+  project_name: string | null
+  project_icon: string | null
+  project_color: string | null
+  assignee_name: string | null
+}
+
+export async function getTicketProjects(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc('ticket_projects')
+  return { data: (data ?? []) as TicketProject[], error }
+}
+
+export async function createTicket(
+  supabase: SupabaseClient,
+  { project_id, name, description, due_date }: { project_id: string; name: string; description?: string | null; due_date?: string | null }
+) {
+  return supabase.rpc('create_ticket', { p_project_id: project_id, p_name: name, p_description: description ?? null, p_due_date: due_date ?? null })
+}
+
+export async function getMyTickets(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc('my_tickets')
+  return { data: (data ?? []) as Ticket[], error }
+}
+
+export async function setAcceptsTickets(supabase: SupabaseClient, projectId: string, on: boolean) {
+  return supabase.rpc('set_accepts_tickets', { p_project_id: projectId, p_on: on })
 }
 
 // project_id → my role, for the manager-only controls (lock a due date, answer extension requests)

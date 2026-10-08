@@ -29,6 +29,9 @@ interface ProjectHeaderProps {
   onProjectUpdate: (updates: { name?: string; color?: string; icon?: string }) => Promise<void>;
   onProjectArchive: () => void;
   onProjectDelete: () => void;
+  acceptsTickets?: boolean;
+  // only passed for people who may change it (project managers and super admins)
+  onAcceptsTicketsChange?: (on: boolean) => void;
 }
 
 export function ProjectHeader({
@@ -44,6 +47,8 @@ export function ProjectHeader({
   onProjectUpdate,
   onProjectArchive,
   onProjectDelete,
+  acceptsTickets = false,
+  onAcceptsTicketsChange,
 }: ProjectHeaderProps) {
   const visibleMembers = members.slice(0, 3);
   const [showEdit, setShowEdit] = useState(false);
@@ -209,6 +214,18 @@ export function ProjectHeader({
                   ))}
                 </div>
               </div>
+
+              {onAcceptsTicketsChange && !isPrivate && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', borderTop: '1px solid var(--border)', padding: '12px 0', cursor: 'pointer', fontSize: '13px', color: 'var(--text)' }}>
+                  <input type="checkbox" checked={acceptsTickets} onChange={(e) => onAcceptsTicketsChange(e.target.checked)} style={{ marginTop: 2 }} />
+                  <span>
+                    Accept tickets
+                    <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Anyone with an account can send this project a request. They only ever see their own.
+                    </span>
+                  </span>
+                </label>
+              )}
 
               {(canArchive || canDelete) && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>

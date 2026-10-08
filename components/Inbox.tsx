@@ -9,7 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 
 export interface NotificationItem {
   id: string;
-  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated';
+  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket';
   taskName: string;
   taskId?: string | null;
   projectId?: string | null;
@@ -54,6 +54,7 @@ function phrase(n: NotificationItem) {
   if (n.type === 'comment') return n.detail ? `commented “${n.detail}”` : 'commented';
   if (n.type === 'mention') return 'mentioned you';
   if (n.type === 'assigned') return 'assigned it to you';
+  if (n.type === 'ticket') return 'raised it as a ticket';
   if (n.type === 'completed') return 'completed it';
   if (n.type === 'due_soon') return 'it is due soon';
   return n.detail ?? 'updated it';
@@ -68,7 +69,7 @@ function groupSummary(group: NotificationItem[]) {
 }
 
 // A grouped row's headline uses its most important notification: a mention beats an edit.
-const RANK: NotificationItem['type'][] = ['mention', 'assigned', 'comment', 'completed', 'due_soon', 'updated'];
+const RANK: NotificationItem['type'][] = ['mention', 'ticket', 'assigned', 'comment', 'completed', 'due_soon', 'updated'];
 const headOf = (group: NotificationItem[]) => [...group].sort((a, b) => RANK.indexOf(a.type) - RANK.indexOf(b.type))[0];
 
 function relativeTime(iso: string) {
@@ -230,6 +231,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   {notif.type === 'comment' && `${notif.actorName} commented on "${notif.taskName}"`}
                   {notif.type === 'mention' && `${notif.actorName} mentioned you in "${notif.taskName}"`}
                   {notif.type === 'assigned' && `${notif.actorName} assigned you "${notif.taskName}"`}
+                  {notif.type === 'ticket' && `${notif.actorName} raised a ticket: "${notif.taskName}"`}
                   {notif.type === 'due_soon' && `"${notif.taskName}" is due soon`}
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
                   {notif.type === 'updated' && `${actorList(actors)} updated "${notif.taskName}"`}

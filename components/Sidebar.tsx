@@ -1,16 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy, Ticket } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface SidebarProps {
-  activeSection: 'my-tasks' | 'inbox' | 'projects';
+  activeSection: 'my-tasks' | 'inbox' | 'tickets' | 'projects';
   activeProjectId?: string;
   projects: Project[];
   notificationsBadge?: number;
-  onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
+  onSectionChange: (section: 'my-tasks' | 'inbox' | 'tickets' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectHover?: (projectId: string) => void;
   onProjectCreate: () => void;
@@ -21,6 +21,7 @@ interface SidebarProps {
   onProjectRename: (projectId: string, name: string) => void;
   onProjectDelete: (projectId: string) => void;
   onCreateTask: () => void;
+  onCreateTicket: () => void;
   onInvite: () => void;
 }
 
@@ -39,6 +40,7 @@ export function Sidebar({
   onProjectRename,
   onProjectDelete,
   onCreateTask,
+  onCreateTicket,
   onInvite,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState(true);
@@ -58,6 +60,11 @@ export function Sidebar({
         <Plus size={20} />
         <span>Create task</span>
       </button>
+      {/* a request for another team's project; see CreateTicketModal */}
+      <button className="sidebar-create-btn is-ticket" onClick={onCreateTicket}>
+        <Ticket size={18} />
+        <span>Create ticket</span>
+      </button>
 
       <div className="sidebar-nav">
         <button
@@ -75,6 +82,14 @@ export function Sidebar({
           <Bell size={20} className="sidebar-nav-icon" />
           <span>Notifications</span>
           {notificationsBadge > 0 && <div className="sidebar-nav-badge">{notificationsBadge}</div>}
+        </button>
+
+        <button
+          className={`sidebar-nav-item ${activeSection === 'tickets' ? 'active' : ''}`}
+          onClick={() => onSectionChange('tickets')}
+        >
+          <Ticket size={20} className="sidebar-nav-icon" />
+          <span>My tickets</span>
         </button>
       </div>
 

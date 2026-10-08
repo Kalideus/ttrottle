@@ -52,7 +52,10 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  // Several tasks can show their subtasks at once: collapsing one because another was clicked
+  // shifted the whole list under the pointer.
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+  const expandTask = (taskId: string) => setExpandedTaskIds((prev) => (prev.has(taskId) ? prev : new Set(prev).add(taskId)));
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   // Below this width (e.g. with the task panel open) rows drop to just name + due date.
@@ -95,7 +98,11 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   };
 
   const toggleTaskExpand = (taskId: string) => {
-    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(taskId)) next.add(taskId);
+      return next;
+    });
   };
 
   const toggleTaskComplete = (task: Task, e: React.MouseEvent) => {
@@ -247,7 +254,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
   const renderTask = (task: Task, siblings: Task[], isLevel2 = false) => {
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-    const isExpanded = expandedTaskId === task.id;
+    const isExpanded = expandedTaskIds.has(task.id);
     const isCompleted = task.completed;
     const siblingIndex = siblings.findIndex((t) => t.id === task.id);
     const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : null;
@@ -311,13 +318,14 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             e.preventDefault();
             e.stopPropagation();
             onMakeSubtask?.(draggedTaskId, task.id);
-            setExpandedTaskId(task.id); // show where it landed
+            expandTask(task.id); // show where it landed
             setDragOverTaskId(null);
             setDraggedTaskId(null);
           }}
           onClick={() => {
             onTaskSelect(task.id);
-            if (hasSubtasks) toggleTaskExpand(task.id);
+            // opening a task shows its subtasks and leaves them open; the arrow is what collapses them
+            if (hasSubtasks) expandTask(task.id);
           }}
           draggable={!(isLevel2 && flat)}
           onDragStart={(e) => {
@@ -408,6 +416,12 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
             {projectChip && <span className="task-project-inline" style={{ flexShrink: 0 }}>{projectChip}</span>}
 
+            {task.ticket_by && (
+              <span className="ticket-chip" title="Raised as a ticket from outside the project" style={{ backgroundColor: hexToRgba('#C98A1B', 0.15), color: '#C98A1B' }}>
+                Ticket{task.requester ? ` · ${task.requester.name}` : ''}
+              </span>
+            )}
+
             {(task.tags ?? []).length > 0 && (
               <div style={{ display: 'flex', gap: '4px' }}>
                 {task.tags!.map((tag) => (
@@ -487,7 +501,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenMenuTaskId(null);
-                          setExpandedTaskId(task.id);
+                          expandTask(task.id);
                           setAddingSubtaskTo(task.id);
                         }}
                         style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}
@@ -525,7 +539,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                             const [kind, id] = [e.target.value.slice(0, 2), e.target.value.slice(2)];
                             setOpenMenuTaskId(null);
                             if (kind === 's:') moveToSection(task.id, id);
-                            if (kind === 't:') { onMakeSubtask?.(task.id, id); setExpandedTaskId(id); }
+                            if (kind === 't:') { onMakeSubtask?.(task.id, id); expandTask(id); }
                           }}
                           style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', color: 'inherit', fontSize: 'inherit', padding: '4px 0', cursor: 'pointer' }}
                         >

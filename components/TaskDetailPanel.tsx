@@ -325,6 +325,12 @@ export function TaskDetailPanel({
           </div>
         )}
 
+        {task.ticket_by && (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '0 8px', margin: '-6px 0 16px' }}>
+            Ticket from {task.requester?.name ?? 'someone outside the project'}. They can see this task and its comments.
+          </div>
+        )}
+
         {/* Assignee & Due date */}
         <div className="detail-field-block" style={{ display: 'flex', flexDirection: 'row', gap: '20px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>

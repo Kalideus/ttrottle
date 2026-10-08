@@ -10,6 +10,8 @@ import type { NewTaskSpec } from '@/lib/csvImport';
 import { repeatLabel, type Repeat } from '@/lib/repeat';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { CreateTicketModal, type NewTicketInput } from '@/components/CreateTicketModal';
+import { Tickets } from '@/components/Tickets';
 import { MembersModal } from '@/components/MembersModal';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TukTukCelebration } from '@/components/TukTukCelebration';
@@ -30,6 +32,12 @@ import {
   createProject,
   createProjectWithContent,
   getMyProjectRoles,
+  getTicketProjects,
+  createTicket,
+  getMyTickets,
+  setAcceptsTickets,
+  type Ticket,
+  type TicketProject,
   answerExtensionRequest,
   projectToPlan,
   updateProject,
@@ -110,7 +118,7 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
 
 export default function AppPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<'my-tasks' | 'inbox' | 'projects'>('my-tasks');
+  const [activeSection, setActiveSection] = useState<'my-tasks' | 'inbox' | 'tickets' | 'projects'>('my-tasks');
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
@@ -162,6 +170,11 @@ export default function AppPage() {
   const [duplicateFrom, setDuplicateFrom] = useState<Project | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  // Tickets: requests I've sent to other teams' projects. null = the Create ticket dialog is closed.
+  const [ticketTeams, setTicketTeams] = useState<TicketProject[] | null>(null);
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // on phones the sidebar is a slide-over drawer: start closed, close after picking something
@@ -1161,6 +1174,38 @@ export default function AppPage() {
     window.location.href = '/login';
   };
 
+  const loadTickets = useCallback(async () => {
+    setTicketsLoading(true);
+    const { data } = await getMyTickets(supabase);
+    setTickets(data);
+    setTicketsLoading(false);
+  }, [supabase]);
+  useEffect(() => {
+    if (activeSection === 'tickets') void loadTickets();
+  }, [activeSection, loadTickets]);
+
+  const openCreateTicket = async () => {
+    setShowCreateTicket(true);
+    setTicketTeams((await getTicketProjects(supabase)).data);
+  };
+
+  const submitTicket = async (ticket: NewTicketInput) => {
+    const { data: id, error } = await createTicket(supabase, ticket);
+    if (error) return error.message;
+    setShowCreateTicket(false);
+    // show it where its progress can be followed
+    setActiveSection('tickets');
+    setSelectedTaskId(id as string);
+    void loadTickets();
+    return null;
+  };
+
+  const handleAcceptsTickets = (on: boolean) => {
+    const projectId = activeProjectId;
+    setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, accepts_tickets: on } : p)));
+    persist(async () => must(await setAcceptsTickets(supabase, projectId, on)), 'projects');
+  };
+
   const handleCommentAdd = async (body: string, mentions: string[]) => {
     if (!selectedTaskId || !currentUserId) return;
     const taskId = selectedTaskId;
@@ -1245,7 +1290,12 @@ export default function AppPage() {
     }
     // Asana-style: stay in the inbox and open the task in the side panel. Loading
     // the task's project in the background is what makes the panel able to find it.
-    if (notif?.projectId && notif?.taskId) {
+    if (notif?.taskId && notif.projectId && !projects.some((p) => p.id === notif.projectId)) {
+      // a ticket I sent to a project I'm not in: it lives in My tickets, not in a project I can open
+      setActiveSection('tickets');
+      setSelectedTaskId(notif.taskId);
+      setFocusCommentId(notif.commentId ?? null);
+    } else if (notif?.projectId && notif?.taskId) {
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
       setFocusCommentId(notif.commentId ?? null);
@@ -1393,6 +1443,7 @@ export default function AppPage() {
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showCreateTicket && <CreateTicketModal teams={ticketTeams} onCreate={submitTicket} onClose={() => setShowCreateTicket(false)} />}
 
       {celebration && <TukTukCelebration key={celebration} onDone={endCelebration} />}
 
@@ -1417,7 +1468,8 @@ export default function AppPage() {
           notificationsBadge={notificationsBadge}
           onSectionChange={(section) => {
             // don't carry a task open elsewhere into the inbox's side panel
-            if (section === 'inbox') setSelectedTaskId(null);
+            // (My tickets uses the selected task as its open ticket, so the same goes for it, both ways)
+            if (section === 'inbox' || section === 'tickets' || activeSection === 'tickets') setSelectedTaskId(null);
             setActiveSection(section);
             closeSidebarOnPhone();
           }}
@@ -1434,6 +1486,7 @@ export default function AppPage() {
             persist(async () => must(await updateProject(supabase, projectId, { name })), 'projects');
           }}
           onCreateTask={handleCreateTaskClick}
+          onCreateTicket={openCreateTicket}
           onInvite={handleInvite}
         />
 
@@ -1455,6 +1508,8 @@ export default function AppPage() {
                 onProjectUpdate={handleProjectUpdate}
                 onProjectArchive={handleProjectArchive}
                 onProjectDelete={() => handleProjectDelete()}
+                acceptsTickets={!!currentProject?.accepts_tickets}
+                onAcceptsTicketsChange={canManage(currentProject?.id) ? handleAcceptsTickets : undefined}
               />
 
               <Toolbar
@@ -1584,6 +1639,24 @@ export default function AppPage() {
                 {taskPanel}
               </div>
             </>
+          )}
+
+          {activeSection === 'tickets' && (
+            <div className="app-content">
+              <Tickets
+                tickets={tickets}
+                loading={ticketsLoading}
+                openTicketId={selectedTaskId}
+                onToggle={(id) => setSelectedTaskId((current) => (current === id ? null : id))}
+                onCreate={openCreateTicket}
+                comments={comments}
+                commentsLoading={commentsLoading}
+                onCommentAdd={handleCommentAdd}
+                onCommentEdit={handleCommentEdit}
+                onCommentDelete={handleCommentDelete}
+                onCommentLike={handleCommentLike}
+              />
+            </div>
           )}
 
           {activeSection === 'inbox' && (
