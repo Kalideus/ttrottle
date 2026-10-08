@@ -1,6 +1,6 @@
 'use client';
 
-import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock } from 'lucide-react';
+import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock, BellOff } from 'lucide-react';
 import { repeatOptions, repeatLabel } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, Project, ProjectMember, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
@@ -34,6 +34,8 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   /** Shown outside the task's project (My tasks): jump to the task there. */
   onOpenInProject?: () => void;
+  // Opened from the inbox with notifications still listed for this task: clears them without leaving the task.
+  onClearNotification?: () => void;
   /** The task's project, shown as a coloured label above the title. */
   project?: Project | null;
   onTaskUpdate: (taskId: string, updates: Record<string, unknown>) => Promise<void>;
@@ -79,6 +81,7 @@ export function TaskDetailPanel({
   onParentSelect,
   onClose,
   onOpenInProject,
+  onClearNotification,
   project,
   onTaskUpdate,
   onTaskDelete,
@@ -118,13 +121,13 @@ export function TaskDetailPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, anyEditorOpen]);
 
-  // Click outside the panel closes it — but clicking another task row (to switch)
-  // or the app chrome does not.
+  // Click outside the panel closes it — but clicking another task row or notification
+  // (to switch, or to tick the notification off while this stays open) or the app chrome does not.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
       if (panelRef.current?.contains(t)) return;
-      if (t.closest('.task-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar')) return;
+      if (t.closest('.task-row') || t.closest('.inbox-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar')) return;
       onClose();
     };
     document.addEventListener('mousedown', onDown);
@@ -181,6 +184,12 @@ export function TaskDetailPanel({
         </button>
 
         <div className="detail-panel-actions" style={{ position: 'relative' }}>
+          {onClearNotification && (
+            <button className="inbox-head-btn" title="Clear this from your notifications" onClick={onClearNotification}>
+              <BellOff size={15} />
+              Clear
+            </button>
+          )}
           {onOpenInProject && (
             <button className="detail-panel-menu-btn" title="Open in project" aria-label="Open in project" onClick={onOpenInProject}>
               <ExternalLink size={18} />

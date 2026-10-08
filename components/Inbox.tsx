@@ -170,6 +170,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
           return (
           <div
             key={group[0].id}
+            className="inbox-row" // the open task panel stays open for clicks on these (see TaskDetailPanel)
             role="button"
             tabIndex={0}
             onClick={() => onNotificationClick(ids)}

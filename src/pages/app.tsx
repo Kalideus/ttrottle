@@ -1346,6 +1346,8 @@ export default function AppPage() {
   };
 
   // The task side panel is the same in every section; outside its project it also links back to it.
+  // in the inbox, the open task can be ticked off the list from its own panel (on a phone the panel hides the list)
+  const openTaskNotificationIds = activeSection === 'inbox' && selectedTask ? notifications.filter((n) => n.taskId === selectedTask.id).map((n) => n.id) : [];
   const taskPanel = selectedTask && (
     <>
       <div className="detail-panel-backdrop" onClick={() => setSelectedTaskId(null)} />
@@ -1366,6 +1368,7 @@ export default function AppPage() {
           onOpenInProject: () => selectedTask.project_id && openInProject(selectedTask.project_id, selectedTask.id),
           project: projects.find((p) => p.id === selectedTask.project_id),
         })}
+        onClearNotification={openTaskNotificationIds.length ? () => handleNotificationsClear(openTaskNotificationIds) : undefined}
         onSubtaskSelect={setSelectedTaskId}
         parentTaskName={parentTask?.name ?? null}
         onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
