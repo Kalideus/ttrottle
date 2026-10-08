@@ -381,36 +381,64 @@ export function TaskDetailPanel({
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="detail-field-label" style={{ display: 'flex', alignItems: 'center' }}>
-              <FieldIcon icon={Calendar} color="#E8833A" />
-              Due date
+            <div className="detail-field-label due-date-label">
+              <span className="due-date-label-title">
+                <FieldIcon icon={Calendar} color="#E8833A" />
+                Due date
+              </span>
               {canManage ? (
                 <button
                   type="button"
-                  title={task.due_locked ? 'Locked: only managers can change it. Click to unlock' : 'Lock the date so only managers can change it'}
+                  className={`due-date-lock-btn${task.due_locked ? ' is-locked' : ''}`}
+                  title={task.due_locked ? 'Unlock due date' : 'Lock due date'}
                   aria-pressed={!!task.due_locked}
                   onClick={() => onTaskUpdate(task.id, { due_locked: !task.due_locked })}
-                  style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: task.due_locked ? 'var(--accent)' : 'var(--text-muted)' }}
                 >
-                  {task.due_locked ? <Lock size={14} /> : <Unlock size={14} />}
+                  {task.due_locked ? <Unlock size={13} /> : <Lock size={13} />}
+                  {task.due_locked ? 'Unlock' : 'Lock'}
                 </button>
               ) : (
-                task.due_locked && <Lock size={14} aria-label="Locked by a manager" style={{ marginLeft: 6, color: 'var(--accent)' }} />
+                task.due_locked && (
+                  <span className="due-date-lock-status" title="Locked by a manager">
+                    <Lock size={13} />
+                    Locked
+                  </span>
+                )
               )}
             </div>
             <div
               className="detail-field-value"
               onClick={() => !dateReadOnly && setMenu(menu === 'dueDate' ? null : 'dueDate')}
               title={dateReadOnly ? 'A manager has locked this date' : undefined}
-              style={{ cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, cursor: dateReadOnly ? 'default' : 'pointer', position: 'relative', color: isOverdue ? '#D64545' : undefined, fontWeight: isOverdue ? 600 : undefined }}
             >
-              {task.due_date
-                ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                : 'No due date'}
-              {task.repeat && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
-                  <Repeat size={12} /> {repeatLabel(task.repeat, task.due_date)}
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span>
+                  {task.due_date
+                    ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'No due date'}
                 </span>
+                {task.repeat && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
+                    <Repeat size={12} /> {repeatLabel(task.repeat, task.due_date)}
+                  </span>
+                )}
+              </span>
+              {task.due_date && !dateReadOnly && (
+                <button
+                  type="button"
+                  className="due-date-clear-btn"
+                  title="Remove due date"
+                  aria-label="Remove due date"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenu(null);
+                    void onTaskUpdate(task.id, { due_date: null });
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <X size={14} />
+                </button>
               )}
 
               {menu === 'dueDate' && (
