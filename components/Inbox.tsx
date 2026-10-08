@@ -27,11 +27,15 @@ export interface NotificationItem {
 interface InboxProps {
   notifications: NotificationItem[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  unreadCount: number;
   openTaskId: string | null; // task showing in the side panel, highlighted here
   projects: { id: string; name: string; color: string }[];
   // each takes every notification id in the clicked row (a row can be a grouped run of updates)
   onNotificationClick: (ids: string[]) => void;
   onOpenProject: (projectId: string, taskId?: string | null) => void;
+  onLoadMore: () => void;
   onMarkAllRead: () => void;
   onMarkRead: (ids: string[], read: boolean) => void;
   onClear: (ids: string[]) => void;
@@ -77,9 +81,8 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
-export function Inbox({ notifications, loading, openTaskId, projects, onNotificationClick, onOpenProject, onMarkAllRead, onMarkRead, onClear, onClearAll }: InboxProps) {
+export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCount, openTaskId, projects, onNotificationClick, onOpenProject, onLoadMore, onMarkAllRead, onMarkRead, onClear, onClearAll }: InboxProps) {
   const groups = groupNotifications(notifications);
-  const unreadCount = groups.filter((g) => g.some((n) => !n.readAt)).length; // rows, matching what's on screen
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[]; unread: boolean } | null>(null);
 
@@ -136,7 +139,7 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
       {confirmClearAll && (
         <ConfirmModal
           title="Clear all notifications?"
-          message={`This removes all ${notifications.length} notification${notifications.length === 1 ? '' : 's'} from your inbox. It can't be undone.`}
+          message="This removes all notifications from your inbox. It can't be undone."
           confirmLabel="Clear all"
           onConfirm={() => {
             setConfirmClearAll(false);
@@ -259,6 +262,7 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
                     e.stopPropagation();
                     onOpenProject(project.id, notif.taskId);
                   }}
+                  onKeyDown={(e) => e.stopPropagation()}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color, flexShrink: 0 }} />
                   <span className="inbox-project-name">{project.name}</span> →
@@ -304,6 +308,17 @@ export function Inbox({ notifications, loading, openTaskId, projects, onNotifica
           </div>
           );
         })}
+        {(hasMore || loadingMore) && (
+          <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            {loadingMore ? (
+              'Loading older notifications...'
+            ) : (
+              <button className="inbox-head-btn" style={{ margin: '0 auto' }} onClick={onLoadMore}>
+                Load older notifications
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {menu && (

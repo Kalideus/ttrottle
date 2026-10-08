@@ -9,7 +9,6 @@ interface SidebarProps {
   activeSection: 'my-tasks' | 'inbox' | 'projects';
   activeProjectId?: string;
   projects: Project[];
-  myTasksBadge?: number;
   notificationsBadge?: number;
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
@@ -29,7 +28,6 @@ export function Sidebar({
   activeSection,
   activeProjectId,
   projects,
-  myTasksBadge = 0,
   notificationsBadge = 0,
   onSectionChange,
   onProjectSelect,
@@ -68,7 +66,6 @@ export function Sidebar({
         >
           <CheckSquare size={20} className="sidebar-nav-icon" />
           <span>My tasks</span>
-          {myTasksBadge > 0 && <div className="sidebar-nav-badge">{myTasksBadge}</div>}
         </button>
 
         <button

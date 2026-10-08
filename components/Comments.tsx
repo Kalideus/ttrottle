@@ -51,6 +51,17 @@ function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
 }
 
+function formatCommentTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  const day = date.getDate();
+  const suffix = day % 100 >= 11 && day % 100 <= 13
+    ? 'th'
+    : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] ?? 'th');
+  const dateLabel = `${day}${suffix} ${date.toLocaleString('en-GB', { month: 'short' })} ${date.getFullYear()}`;
+  const timeLabel = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return `${dateLabel}, ${timeLabel}`;
+}
+
 function extractMentions(body: string, users: { id: string; name: string }[]): string[] {
   const tokens = body.match(/@([a-zA-Z][\w'-]*)/g) ?? [];
   const ids = new Set<string>();
@@ -242,7 +253,7 @@ export function Comments({
                         dateTime={comment.createdAt}
                         style={{ fontSize: '12px', color: 'var(--text-muted)' }}
                       >
-                        {new Date(comment.createdAt).toLocaleString()}
+                        {formatCommentTimestamp(comment.createdAt)}
                       </time>
                       {comment.editedAt && (
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>

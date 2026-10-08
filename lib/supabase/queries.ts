@@ -765,7 +765,7 @@ export async function getTaskTags(supabase: SupabaseClient, taskId: string) {
   return supabase.from('task_tags').select('tags(*)').eq('task_id', taskId)
 }
 
-export async function getNotifications(supabase: SupabaseClient, userId: string, { limit = 50 } = {}) {
+export async function getNotifications(supabase: SupabaseClient, userId: string, { limit = 50, offset = 0 } = {}) {
   // Slack-style: the feed keeps read items as history; unread ones are highlighted
   // and counted in the badge (getUnreadCount).
   const { data: notifications, error } = await supabase
@@ -776,7 +776,7 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   if (error) return { data: [], error }
 

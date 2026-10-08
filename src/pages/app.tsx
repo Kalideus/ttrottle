@@ -53,8 +53,6 @@ import {
   getMyTasks,
   getCurrentProfile,
   updateProfile,
-  getLastSeen,
-  touchLastSeen,
   getNotifications,
   getUnreadCount,
   markNotificationsRead,
@@ -81,6 +79,7 @@ import {
 } from '@/lib/supabase/queries';
 
 const DAY_MS = 86400000;
+const NOTIFICATIONS_PAGE_SIZE = 50;
 
 // Supabase returns { error } instead of throwing; background saves need a throw to report the failure.
 function must<T extends { error: unknown }>(result: T): T {
@@ -150,11 +149,15 @@ export default function AppPage() {
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const notificationsRef = useRef<NotificationItem[]>([]);
+  notificationsRef.current = notifications;
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsLoadingMore, setNotificationsLoadingMore] = useState(false);
+  const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
+  const loadingMoreNotifications = useRef(false);
+  const notificationLoadRequest = useRef(0);
   const [notificationsBadge, setNotificationsBadge] = useState(0);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  // Timestamp of my previous session; "My tasks" badges tasks assigned since then.
-  const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -182,11 +185,6 @@ export default function AppPage() {
   // (e.g. "jsmith23") -- treat anything with no space as "not set yet" and
   // force the profile modal until they enter a real first + last name.
   const needsFullName = !!currentProfile && !currentProfile.name?.trim().includes(' ');
-
-  const myTasksBadge = useMemo(
-    () => (lastLoginAt ? myTasks.filter((t) => t.created_at && t.created_at > lastLoginAt).length : 0),
-    [myTasks, lastLoginAt]
-  );
 
   // Shared task links: /app?project=<id>&task=<id> opens that task in its project.
   // The query is then cleared so a refresh or later navigation doesn't re-open it.
@@ -289,42 +287,70 @@ export default function AppPage() {
     });
   }, [activeSection, currentUserId, currentProfile, supabase]);
 
-  useEffect(() => {
-    if (!currentUserId) return;
-    // Read my previous session time (badge cutoff), then stamp this session.
-    getLastSeen(supabase, currentUserId).then((ts) => {
-      setLastLoginAt(ts);
-      void touchLastSeen(supabase, currentUserId);
-    });
-  }, [currentUserId, supabase]);
-
   const loadNotificationsBadge = useCallback(async () => {
     if (!currentUserId) return;
     setNotificationsBadge(await getUnreadCount(supabase, currentUserId));
   }, [currentUserId, supabase]);
 
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async ({ append = false } = {}) => {
     if (!currentUserId) return;
-    const { data } = await getNotifications(supabase, currentUserId);
-    setNotifications(
-      (data ?? []).map((n: any) => ({
-        id: n.id,
-        type: n.type,
-        taskName: n.task?.name ?? 'a task',
-        taskId: n.task?.id ?? null,
-        projectId: n.task?.project_id ?? null,
-        commentId: n.comment_id ?? null,
-        dueDate: n.task?.due_date ?? null,
-        priority: n.task?.priority ?? null,
-        completed: !!n.task?.completed,
-        assignee: n.task_assignee ?? null,
-        actorName: n.actor?.name ?? 'Someone',
-        detail: n.detail ?? null,
-        createdAt: n.created_at,
-        readAt: n.read_at,
-      }))
+    const requestId = append ? notificationLoadRequest.current : ++notificationLoadRequest.current;
+    const loadedCount = notificationsRef.current.length;
+    const offsets = append
+      ? [loadedCount]
+      : Array.from(
+          { length: Math.max(1, Math.ceil(Math.max(NOTIFICATIONS_PAGE_SIZE, loadedCount) / NOTIFICATIONS_PAGE_SIZE)) },
+          (_, page) => page * NOTIFICATIONS_PAGE_SIZE
+        );
+    const pages = await Promise.all(
+      offsets.map((offset) => getNotifications(supabase, currentUserId, { limit: NOTIFICATIONS_PAGE_SIZE, offset }))
     );
+    const failedPage = pages.find((page) => page.error);
+    if (failedPage?.error) {
+      console.error('Error loading notifications:', failedPage.error);
+      return;
+    }
+    if (requestId !== notificationLoadRequest.current) return;
+    const rows = pages.flatMap((page) => page.data ?? []);
+    const mapped = rows.map((n: any) => ({
+      id: n.id,
+      type: n.type,
+      taskName: n.task?.name ?? 'a task',
+      taskId: n.task?.id ?? null,
+      projectId: n.task?.project_id ?? null,
+      commentId: n.comment_id ?? null,
+      dueDate: n.task?.due_date ?? null,
+      priority: n.task?.priority ?? null,
+      completed: !!n.task?.completed,
+      assignee: n.task_assignee ?? null,
+      actorName: n.actor?.name ?? 'Someone',
+      detail: n.detail ?? null,
+      createdAt: n.created_at,
+      readAt: n.read_at,
+    }));
+    if (append) {
+      setNotifications((prev) => {
+        const existing = new Set(prev.map((n) => n.id));
+        return [...prev, ...mapped.filter((n) => !existing.has(n.id))]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      });
+    } else {
+      setNotifications(mapped);
+    }
+    setHasMoreNotifications((pages[pages.length - 1]?.data?.length ?? 0) === NOTIFICATIONS_PAGE_SIZE);
   }, [currentUserId, supabase]);
+
+  const loadMoreNotifications = useCallback(async () => {
+    if (!hasMoreNotifications || loadingMoreNotifications.current) return;
+    loadingMoreNotifications.current = true;
+    setNotificationsLoadingMore(true);
+    try {
+      await loadNotifications({ append: true });
+    } finally {
+      loadingMoreNotifications.current = false;
+      setNotificationsLoadingMore(false);
+    }
+  }, [hasMoreNotifications, loadNotifications]);
 
   useEffect(() => {
     void loadNotificationsBadge();
@@ -1340,7 +1366,6 @@ export default function AppPage() {
           activeSection={activeSection}
           activeProjectId={activeProjectId}
           projects={projects}
-          myTasksBadge={myTasksBadge}
           notificationsBadge={notificationsBadge}
           onSectionChange={(section) => {
             // don't carry a task open elsewhere into the inbox's side panel
@@ -1588,10 +1613,14 @@ export default function AppPage() {
               <Inbox
                 notifications={notifications}
                 loading={notificationsLoading}
+                loadingMore={notificationsLoadingMore}
+                hasMore={hasMoreNotifications}
+                unreadCount={notificationsBadge}
                 openTaskId={selectedTask?.id ?? null}
                 projects={projects}
                 onNotificationClick={handleNotificationClick}
                 onOpenProject={openInProject}
+                onLoadMore={() => void loadMoreNotifications()}
                 onMarkAllRead={handleMarkAllRead}
                 onMarkRead={handleNotificationsMarkRead}
                 onClear={handleNotificationsClear}
