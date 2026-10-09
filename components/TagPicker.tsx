@@ -46,6 +46,7 @@ export function TagPicker({
       setNewTagName('');
       setNewTagColor('#4573D2');
       setShowNewTagForm(false);
+      setShowDropdown(false);
     } finally {
       setIsSubmitting(false);
     }

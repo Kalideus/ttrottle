@@ -482,8 +482,11 @@ export function TaskDetailPanel({
                     ref={openPicker}
                     defaultValue={task.due_date ?? ''}
                     onClick={(e) => e.stopPropagation()}
-                    // stays open so the repeat can be set straight after; click outside to close
-                    onChange={(e) => onTaskUpdate(task.id, { due_date: e.target.value || null })}
+                    onChange={(e) => {
+                      onTaskUpdate(task.id, { due_date: e.target.value || null });
+                      // picking a date closes it; a half-typed one (year 0002, or a cleared field) doesn't
+                      if (e.target.value >= '1900') setMenu(null);
+                    }}
                     style={{
                       width: '100%',
                       padding: '8px',
