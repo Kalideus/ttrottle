@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { photosAsText } from '@/lib/taskPhotos'
 import type { Repeat } from '@/lib/repeat'
 import type { NewTaskSpec } from '@/lib/csvImport'
 
@@ -733,7 +734,8 @@ export async function createComment(
     ])
     ;(result.data as Record<string, unknown>).author = authorProfile ?? null
 
-    const snippet = body.length > 140 ? `${body.slice(0, 140)}…` : body
+    const text = photosAsText(body)
+    const snippet = text.length > 140 ? `${text.slice(0, 140)}…` : text
     const row = (user_id: string, type: string) => ({ user_id, task_id, type, actor_id: author_id, comment_id: result.data.id, detail: snippet })
 
     // followers get a 'comment' notification; mentioned non-followers get a 'mention' one

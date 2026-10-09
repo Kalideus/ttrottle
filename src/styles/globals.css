@@ -2453,6 +2453,9 @@ button.project-members:hover { background: var(--surface-alt); }
 .md ol { list-style: decimal; }
 .md a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .md a:hover { color: var(--text); }
+.md-photo { display: block; max-width: 100%; max-height: 360px; margin: 4px 0; border-radius: 6px; }
+.md-photo.is-loading { width: 120px; height: 80px; background: var(--surface-alt); }
+.md-photo-missing { color: var(--text-muted); font-style: italic; }
 .md code {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
   background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;

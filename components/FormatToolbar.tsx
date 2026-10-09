@@ -1,8 +1,9 @@
 'use client';
 
-import type { KeyboardEvent, RefObject } from 'react';
-import { Bold, Italic, Strikethrough, Code, List, ListOrdered } from 'lucide-react';
+import { useRef, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
+import { Bold, Italic, Strikethrough, Code, List, ListOrdered, ImagePlus } from 'lucide-react';
 import { wrapEdit, listEdit, enterEdit, type Edit } from '@/lib/format';
+import { uploadTaskPhoto } from '@/lib/taskPhotos';
 
 function apply(el: HTMLTextAreaElement, edit: Edit) {
   el.focus();
@@ -25,9 +26,61 @@ const TOOLS: { icon: typeof Bold; label: string; run: Run }[] = [
   { icon: ListOrdered, label: 'Numbered list', run: (v, s, e) => listEdit(v, s, e, 'ol') },
 ];
 
-export function FormatToolbar({ target }: { target: RefObject<HTMLTextAreaElement | null> }) {
+// Uploads the images one by one and drops each in at the cursor, on its own line.
+async function insertPhotos(el: HTMLTextAreaElement, taskId: string, files: File[]) {
+  for (const file of files) {
+    try {
+      const token = await uploadTaskPhoto(taskId, file);
+      if (!el.isConnected) return; // the box was closed while it uploaded
+      const { value, selectionStart: s, selectionEnd: e } = el;
+      const text = `${s > 0 && value[s - 1] !== '\n' ? '\n' : ''}${token}\n`;
+      apply(el, { start: s, end: e, text, selStart: s + text.length, selEnd: s + text.length });
+    } catch (err) {
+      window.alert(`Couldn't add that photo: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+  }
+}
+
+const images = (list: FileList | null) => Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
+
+// Paste or drag a photo straight into a description/comment box: spread onto the textarea.
+export function photoEvents(taskId: string) {
+  return {
+    onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      // copying from Word/Excel puts a picture of the text on the clipboard too; the text wins
+      const files = e.clipboardData.getData('text/plain') ? [] : images(e.clipboardData.files);
+      if (!files.length) return;
+      e.preventDefault();
+      void insertPhotos(e.currentTarget, taskId, files);
+    },
+    onDrop: (e: DragEvent<HTMLTextAreaElement>) => {
+      const files = images(e.dataTransfer.files);
+      if (!files.length) return;
+      e.preventDefault();
+      void insertPhotos(e.currentTarget, taskId, files);
+    },
+  };
+}
+
+// photoTaskId: the task whose folder photos go into; leave it out for a toolbar without the photo button.
+export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLTextAreaElement | null>; photoTaskId?: string }) {
+  const fileRef = useRef<HTMLInputElement>(null);
   return (
     <div className="fmt-toolbar">
+      {photoTaskId && (
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = images(e.target.files);
+            e.target.value = ''; // so picking the same photo again still fires
+            if (target.current) void insertPhotos(target.current, photoTaskId, files);
+          }}
+        />
+      )}
       {TOOLS.map(({ icon: Icon, label, run }) => (
         <button
           key={label}
@@ -44,6 +97,17 @@ export function FormatToolbar({ target }: { target: RefObject<HTMLTextAreaElemen
           <Icon size={14} />
         </button>
       ))}
+      {photoTaskId && (
+        <button
+          type="button"
+          title="Add a photo"
+          aria-label="Add a photo"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => fileRef.current?.click()}
+        >
+          <ImagePlus size={14} />
+        </button>
+      )}
     </div>
   );
 }

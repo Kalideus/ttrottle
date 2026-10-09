@@ -8,7 +8,7 @@ import { MemberAvatar } from '@/components/PeoplePicker';
 import type { ProjectMember } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 import { autoGrow } from '@/lib/autoGrow';
-import { FormatToolbar, formatKeyDown } from './FormatToolbar';
+import { FormatToolbar, formatKeyDown, photoEvents } from './FormatToolbar';
 import { Markdown } from './Markdown';
 
 export interface CommentItem {
@@ -265,9 +265,10 @@ export function Comments({
 
                     {editingId === comment.id ? (
                       <>
-                      <FormatToolbar target={editRef} />
+                      <FormatToolbar target={editRef} photoTaskId={taskId} />
                       <textarea
                         autoFocus
+                        {...photoEvents(taskId)}
                         ref={(el) => {
                           editRef.current = el;
                           autoGrow(el);
@@ -418,10 +419,11 @@ export function Comments({
         {aboveComposer && <div style={{ marginBottom: 12 }}>{aboveComposer}</div>}
 
         <form onSubmit={handleSubmit}>
-          <FormatToolbar target={composerRef} />
+          <FormatToolbar target={composerRef} photoTaskId={taskId} />
           <div style={{ position: 'relative' }}>
             <textarea
               ref={composerRef}
+              {...photoEvents(taskId)}
               value={composerValue}
               onChange={handleComposerChange}
               onSelect={(e) => updateMentionState(composerValue, e.currentTarget.selectionStart)}

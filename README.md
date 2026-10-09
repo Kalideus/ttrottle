@@ -30,5 +30,5 @@ Some things exist only in the live database and not in this folder: the `profile
 
 - **Sign-up is by invite.** A project's owner or manager invites people from the project header; super admins can invite to any project from `/admin/team`.
 - **Roles.** Per project: owner, manager (`admin` in the database) and member. Site-wide: `is_super_admin` and `can_create_projects` on `profiles`, set from `/admin/team`.
-- **Deleting a task is a soft delete.** Super admins restore tasks at `/admin/deleted-tasks`. `vercel.json` schedules `/api/cron/purge-deleted-tasks` nightly, which removes tasks deleted more than 90 days ago for good.
+- **Deleting a task is a soft delete.** Super admins restore tasks at `/admin/deleted-tasks`. `vercel.json` schedules `/api/cron/purge-deleted-tasks` nightly, which removes tasks deleted more than 90 days ago for good, along with their photos. The same run removes the photos (not the task) of tasks completed more than 180 days ago.
 - **Deleting a project is permanent** and takes its tasks and comments with it.

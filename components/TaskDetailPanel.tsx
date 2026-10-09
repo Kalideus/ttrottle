@@ -9,7 +9,7 @@ import { TagPicker, hexToRgba } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { autoGrow } from '@/lib/autoGrow';
 import { openPicker } from '@/lib/openPicker';
-import { FormatToolbar, formatKeyDown } from '@/components/FormatToolbar';
+import { FormatToolbar, formatKeyDown, photoEvents } from '@/components/FormatToolbar';
 import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
 import { isOverdue, formatDay } from '@/lib/dates';
@@ -163,11 +163,11 @@ export function TaskDetailPanel({
     []
   );
 
-  const handleSaveDescription = () => {
+  const handleSaveDescription = (keepEditing = false) => {
     if (description !== (task.description ?? '')) {
       onTaskUpdate(task.id, { description });
     }
-    setIsEditingDescription(false);
+    if (!keepEditing) setIsEditingDescription(false);
   };
 
   return (
@@ -676,9 +676,10 @@ export function TaskDetailPanel({
           <div className="detail-description-label">Description</div>
           {isEditingDescription ? (
             <>
-            <FormatToolbar target={descriptionRef} />
+            <FormatToolbar target={descriptionRef} photoTaskId={task.id} />
             <textarea
               autoFocus
+              {...photoEvents(task.id)}
               ref={(el) => {
                 descriptionRef.current = el;
                 autoGrow(el);
@@ -687,7 +688,8 @@ export function TaskDetailPanel({
               className="detail-description-textarea"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onBlur={handleSaveDescription}
+              // Still the focused box = the window lost focus (the photo picker, alt-tab): save, but keep editing
+              onBlur={(e) => handleSaveDescription(document.activeElement === e.currentTarget)}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                   e.preventDefault();
