@@ -1358,6 +1358,8 @@ export default function AppPage() {
     const unreadGone = notifications.filter((n) => gone.has(n.id) && !n.readAt).length;
     setNotifications((prev) => prev.filter((n) => !gone.has(n.id)));
     setNotificationsBadge((c) => Math.max(0, c - unreadGone));
+    // done with it: the task it opened closes too, instead of staying beside a shorter (or empty) list
+    if (activeSection === 'inbox' && notifications.some((n) => gone.has(n.id) && n.taskId === selectedTaskId)) setSelectedTaskId(null);
     persist(async () => must(await clearNotifications(supabase, ids)), 'notifications');
   };
 
@@ -1366,6 +1368,7 @@ export default function AppPage() {
     const uid = currentUserId;
     setNotifications([]);
     setNotificationsBadge(0);
+    if (activeSection === 'inbox') setSelectedTaskId(null);
     persist(async () => must(await clearAllNotifications(supabase, uid)), 'notifications');
   };
 
