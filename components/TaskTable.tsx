@@ -324,8 +324,9 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
           }}
           onClick={() => {
             onTaskSelect(task.id);
-            // opening a task shows its subtasks and leaves them open; the arrow is what collapses them
-            if (hasSubtasks) expandTask(task.id);
+            // opening a task shows its subtasks and leaves them open when another task is clicked;
+            // clicking the open task again (or the arrow) collapses them
+            if (hasSubtasks) (task.id === selectedTaskId ? toggleTaskExpand : expandTask)(task.id);
           }}
           draggable={!(isLevel2 && flat)}
           onDragStart={(e) => {

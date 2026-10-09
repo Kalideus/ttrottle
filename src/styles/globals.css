@@ -803,6 +803,9 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   top: 0;
   z-index: 10;
   min-width: 420px;
+  /* leaves the same space .table-body's scrollbar takes, so the columns line up with the rows */
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 .table-header-cell {
@@ -822,6 +825,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 .table-body {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   min-width: 420px;
 }
 
@@ -2461,15 +2465,18 @@ button.project-members:hover { background: var(--surface-alt); }
   background: var(--surface-alt); padding: 1px 4px; border-radius: 4px;
 }
 
-/* Narrow table (TaskTable's is-compact, e.g. task panel open): one row per task, just name + due date */
+/* Narrow table (TaskTable's is-compact, e.g. task panel open): name, a slim assignee column, due date */
 .is-compact .table-header,
 .is-compact .task-row,
-.is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px); }
+.is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) 72px minmax(80px, 100px); }
 .is-compact .table-header-cell:nth-child(2),
+.is-compact .task-cell-assignee { padding: 0 4px; }
 .is-compact .table-header-cell:nth-child(4),
-.is-compact .task-cell-assignee,
 .is-compact .task-cell-priority,
 .is-compact .task-project-inline { display: none; }
+.is-flat.is-compact .table-header,
+.is-flat.is-compact .task-row,
+.is-flat.is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px); }
 /* My tasks (flat): every task is yours, so no Assignee column */
 .is-flat .table-header-cell:nth-child(2),
 .is-flat .task-cell-assignee { display: none; }
@@ -2545,6 +2552,9 @@ button.project-members:hover { background: var(--surface-alt); }
   .table-header, .table-body { min-width: 0; }
   .table-header-cell:nth-child(4), .task-cell-priority { display: none; }
   .table-header-cell:not(:first-child), .task-metadata-cell { padding: 0 4px; }
+  /* no room for the assignee beside the name on a phone */
+  .is-compact .table-header, .is-compact .task-row, .is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px); }
+  .is-compact .table-header-cell:nth-child(2), .is-compact .task-cell-assignee { display: none; }
   .task-row-content { gap: 8px; }
   .task-checkbox { width: 22px; height: 22px; }
 
