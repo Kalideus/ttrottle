@@ -833,7 +833,19 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
         <div className="table-header-cell">Priority</div>
       </div>
 
-      <div className="table-body">
+      <div
+        className="table-body"
+        // Dragging a row near the top or bottom edge scrolls the list, faster the closer it gets.
+        // Capture phase: the rows stop this event before it would bubble up to here.
+        onDragOverCapture={(e) => {
+          if (!draggedTaskId) return;
+          const el = e.currentTarget;
+          const { top, bottom } = el.getBoundingClientRect();
+          const edge = 70;
+          if (e.clientY < top + edge) el.scrollTop -= Math.ceil((top + edge - e.clientY) / 3);
+          else if (e.clientY > bottom - edge) el.scrollTop += Math.ceil((e.clientY - (bottom - edge)) / 3);
+        }}
+      >
         {sectionIds.map((headingId) => {
           const headingTasks = groupedTasks[headingId] ?? [];
           if (flat) {
