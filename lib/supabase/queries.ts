@@ -741,6 +741,14 @@ export async function createComment(
     // followers get a 'comment' notification; mentioned non-followers get a 'mention' one
     const followerIds = new Set((followers ?? []).map((f) => f.user_id))
     const mentionOnly = (mentions ?? []).filter((uid) => uid !== author_id && !followerIds.has(uid))
+    // being mentioned makes you a follower, so you hear about what happens next (after the list
+    // above was read: this mention still reaches them as a 'mention', not a 'comment')
+    if (mentionOnly.length) {
+      const { error: followError } = await supabase
+        .from('followers')
+        .upsert(mentionOnly.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
+      if (followError) console.error('Failed to add mentioned people as followers:', followError)
+    }
     const notifications = [...[...followerIds].map((uid) => row(uid, 'comment')), ...mentionOnly.map((uid) => row(uid, 'mention'))]
     if (notifications.length) {
       const { error: notifyError } = await supabase.from('notifications').insert(notifications)

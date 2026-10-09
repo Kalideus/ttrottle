@@ -218,8 +218,10 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     const rect = e.currentTarget.getBoundingClientRect();
     const f = (e.clientY - rect.top) / rect.height;
     if (dragged.parent_task_id) {
-      // a subtask reorders among its own siblings only
-      return target.parent_task_id === dragged.parent_task_id && target.id !== dragged.id ? { id: target.id, after: f > 0.5 } : null;
+      // a subtask reorders among its own siblings...
+      if (target.parent_task_id) return target.parent_task_id === dragged.parent_task_id && target.id !== dragged.id ? { id: target.id, after: f > 0.5 } : null;
+      // ...or becomes a task where it's dropped: the edges of a task row (the middle keeps the older rules)
+      return f < 0.3 ? { id: target.id, after: false } : f > 0.7 && !expanded ? { id: target.id, after: true } : null;
     }
     // a task over someone's subtasks lands after that whole group
     if (target.parent_task_id) return target.parent_task_id === dragged.id ? 'dead' : { id: target.parent_task_id, after: true };
@@ -229,7 +231,9 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     return { id: target.id, after: f > 0.5 && !expanded };
   };
 
-  const isLevel2Drag = !!draggedTaskId && !!findTask(draggedTaskId)?.parent_task_id;
+  // The "+ Add subtask" row closes a task's group: a task or subtask dropped there lands after the group.
+  const afterGroup = (task: Task): DropSpot =>
+    manualOrder && !flat && onTaskMove && draggedTaskId ? (draggedTaskId === task.id ? 'dead' : { id: task.id, after: true }) : null;
 
   const showDropSpot = (e: React.DragEvent, spot: Exclude<DropSpot, null>, nestId: string) => {
     e.preventDefault();
@@ -727,13 +731,12 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                   color: 'var(--text-muted)',
                 }}
                 onClick={() => setAddingSubtaskTo(task.id)}
-                // counts as one of this task's subtask rows: a task dragged here lands after the group
                 onDragOver={(e) => {
-                  const spot = isLevel2Drag ? null : dropSpot(e, { ...task, parent_task_id: task.id }, false);
+                  const spot = afterGroup(task);
                   if (spot) showDropSpot(e, spot, task.id);
                 }}
                 onDrop={(e) => {
-                  const spot = isLevel2Drag ? null : dropSpot(e, { ...task, parent_task_id: task.id }, false);
+                  const spot = afterGroup(task);
                   if (spot) dropOnSpot(e, spot, task.id);
                 }}
               >

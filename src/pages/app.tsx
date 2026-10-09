@@ -878,7 +878,9 @@ export default function AppPage() {
     const task = findAnyTask(taskId);
     const target = findAnyTask(targetId);
     const parentId = target?.parent_task_id ?? null;
-    if (!task || !target || task.id === target.id || (task.parent_task_id ?? null) !== parentId) return;
+    // a subtask dropped beside a task becomes a task there
+    const promote = !!task?.parent_task_id && !parentId;
+    if (!task || !target || task.id === target.id || (!promote && (task.parent_task_id ?? null) !== parentId)) return;
     const headingId = target.heading_id ?? null;
     const pool = parentId ? tasks.find((t) => t.id === parentId)?.subtasks ?? [] : tasks.filter((t) => (t.heading_id ?? null) === headingId);
     const order = pool.filter((t) => t.id !== taskId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -893,6 +895,11 @@ export default function AppPage() {
       ts.map((t) => (t.id === parentId ? { ...t, subtasks: (t.subtasks ?? []).map(moved).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) } : renumber(t)))
     );
     persist(() => Promise.all(changed.map(async (m) => must(await updateTask(supabase, m.id, { position: m.position })))), 'tasks');
+    if (promote) {
+      handlePromoteSubtask(taskId, headingId, position);
+      setResortToken((n) => n + 1); // otherwise a new row sits at the bottom until the next sort
+      return;
+    }
 
     // the dragged row goes through the normal update, so a change of section is logged and notified as usual
     const updates = !parentId && (task.heading_id ?? null) !== headingId ? { heading_id: headingId, position } : { position };
@@ -1443,7 +1450,19 @@ export default function AppPage() {
       )}
 
       {showInvite && (
-        <InviteModal onInvite={submitInvite} onClose={() => setShowInvite(false)} />
+        <InviteModal
+          onInvite={submitInvite}
+          // the members list only lets this project's owner/managers add (a super admin who isn't in it can still invite)
+          onAddExisting={
+            ['owner', 'admin'].includes(projectMembers.find((m) => m.profile_id === currentUserId)?.role ?? '')
+              ? () => {
+                  setShowInvite(false);
+                  void openMembers();
+                }
+              : undefined
+          }
+          onClose={() => setShowInvite(false)}
+        />
       )}
       {showImport && <ProjectImportModal people={allPeople} onImport={handleProjectImport} onClose={() => setShowImport(false)} />}
       {duplicateFrom && <ProjectDuplicateModal sourceName={duplicateFrom.name} onDuplicate={handleProjectDuplicate} onClose={() => setDuplicateFrom(null)} />}

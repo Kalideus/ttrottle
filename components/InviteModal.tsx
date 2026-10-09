@@ -6,10 +6,12 @@ import { useEscapeToClose } from '@/lib/useEscapeToClose';
 
 interface InviteModalProps {
   onInvite: (email: string, sendEmail: boolean) => Promise<{ ok: boolean; message: string; link?: string }>;
+  /** Switches to the members list, where people who already have an account are added in one click. */
+  onAddExisting?: () => void;
   onClose: () => void;
 }
 
-export function InviteModal({ onInvite, onClose }: InviteModalProps) {
+export function InviteModal({ onInvite, onAddExisting, onClose }: InviteModalProps) {
   useEscapeToClose(onClose);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState<'email' | 'link' | null>(null);
@@ -52,8 +54,18 @@ export function InviteModal({ onInvite, onClose }: InviteModalProps) {
           </button>
         </div>
 
+        {onAddExisting && (
+          <div className="modal-field">
+            <span className="modal-field-label">Already in TTROTTLE?</span>
+            <button type="button" className="modal-btn ghost" onClick={onAddExisting}>
+              Add someone from your team
+            </button>
+            <span className="modal-field-hint">Pick from everyone who already has an account. No link needed.</span>
+          </div>
+        )}
+
         <label className="modal-field">
-          <span className="modal-field-label">Email</span>
+          <span className="modal-field-label">{onAddExisting ? 'New to TTROTTLE? Their email' : 'Email'}</span>
           <input
             className="modal-input"
             type="email"
