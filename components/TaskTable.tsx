@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { MoreVertical, ChevronUp, ChevronDown, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock, MoveRight } from 'lucide-react';
+import { MoreVertical, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock, MoveRight } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
 import { PeoplePicker } from '@/components/PeoplePicker';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
@@ -27,7 +27,8 @@ interface TaskTableProps {
   onHeadingAdd: (name: string) => Promise<void>;
   onHeadingDelete: (headingId: string) => Promise<void>;
   onNoHeadingRename: (name: string, taskIds: string[]) => Promise<void>;
-  onTaskReorder: (taskId: string, swapWithTaskId: string) => Promise<void>;
+  /** Dragged to the line before/after another row (same level: section tasks, or one parent's subtasks). */
+  onTaskMove?: (taskId: string, targetId: string, after: boolean) => void;
   manualOrder?: boolean;
   /** Flat list with no section headers or "+ Add section" — used by My Tasks. */
   flat?: boolean;
@@ -48,7 +49,7 @@ interface TaskTableProps {
   canManage?: (projectId: string) => boolean;
 }
 
-export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskReorder, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskMove, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -74,6 +75,8 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverHeadingId, setDragOverHeadingId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  // the line showing where a dragged row will land: before/after this row (and its subtasks)
+  const [dropLine, setDropLine] = useState<{ id: string; after: boolean } | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [undoTask, setUndoTask] = useState<{ id: string; name: string } | null>(null);
   const [confirmTask, setConfirmTask] = useState<Task | null>(null);
@@ -205,8 +208,60 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     }
   };
 
+  type DropSpot = { id: string; after: boolean } | 'nest' | 'dead' | null;
+
+  // Drag to reorder (manual order only). Where the dragged row goes if let go over `target`: a line
+  // before/after a row, 'nest' onto it, 'dead' (nothing happens), or null to leave it to the older rules.
+  const dropSpot = (e: React.DragEvent, target: Task, expanded: boolean): DropSpot => {
+    const dragged = manualOrder && !flat && onTaskMove && draggedTaskId ? findTask(draggedTaskId) : undefined;
+    if (!dragged) return null;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const f = (e.clientY - rect.top) / rect.height;
+    if (dragged.parent_task_id) {
+      // a subtask reorders among its own siblings only
+      return target.parent_task_id === dragged.parent_task_id && target.id !== dragged.id ? { id: target.id, after: f > 0.5 } : null;
+    }
+    // a task over someone's subtasks lands after that whole group
+    if (target.parent_task_id) return target.parent_task_id === dragged.id ? 'dead' : { id: target.parent_task_id, after: true };
+    if (target.id === dragged.id) return 'dead';
+    // the edges of a row reorder, the middle nests; under an open task "after" is its subtask rows instead
+    if (canNestInto(target, false)) return f < 0.3 ? { id: target.id, after: false } : f > 0.7 && !expanded ? { id: target.id, after: true } : 'nest';
+    return { id: target.id, after: f > 0.5 && !expanded };
+  };
+
+  const isLevel2Drag = !!draggedTaskId && !!findTask(draggedTaskId)?.parent_task_id;
+
+  const showDropSpot = (e: React.DragEvent, spot: Exclude<DropSpot, null>, nestId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const line = typeof spot === 'object' ? spot : null;
+    // dragover fires constantly: only touch state when the spot changes
+    if (line?.id !== dropLine?.id || line?.after !== dropLine?.after) setDropLine(line);
+    const nest = spot === 'nest' ? nestId : null;
+    if (nest !== dragOverTaskId) setDragOverTaskId(nest);
+    if (dragOverHeadingId) setDragOverHeadingId(null);
+  };
+
+  const endDrag = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverHeadingId(null);
+    setDropLine(null);
+  };
+
+  const dropOnSpot = (e: React.DragEvent, spot: Exclude<DropSpot, null>, nestId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedTaskId && spot === 'nest') {
+      onMakeSubtask?.(draggedTaskId, nestId);
+      expandTask(nestId); // show where it landed
+    } else if (draggedTaskId && typeof spot === 'object') onTaskMove?.(draggedTaskId, spot.id, spot.after);
+    endDrag();
+  };
+
   const handleDropOnSection = (targetHeadingId: string) => {
     setDragOverHeadingId(null);
+    setDropLine(null);
     if (!draggedTaskId) return;
     moveToSection(draggedTaskId, targetHeadingId);
     setDraggedTaskId(null);
@@ -252,13 +307,10 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     );
   };
 
-  const renderTask = (task: Task, siblings: Task[], isLevel2 = false) => {
+  const renderTask = (task: Task, isLevel2 = false) => {
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
     const isExpanded = expandedTaskIds.has(task.id);
     const isCompleted = task.completed;
-    const siblingIndex = siblings.findIndex((t) => t.id === task.id);
-    const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : null;
-    const nextSibling = siblingIndex >= 0 && siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : null;
     const projectChip = task.project ? (
       <span
         role={onOpenProject ? 'button' : undefined}
@@ -286,13 +338,16 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     ) : null;
 
     return (
-      <div key={task.id}>
+      <div key={task.id} className={`task-group ${isLevel2 ? 'level-2' : ''} ${dropLine?.id === task.id ? (dropLine.after ? 'drop-after' : 'drop-before') : ''}`}>
         <div className={`task-row ${isLevel2 ? 'level-2' : ''} ${selectedTaskId === task.id ? 'selected' : ''} ${completingTaskId === task.id ? 'completing' : ''} ${dragOverTaskId === task.id ? 'drop-target' : ''}`}
           onMouseEnter={() => onTaskHover?.(task.id)}
           // Dropping a task onto another makes it a subtask. Not allowed: onto a subtask (two levels max),
           // onto itself, a task that has its own subtasks, or in My Tasks (which mixes projects).
           // Otherwise the event falls through to the section, which moves the task to that heading.
           onDragOver={(e) => {
+            const spot = dropSpot(e, task, isExpanded && !!hasSubtasks);
+            if (spot) return showDropSpot(e, spot, task.id);
+            if (dropLine) setDropLine(null);
             // rows where letting go does nothing (see isDeadZone) swallow the drop so it can't reach the section
             if (isDeadZone(task, isLevel2)) {
               e.preventDefault();
@@ -308,6 +363,8 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
           }}
           onDragLeave={() => setDragOverTaskId((prev) => (prev === task.id ? null : prev))}
           onDrop={(e) => {
+            const spot = dropSpot(e, task, isExpanded && !!hasSubtasks);
+            if (spot) return dropOnSpot(e, spot, task.id);
             if (isDeadZone(task, isLevel2)) {
               e.preventDefault();
               e.stopPropagation();
@@ -334,10 +391,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             e.dataTransfer.effectAllowed = 'move';
             setDraggedTaskId(task.id);
           }}
-          onDragEnd={() => {
-            setDraggedTaskId(null);
-            setDragOverTaskId(null);
-          }}
+          onDragEnd={endDrag}
           style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 && flat ? undefined : 'grab' }}
         >
           <div className="task-row-content">
@@ -363,31 +417,6 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
               </div>
             )}
             {!hasSubtasks && <div className="task-disclosure" />}
-
-            {manualOrder && (
-              <div className="task-reorder-controls">
-                <button
-                  disabled={!prevSibling}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (prevSibling) onTaskReorder(task.id, prevSibling.id);
-                  }}
-                  style={{ background: 'none', border: 'none', cursor: prevSibling ? 'pointer' : 'default', color: prevSibling ? 'var(--text-muted)' : 'var(--border)', padding: 0, lineHeight: 0 }}
-                >
-                  <ChevronUp size={14} />
-                </button>
-                <button
-                  disabled={!nextSibling}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (nextSibling) onTaskReorder(task.id, nextSibling.id);
-                  }}
-                  style={{ background: 'none', border: 'none', cursor: nextSibling ? 'pointer' : 'default', color: nextSibling ? 'var(--text-muted)' : 'var(--border)', padding: 0, lineHeight: 0 }}
-                >
-                  <ChevronDown size={14} />
-                </button>
-              </div>
-            )}
 
             <div
               className={`task-checkbox ${isCompleted ? 'completed' : ''} ${completingTaskId === task.id ? 'completing' : ''}`}
@@ -677,7 +706,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             {(() => {
               // completed subtasks follow the "Show completed" toggle; the n/m count above still includes them
               const visible = (task.subtasks ?? []).filter((st) => showCompleted || !st.completed);
-              return visible.map((subtask) => renderTask(subtask, visible, true));
+              return visible.map((subtask) => renderTask(subtask, true));
             })()}
             {addingSubtaskTo === task.id ? (
               <div style={{ padding: '8px 24px 8px calc(24px + 28px + 28px)' }}>
@@ -698,6 +727,15 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                   color: 'var(--text-muted)',
                 }}
                 onClick={() => setAddingSubtaskTo(task.id)}
+                // counts as one of this task's subtask rows: a task dragged here lands after the group
+                onDragOver={(e) => {
+                  const spot = isLevel2Drag ? null : dropSpot(e, { ...task, parent_task_id: task.id }, false);
+                  if (spot) showDropSpot(e, spot, task.id);
+                }}
+                onDrop={(e) => {
+                  const spot = isLevel2Drag ? null : dropSpot(e, { ...task, parent_task_id: task.id }, false);
+                  if (spot) dropOnSpot(e, spot, task.id);
+                }}
               >
                 <span style={{ fontSize: '13px' }}>+ Add subtask</span>
               </div>
@@ -801,7 +839,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
           if (flat) {
             return (
               <div key={headingId} className="table-section">
-                {headingTasks.map((task) => renderTask(task, headingTasks))}
+                {headingTasks.map((task) => renderTask(task))}
               </div>
             );
           }
@@ -813,6 +851,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
               if (draggedTaskId) {
                 e.preventDefault();
                 if (dragOverHeadingId !== headingId) setDragOverHeadingId(headingId);
+                if (dropLine) setDropLine(null);
               }
             }}
             onDragLeave={() => setDragOverHeadingId((prev) => (prev === headingId ? null : prev))}
@@ -884,7 +923,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
             {expandedSections[headingId] !== false && (
               <>
-                {headingTasks.map((task) => renderTask(task, headingTasks))}
+                {headingTasks.map((task) => renderTask(task))}
                 {addingToHeading === headingId ? (
                   <div style={{ padding: '8px 24px' }}>
                     <AddTaskForm

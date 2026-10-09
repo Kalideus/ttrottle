@@ -942,11 +942,23 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   transform: rotate(-90deg);
 }
 
-.task-reorder-controls {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+/* drag to reorder: the line where the row will land */
+.task-group { position: relative; }
+.task-group.drop-before::before,
+.task-group.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent);
+  z-index: 5;
+  pointer-events: none;
 }
+.task-group.drop-before::before { top: -2px; }
+.task-group.drop-after::after { bottom: -1px; }
+.task-group.level-2.drop-before::before,
+.task-group.level-2.drop-after::after { left: 52px; }
 
 .task-checkbox {
   width: 18px;
@@ -2543,6 +2555,7 @@ button.project-members:hover { background: var(--surface-alt); }
   .toolbar-actions { gap: 4px; }
   .toolbar-btn { padding: 0 8px; }
   .toolbar-search-input { min-width: 0; width: 140px; }
+  .toolbar-add-heading-btn { display: none; } /* no room; "+ Add section" under the list does the same */
 
   /* table: drop the priority column (still editable in the task panel), tighten the rest */
   .table-header, .section-header, .task-row, .add-task-row {
@@ -2574,7 +2587,6 @@ button.project-members:hover { background: var(--surface-alt); }
 /* Phones: bigger tap targets (Apple's guideline is ~44px; these were 14-20px) and room for the iPhone home bar */
 @media (max-width: 720px) {
   .task-menu, .project-header-menu, .sidebar-project-menu { width: 36px; height: 36px; }
-  .task-reorder-controls button { padding: 3px 6px !important; }
   .task-disclosure { width: 28px; height: 28px; }
   .task-row, .add-task-row { min-height: 52px; }
   .detail-panel-close-btn, .detail-panel-menu-btn, .modal-close { min-width: 40px; min-height: 40px; }

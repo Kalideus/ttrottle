@@ -16,6 +16,8 @@ export type SortField = 'due_date' | 'priority' | 'name' | 'created_at' | 'posit
 
 interface ToolbarProps {
   onAddTask: () => void;
+  /** Shows an "Add heading" button beside "Add task" (projects only; My tasks has no headings). */
+  onAddHeading?: () => void;
   activeFilters: FilterValue[];
   onFilterChange: (filters: FilterValue[]) => void;
   onSortChange: (field: SortField) => void;
@@ -30,6 +32,7 @@ interface ToolbarProps {
 
 export function Toolbar({
   onAddTask,
+  onAddHeading,
   activeFilters,
   onFilterChange,
   onSortChange,
@@ -69,10 +72,18 @@ export function Toolbar({
 
   return (
     <div className="app-toolbar">
-      <button className="toolbar-add-task-btn" onClick={onAddTask}>
-        <span className="toolbar-add-task-plus">+</span>
-        <span>Add task</span>
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="toolbar-add-task-btn" onClick={onAddTask}>
+          <span className="toolbar-add-task-plus">+</span>
+          <span>Add task</span>
+        </button>
+        {onAddHeading && (
+          <button className="toolbar-add-task-btn toolbar-add-heading-btn" onClick={onAddHeading}>
+            <span className="toolbar-add-task-plus">+</span>
+            <span>Add heading</span>
+          </button>
+        )}
+      </div>
 
       <div className="toolbar-actions">
         {openMenu && (

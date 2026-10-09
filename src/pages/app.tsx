@@ -871,17 +871,34 @@ export default function AppPage() {
     }, 'tasks', 'activity');
   };
 
-  const handleTaskReorder = async (taskId: string, swapWithTaskId: string) => {
-    const a = tasks.find((t) => t.id === taskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === taskId);
-    const b = tasks.find((t) => t.id === swapWithTaskId) ?? tasks.flatMap((t) => t.subtasks ?? []).find((t) => t.id === swapWithTaskId);
-    if (!a || !b) return;
-    patchTask(a.id, (t) => ({ ...t, position: b.position }));
-    patchTask(b.id, (t) => ({ ...t, position: a.position }));
-    setResortToken((n) => n + 1);
-    persist(() => Promise.all([
-      updateTask(supabase, a.id, { position: b.position }).then(must),
-      updateTask(supabase, b.id, { position: a.position }).then(must),
-    ]), 'tasks');
+  // Dragging a row to the line before/after another: it takes that place among the target's siblings
+  // (the tasks of the target's section, or one parent's subtasks), which are then renumbered 0..n.
+  // ponytail: one save per row whose number changed; switch to a single bulk update if sections get long
+  const handleTaskMove = (taskId: string, targetId: string, after: boolean) => {
+    const task = findAnyTask(taskId);
+    const target = findAnyTask(targetId);
+    const parentId = target?.parent_task_id ?? null;
+    if (!task || !target || task.id === target.id || (task.parent_task_id ?? null) !== parentId) return;
+    const headingId = target.heading_id ?? null;
+    const pool = parentId ? tasks.find((t) => t.id === parentId)?.subtasks ?? [] : tasks.filter((t) => (t.heading_id ?? null) === headingId);
+    const order = pool.filter((t) => t.id !== taskId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    order.splice(order.findIndex((t) => t.id === targetId) + (after ? 1 : 0), 0, task);
+
+    const changed = order.map((t, position) => ({ id: t.id, position, was: t.position })).filter((m) => m.position !== m.was && m.id !== taskId);
+    const position = order.indexOf(task);
+    const place = new Map(changed.map((m) => [m.id, m.position]));
+    const renumber = (t: Task): Task => (place.has(t.id) ? { ...t, position: place.get(t.id)! } : t);
+    const moved = (t: Task): Task => (t.id === taskId ? { ...t, position } : renumber(t));
+    setTasks((ts) =>
+      ts.map((t) => (t.id === parentId ? { ...t, subtasks: (t.subtasks ?? []).map(moved).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) } : renumber(t)))
+    );
+    persist(() => Promise.all(changed.map(async (m) => must(await updateTask(supabase, m.id, { position: m.position })))), 'tasks');
+
+    // the dragged row goes through the normal update, so a change of section is logged and notified as usual
+    const updates = !parentId && (task.heading_id ?? null) !== headingId ? { heading_id: headingId, position } : { position };
+    if (parentId) {
+      if (position !== task.position) persist(async () => must(await updateTask(supabase, taskId, { position })), 'tasks');
+    } else void handleTaskUpdate(taskId, updates);
   };
 
   const handleTagAdd = async (tag: Tag) => {
@@ -1517,6 +1534,11 @@ export default function AppPage() {
 
               <Toolbar
                 onAddTask={handleCreateTaskClick}
+                onAddHeading={() => {
+                  if (!activeProjectId) return window.alert('Create or open a project first.');
+                  const name = window.prompt('Heading name:')?.trim();
+                  if (name) void handleHeadingAdd(name);
+                }}
                 activeFilters={activeFilters}
                 onFilterChange={setActiveFilters}
                 onSortChange={setSortField}
@@ -1576,8 +1598,8 @@ export default function AppPage() {
                       onHeadingAdd={handleHeadingAdd}
                       onHeadingDelete={handleHeadingDelete}
                       onNoHeadingRename={handleNoHeadingRename}
-                      onTaskReorder={handleTaskReorder}
-                      manualOrder={sortField === 'position'}
+                      onTaskMove={handleTaskMove}
+                      manualOrder={sortField === 'position' && sortDirection === 'asc'}
                       bulkSelected={bulk}
                       onBulkToggle={(id) =>
                         setBulk((prev) => {
@@ -1637,7 +1659,6 @@ export default function AppPage() {
                   onHeadingAdd={async () => window.alert('Open a project to add sections there.')}
                   onHeadingDelete={async () => {}}
                   onNoHeadingRename={async () => window.alert('Open a project to add sections there.')}
-                  onTaskReorder={async () => {}}
                 />
                 {taskPanel}
               </div>
