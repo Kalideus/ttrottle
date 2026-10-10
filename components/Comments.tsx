@@ -33,7 +33,7 @@ interface CommentsProps {
   comments: CommentItem[];
   mentionableUsers: { id: string; name: string; member?: ProjectMember }[];
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
-  onCommentEdit: (commentId: string, body: string) => Promise<void>;
+  onCommentEdit: (commentId: string, body: string, newMentions?: string[]) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
   // project managers answer extension requests on a locked due date
@@ -44,12 +44,22 @@ interface CommentsProps {
   loading?: boolean;
 }
 
-// "@name" only matches a single word, so this only requires (and only
-// supports) matching on someone's first name -- good enough for a small
-// team. Doesn't disambiguate two people sharing a first name (first match
-// wins); add last-name matching if that becomes a real problem.
+// "@name" is a single word: first name plus last initial ("@TomC"), so two Toms
+// don't get each other's mentions. A bare first name ("@Tom", and every mention
+// written before this) still works, going to the first person with that name.
+// ponytail: same first name and same last initial still clash; use the full surname if that ever happens
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
+}
+
+function handle(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length > 1 ? parts[0] + parts[parts.length - 1][0].toUpperCase() : parts[0] ?? '';
+}
+
+function mentioned<T extends { name: string }>(token: string, users: T[]): T | undefined {
+  const needle = token.slice(1).toLowerCase();
+  return users.find((u) => handle(u.name).toLowerCase() === needle) ?? users.find((u) => firstName(u.name).toLowerCase() === needle);
 }
 
 function formatCommentTimestamp(timestamp: string): string {
@@ -63,12 +73,11 @@ function formatCommentTimestamp(timestamp: string): string {
   return `${dateLabel}, ${timeLabel}`;
 }
 
-function extractMentions(body: string, users: { id: string; name: string }[]): string[] {
+export function extractMentions(body: string, users: { id: string; name: string }[]): string[] {
   const tokens = body.match(/@([a-zA-Z][\w'-]*)/g) ?? [];
   const ids = new Set<string>();
   for (const token of tokens) {
-    const needle = token.slice(1).toLowerCase();
-    const match = users.find((u) => firstName(u.name).toLowerCase() === needle);
+    const match = mentioned(token, users);
     if (match) ids.add(match.id);
   }
   return Array.from(ids);
@@ -89,7 +98,7 @@ function activeMentionAt(value: string, cursor: number): { start: number; query:
 // plain text rather than being colored as if it worked.
 function renderBody(body: string, users: { id: string; name: string }[]) {
   return body.split(/(@[a-zA-Z][\w'-]*)/g).map((part, i) => {
-    if (part[0] === '@' && users.some((u) => firstName(u.name).toLowerCase() === part.slice(1).toLowerCase())) {
+    if (part[0] === '@' && mentioned(part, users)) {
       return (
         <span key={i} style={{ color: 'var(--accent)', fontWeight: 600 }}>
           {part}
@@ -117,7 +126,6 @@ export function Comments({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -128,7 +136,7 @@ export function Comments({
 
   const mentionMatches = mention
     ? mentionableUsers
-        .filter((u) => firstName(u.name).toLowerCase().startsWith(mention.query.toLowerCase()))
+        .filter((u) => handle(u.name).toLowerCase().startsWith(mention.query.toLowerCase()))
         .slice(0, 6)
     : [];
 
@@ -145,7 +153,7 @@ export function Comments({
 
   const selectMention = (user: { id: string; name: string }) => {
     if (!mention) return;
-    const insertion = `@${firstName(user.name)} `;
+    const insertion = `@${handle(user.name)} `;
     const before = composerValue.slice(0, mention.start);
     const after = composerValue.slice(mention.start + 1 + mention.query.length);
     const next = before + insertion + after;
@@ -207,7 +215,10 @@ export function Comments({
 
   const handleEditSave = async (commentId: string) => {
     if (!editingValue.trim()) return;
-    await onCommentEdit(commentId, editingValue);
+    // people @mentioned by the edit who weren't before: they're told, like in a new comment
+    const before = extractMentions(comments.find((c) => c.id === commentId)?.body ?? '', mentionableUsers);
+    const added = extractMentions(editingValue, mentionableUsers).filter((id) => !before.includes(id));
+    await onCommentEdit(commentId, editingValue, added);
     setEditingId(null);
   };
 
@@ -227,10 +238,7 @@ export function Comments({
                 <div
                   key={comment.id}
                   id={`comment-${comment.id}`}
-                  style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}
-                  onMouseEnter={() => setHoveredCommentId(comment.id)}
-                  onMouseLeave={() => setHoveredCommentId(null)}
-                >
+                  style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}                >
                   <div
                     style={{
                       width: 28,
@@ -347,7 +355,8 @@ export function Comments({
                         {comment.likes > 0 && comment.likes}
                       </button>
 
-                      {comment.isOwn && hoveredCommentId === comment.id && (
+                      {/* always shown, not on hover: a touch screen has no hover */}
+                      {comment.isOwn && (
                         <>
                           {editingId === comment.id ? (
                             <>
@@ -498,7 +507,7 @@ export function Comments({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>@name to mention &middot; ⌘/Ctrl+Enter to send</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{mentionableUsers.length > 0 && <>@name to mention &middot; </>}⌘/Ctrl+Enter to send</div>
             <button
               type="submit"
               disabled={!composerValue.trim() || isSubmitting}

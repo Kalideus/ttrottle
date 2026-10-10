@@ -1,8 +1,8 @@
 'use client';
 
-import { ChevronDown, Lock, UserPlus } from 'lucide-react';
+import { ChevronDown, Lock, Printer, UserPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { ProjectMember } from '@/lib/supabase/queries';
+import type { Heading, ProjectMember } from '@/lib/supabase/queries';
 import { avatarStyle } from '@/lib/avatar';
 
 const PROJECT_COLORS = ['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C', '#5DA283'];
@@ -32,6 +32,10 @@ interface ProjectHeaderProps {
   acceptsTickets?: boolean;
   // only passed for people who may change it (project managers and super admins)
   onAcceptsTicketsChange?: (on: boolean) => void;
+  // which section tickets land in (migration 034)
+  headings: Heading[];
+  ticketHeadingId: string | null;
+  onTicketHeadingChange: (headingId: string) => void;
 }
 
 export function ProjectHeader({
@@ -49,6 +53,9 @@ export function ProjectHeader({
   onProjectDelete,
   acceptsTickets = false,
   onAcceptsTicketsChange,
+  headings,
+  ticketHeadingId,
+  onTicketHeadingChange,
 }: ProjectHeaderProps) {
   const visibleMembers = members.slice(0, 3);
   const [showEdit, setShowEdit] = useState(false);
@@ -67,7 +74,9 @@ export function ProjectHeader({
     });
   };
   const myRole = members.find((m) => m.profile_id === currentUserId)?.role;
-  const canArchive = !isPrivate && (myRole === 'owner' || myRole === 'admin');
+  // same rule as the database: only a project's owner or managers change its name, colour and icon
+  const canEdit = myRole === 'owner' || myRole === 'admin';
+  const canArchive = !isPrivate && canEdit;
   const canDelete = !isPrivate && (myRole === 'owner' || isSuperAdmin);
 
   const openEdit = () => {
@@ -96,9 +105,12 @@ export function ProjectHeader({
             <Lock size={12} /> Only you
           </span>
         )}
-        <button className="project-header-menu" onClick={() => (showEdit ? setShowEdit(false) : openEdit())}>
-          <ChevronDown size={18} />
-        </button>
+        {/* no menu at all for someone it would be empty for */}
+        {(canEdit || canDelete || (onAcceptsTicketsChange && !isPrivate)) && (
+          <button className="project-header-menu" onClick={() => (showEdit ? setShowEdit(false) : openEdit())}>
+            <ChevronDown size={18} />
+          </button>
+        )}
 
         {showEdit && (
           <>
@@ -121,6 +133,8 @@ export function ProjectHeader({
                 gap: '12px',
               }}
             >
+              {canEdit && (
+              <>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>Name</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -214,9 +228,11 @@ export function ProjectHeader({
                   ))}
                 </div>
               </div>
+              </>
+              )}
 
               {onAcceptsTicketsChange && !isPrivate && (
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', borderTop: '1px solid var(--border)', padding: '12px 0', cursor: 'pointer', fontSize: '13px', color: 'var(--text)' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', borderTop: canEdit ? '1px solid var(--border)' : undefined, padding: '12px 0', cursor: 'pointer', fontSize: '13px', color: 'var(--text)' }}>
                   <input type="checkbox" checked={acceptsTickets} onChange={(e) => onAcceptsTicketsChange(e.target.checked)} style={{ marginTop: 2 }} />
                   <span>
                     Accept tickets
@@ -224,6 +240,22 @@ export function ProjectHeader({
                       Anyone with an account can send this project a request. They only ever see their own.
                     </span>
                   </span>
+                </label>
+              )}
+
+              {onAcceptsTicketsChange && !isPrivate && acceptsTickets && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '12px', fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>
+                  Tickets go into
+                  <select
+                    value={ticketHeadingId ?? ''}
+                    onChange={(e) => e.target.value && onTicketHeadingChange(e.target.value)}
+                    style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', color: 'var(--text)', background: 'var(--surface)' }}
+                  >
+                    {!ticketHeadingId && <option value="">A new “Tickets” section</option>}
+                    {headings.map((h) => (
+                      <option key={h.id} value={h.id}>{h.name}</option>
+                    ))}
+                  </select>
                 </label>
               )}
 
@@ -282,8 +314,9 @@ export function ProjectHeader({
           </button>
         )}
 
-        <button className="project-star-btn" title="Favorite">
-          ☆
+        {/* prints components/ProjectPrintSheet.tsx, as does Ctrl/⌘+P */}
+        <button className="project-star-btn" title="Print this project as a checklist" aria-label="Print this project" onClick={() => window.print()}>
+          <Printer size={16} />
         </button>
       </div>
     </div>

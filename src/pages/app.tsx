@@ -18,6 +18,7 @@ import { TukTukCelebration } from '@/components/TukTukCelebration';
 import { avatarInitials, squareAvatarBlob, AVATAR_COLORS } from '@/lib/avatar';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectHeader } from '@/components/ProjectHeader';
+import { ProjectPrintSheet } from '@/components/ProjectPrintSheet';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
 import { TaskTable } from '@/components/TaskTable';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
@@ -36,6 +37,8 @@ import {
   createTicket,
   getMyTickets,
   setAcceptsTickets,
+  setTicketHeading,
+  getTicketPeople,
   type Ticket,
   type TicketProject,
   answerExtensionRequest,
@@ -45,6 +48,7 @@ import {
   createTask,
   updateTask,
   deleteTask,
+  mergeTasks,
   getProjectMembers,
   getMembersByProject,
   addProjectMember,
@@ -504,8 +508,13 @@ export default function AppPage() {
     }
 
     if (activeFilters.length > 0) {
+      // Same kind widens (High or Medium), different kinds narrow (High and Overdue).
+      const kindOf = (f: FilterValue) =>
+        f.startsWith('priority:') ? 'priority' : f.startsWith('tag:') ? 'tag' : f.startsWith('created') ? 'created' : f.startsWith('completed') ? 'completed' : 'due';
+      const kinds = new Map<string, FilterValue[]>();
+      for (const f of activeFilters) kinds.set(kindOf(f), [...(kinds.get(kindOf(f)) ?? []), f]);
       result = result.filter((task) => {
-        return activeFilters.some((filter) => {
+        return [...kinds.values()].every((group) => group.some((filter) => {
           if (filter === 'priority:high') return task.priority === 'high';
           if (filter === 'priority:medium') return task.priority === 'medium';
           if (filter === 'priority:low') return task.priority === 'low';
@@ -519,7 +528,7 @@ export default function AppPage() {
           if (filter === 'completed-7d') return !!task.completed_at && Date.now() - new Date(task.completed_at).getTime() <= 7 * DAY_MS;
           if (filter.startsWith('tag:')) return (task.tags ?? []).some((t) => t.id === filter.slice(4));
           return true;
-        });
+        }));
       });
     }
 
@@ -568,7 +577,7 @@ export default function AppPage() {
 
   const handleBulkDelete = async () => {
     if (!bulk?.size) return;
-    if (!window.confirm(`Delete ${bulk.size} task${bulk.size === 1 ? '' : 's'}? They can be restored from Admin → Deleted tasks.`)) return;
+    if (!window.confirm(`Delete ${bulk.size} task${bulk.size === 1 ? '' : 's'}? A super admin can restore them for 90 days (account menu → Deleted tasks).`)) return;
     const ids = new Set(bulk);
     removeTasks(ids);
     setBulk(new Set());
@@ -711,6 +720,19 @@ export default function AppPage() {
   const handleTaskDelete = async (taskId: string) => {
     removeTasks(new Set([taskId]));
     persist(async () => must(await deleteTask(supabase, taskId, currentUserId)), 'tasks');
+  };
+
+  // Not optimistic like the other saves: the dialog waits, and shows why if the database refuses
+  // (a repeating task, or subtasks that would end up three levels deep).
+  const handleTaskMerge = async (keep: { id: string; project_id: string | null }, removeId: string) => {
+    const { error } = await mergeTasks(supabase, keep.id, removeId);
+    if (error) return error.message;
+    taskCache.current.delete(keep.id);
+    removeTasks(new Set([removeId]));
+    // the open task was the one merged away: show the one it went into
+    if (keep.id !== selectedTaskId && keep.project_id) openInProject(keep.project_id, keep.id);
+    (['tasks', 'comments', 'followers', 'activity', 'notifications'] as const).forEach((k) => void resyncRef.current[k]());
+    return null;
   };
 
   const handleFollowerAdd = async (userId: string) => {
@@ -1036,7 +1058,7 @@ export default function AppPage() {
     };
   }, [phoneOverlay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submitCreateTask = async ({ tag_ids, new_heading, subtasks, comment, ...fields }: NewTaskInput) => {
+  const submitCreateTask = async ({ tag_ids, new_heading, subtasks, comment, comment_mentions, ...fields }: NewTaskInput) => {
     if (!activeProjectId) return;
 
     const heading = new_heading ? addHeadingLocally(new_heading) : null;
@@ -1063,7 +1085,7 @@ export default function AppPage() {
         ...(task.subtasks ?? []).map((s) =>
           createTask(supabase, { id: s.id, position: s.position, project_id: task.project_id, parent_task_id: task.id, name: s.name, created_by: currentUserId }).then(must)
         ),
-        comment && currentUserId ? createComment(supabase, { task_id: task.id, author_id: currentUserId, body: comment, mentions: [] }).then(must) : null,
+        comment && currentUserId ? createComment(supabase, { task_id: task.id, author_id: currentUserId, body: comment, mentions: comment_mentions }).then(must) : null,
       ]);
     }, 'tasks', 'headings', 'comments', 'followers');
   };
@@ -1208,6 +1230,18 @@ export default function AppPage() {
     if (activeSection === 'tickets') void loadTickets();
   }, [activeSection, loadTickets]);
 
+  // the open ticket's team, for @mentions in its comments
+  const [ticketPeople, setTicketPeople] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    setTicketPeople([]);
+    if (activeSection !== 'tickets' || !selectedTaskId) return;
+    let stale = false;
+    void getTicketPeople(supabase, selectedTaskId).then((people) => !stale && setTicketPeople(people));
+    return () => {
+      stale = true;
+    };
+  }, [activeSection, selectedTaskId, supabase]);
+
   const openCreateTicket = async () => {
     setShowCreateTicket(true);
     setTicketTeams((await getTicketProjects(supabase)).data);
@@ -1228,6 +1262,12 @@ export default function AppPage() {
     const projectId = activeProjectId;
     setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, accepts_tickets: on } : p)));
     persist(async () => must(await setAcceptsTickets(supabase, projectId, on)), 'projects');
+  };
+
+  const handleTicketHeading = (headingId: string) => {
+    const projectId = activeProjectId;
+    setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, ticket_heading_id: headingId } : p)));
+    persist(async () => must(await setTicketHeading(supabase, projectId, headingId)), 'projects');
   };
 
   const handleCommentAdd = async (body: string, mentions: string[]) => {
@@ -1275,9 +1315,9 @@ export default function AppPage() {
     if (approve) void handleTaskUpdate(taskId, { due_date: c.requestedDueDate });
   };
 
-  const handleCommentEdit = async (commentId: string, body: string) => {
+  const handleCommentEdit = async (commentId: string, body: string, newMentions: string[] = []) => {
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body, editedAt: new Date().toISOString() } : c)));
-    persist(async () => must(await updateComment(supabase, commentId, { body })), 'comments');
+    persist(async () => must(await updateComment(supabase, commentId, { body, newMentions })), 'comments', 'followers');
   };
 
   const handleCommentLike = async (commentId: string) => {
@@ -1402,6 +1442,9 @@ export default function AppPage() {
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdate={handleTaskUpdate}
         onTaskDelete={handleTaskDelete}
+        projects={projects}
+        searchTasks={runTaskSearch}
+        onTaskMerge={handleTaskMerge}
         onTagAdd={handleTagAdd}
         onTagRemove={handleTagRemove}
         onNewTag={handleNewTag}
@@ -1454,6 +1497,7 @@ export default function AppPage() {
 
       {showInvite && (
         <InviteModal
+          projectName={currentProject?.name}
           onInvite={submitInvite}
           // the members list only lets this project's owner/managers add (a super admin who isn't in it can still invite)
           onAddExisting={
@@ -1472,6 +1516,7 @@ export default function AppPage() {
 
       {showCreateTask && (
         <CreateTaskModal
+          projectName={currentProject?.name}
           members={projectMembers}
           headings={sortedHeadings}
           tags={availableTags}
@@ -1529,7 +1574,10 @@ export default function AppPage() {
           }}
           onCreateTask={handleCreateTaskClick}
           onCreateTicket={openCreateTicket}
-          onInvite={handleInvite}
+          canEditProject={(id) => ['owner', 'admin'].includes(myRoles.get(id) ?? '')}
+          canDeleteProject={(id) => myRoles.get(id) === 'owner' || !!currentProfile?.is_super_admin}
+          onInvite={currentProject && !currentProject.is_private && canManage(currentProject.id) ? handleInvite : undefined}
+          inviteProjectName={currentProject?.name}
         />
 
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
@@ -1552,6 +1600,9 @@ export default function AppPage() {
                 onProjectDelete={() => handleProjectDelete()}
                 acceptsTickets={!!currentProject?.accepts_tickets}
                 onAcceptsTicketsChange={canManage(currentProject?.id) ? handleAcceptsTickets : undefined}
+                headings={sortedHeadings}
+                ticketHeadingId={currentProject?.ticket_heading_id ?? null}
+                onTicketHeadingChange={handleTicketHeading}
               />
 
               <Toolbar
@@ -1656,6 +1707,7 @@ export default function AppPage() {
                 onShowCompletedChange={setShowCompleted}
                 sortField={sortField}
                 sortDirection={sortDirection}
+                openTasksOnly
               />
 
               <div className="app-content">
@@ -1697,6 +1749,7 @@ export default function AppPage() {
                 onCreate={openCreateTicket}
                 comments={comments}
                 commentsLoading={commentsLoading}
+                mentionableUsers={ticketPeople}
                 onCommentAdd={handleCommentAdd}
                 onCommentEdit={handleCommentEdit}
                 onCommentDelete={handleCommentDelete}
@@ -1728,6 +1781,9 @@ export default function AppPage() {
           )}
         </div>
       </div>
+      {activeSection === 'projects' && (
+        <ProjectPrintSheet projectName={currentProject?.name ?? 'Project'} headings={sortedHeadings} tasks={tasks} showCompleted={showCompleted} />
+      )}
     </div>
   );
 }

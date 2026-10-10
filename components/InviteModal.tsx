@@ -5,13 +5,15 @@ import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 
 interface InviteModalProps {
+  /** Named in the title, so it's clear which project the invite is for. */
+  projectName?: string;
   onInvite: (email: string, sendEmail: boolean) => Promise<{ ok: boolean; message: string; link?: string }>;
   /** Switches to the members list, where people who already have an account are added in one click. */
   onAddExisting?: () => void;
   onClose: () => void;
 }
 
-export function InviteModal({ onInvite, onAddExisting, onClose }: InviteModalProps) {
+export function InviteModal({ projectName, onInvite, onAddExisting, onClose }: InviteModalProps) {
   useEscapeToClose(onClose);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState<'email' | 'link' | null>(null);
@@ -48,7 +50,7 @@ export function InviteModal({ onInvite, onAddExisting, onClose }: InviteModalPro
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2 className="modal-title">Invite to project</h2>
+          <h2 className="modal-title">Invite to {projectName ?? 'project'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>

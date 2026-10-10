@@ -96,7 +96,8 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   const toggleSection = (headingId: string) => {
     setExpandedSections((prev) => ({
       ...prev,
-      [headingId]: !prev[headingId],
+      // sections start open (no entry yet), so the first click closes
+      [headingId]: prev[headingId] === false,
     }));
   };
 
@@ -125,6 +126,8 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     setTimeout(() => {
       setCompletingTaskId(null);
       onTaskUpdate(task.id, { completed: true });
+      // no Undo for a repeating task: its next copy already exists (or a subtask has rolled on), and un-ticking wouldn't take that back
+      if (task.repeat) return;
       setUndoTask({ id: task.id, name: task.name });
       setTimeout(() => {
         setUndoTask((current) => (current?.id === task.id ? null : current));
@@ -598,7 +601,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                         e.stopPropagation();
                         setOpenMenuTaskId(null);
                         // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
-                        if (window.confirm(`Delete "${task.name}"? It's recoverable for 90 days, then removed for good.`)) {
+                        if (window.confirm(`Delete "${task.name}"? A super admin can restore it for 90 days, then it's removed for good.`)) {
                           onTaskDelete(task.id);
                         }
                       }}
@@ -883,7 +886,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
               <div className="section-header-content">
                 <div
                   className={`section-disclosure ${
-                    !expandedSections[headingId] ? 'collapsed' : ''
+                    expandedSections[headingId] === false ? 'collapsed' : ''
                   }`}
                 >
                   ▸

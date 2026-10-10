@@ -1,6 +1,8 @@
 'use client';
 
-import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock, BellOff } from 'lucide-react';
+import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock, BellOff, Merge } from 'lucide-react';
+import { MergeTaskModal } from '@/components/MergeTaskModal';
+import type { TaskHit } from '@/components/GlobalSearch';
 import { repeatOptions, repeatLabel } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, Project, ProjectMember, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
@@ -40,11 +42,15 @@ interface TaskDetailPanelProps {
   project?: Project | null;
   onTaskUpdate: (taskId: string, updates: Record<string, unknown>) => Promise<void>;
   onTaskDelete: (taskId: string) => Promise<void>;
+  // Merge with a duplicate (migration 033): the other task is searched for across `projects`.
+  projects: Project[];
+  searchTasks: (query: string) => Promise<TaskHit[]>;
+  onTaskMerge: (keep: { id: string; project_id: string | null }, removeId: string) => Promise<string | null>;
   onTagAdd: (tag: Tag) => void;
   onTagRemove: (tagId: string) => void;
   onNewTag: (name: string, color: string) => Promise<void>;
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
-  onCommentEdit: (commentId: string, body: string) => Promise<void>;
+  onCommentEdit: (commentId: string, body: string, newMentions?: string[]) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
   // owner/admin of the task's project, or super admin: may lock the due date and answer extension requests
@@ -85,6 +91,9 @@ export function TaskDetailPanel({
   project,
   onTaskUpdate,
   onTaskDelete,
+  projects,
+  searchTasks,
+  onTaskMerge,
   onTagAdd,
   onTagRemove,
   onNewTag,
@@ -104,7 +113,7 @@ export function TaskDetailPanel({
   const [description, setDescription] = useState(task.description ?? '');
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   // one menu open at a time: opening another closes the last
-  const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'follower' | 'options'>(null);
+  const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'follower' | 'options' | 'merge'>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -127,14 +136,15 @@ export function TaskDetailPanel({
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
       if (panelRef.current?.contains(t)) return;
-      if (t.closest('.task-row') || t.closest('.inbox-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar')) return;
+      // .modal-overlay: the merge dialog is this panel's, though it's drawn outside it
+      if (t.closest('.task-row') || t.closest('.inbox-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar') || t.closest('.modal-overlay')) return;
       onClose();
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
 
-  const priorityOptions: Array<'high' | 'medium' | 'low'> = ['low', 'medium', 'high'];
+  const priorityOptions = ['high', 'medium', 'low', null] as const;
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
   const overdue = isOverdue(task.due_date, task.completed);
   const dateReadOnly = !!task.due_locked && !canManage;
@@ -239,9 +249,21 @@ export function TaskDetailPanel({
             >
               <button
                 onClick={() => {
+                  if (task.repeat) {
+                    setMenu(null);
+                    window.alert("A repeating task can't be merged. Turn off its repeat first.");
+                  } else setMenu('merge');
+                }}
+                style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Merge size={14} />
+                Merge with another task
+              </button>
+              <button
+                onClick={() => {
                   setMenu(null);
                   // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
-                  if (window.confirm(`Delete "${task.name}"? It's recoverable for 90 days, then removed for good.`)) {
+                  if (window.confirm(`Delete "${task.name}"? A super admin can restore it for 90 days, then it's removed for good.`)) {
                     onTaskDelete(task.id);
                   }
                 }}
@@ -251,6 +273,9 @@ export function TaskDetailPanel({
                 Delete task
               </button>
             </div>
+          )}
+          {menu === 'merge' && (
+            <MergeTaskModal task={task} projects={projects} searchTasks={searchTasks} onMerge={onTaskMerge} onClose={() => setMenu(null)} />
           )}
         </div>
       </div>
@@ -581,7 +606,7 @@ export function TaskDetailPanel({
                 >
                   {priorityOptions.map((opt) => (
                     <div
-                      key={opt}
+                      key={opt ?? 'none'}
                       onClick={(e) => {
                         e.stopPropagation();
                         onTaskUpdate(task.id, { priority: opt });
@@ -596,9 +621,13 @@ export function TaskDetailPanel({
                         color: task.priority === opt ? 'var(--accent)' : 'var(--text)',
                       }}
                     >
-                      <span className={`priority-chip priority-${opt}`}>
-                        {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                      </span>
+                      {opt ? (
+                        <span className={`priority-chip priority-${opt}`}>
+                          {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>No priority</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -629,7 +658,16 @@ export function TaskDetailPanel({
                   onClick={() => onSubtaskSelect(subtask.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
                 >
-                  <div className={`task-checkbox ${subtask.completed ? 'completed' : ''}`} style={{ pointerEvents: 'none' }}>
+                  <div
+                    className={`task-checkbox ${subtask.completed ? 'completed' : ''}`}
+                    role="checkbox"
+                    aria-checked={subtask.completed}
+                    aria-label={`Complete ${subtask.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation(); // tick it here, without opening it
+                      onTaskUpdate(subtask.id, { completed: !subtask.completed });
+                    }}
+                  >
                     {subtask.completed && <Check size={10} strokeWidth={3} />}
                   </div>
                   <span style={{ textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? 'var(--text-muted)' : 'var(--text)' }}>

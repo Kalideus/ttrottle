@@ -22,7 +22,12 @@ interface SidebarProps {
   onProjectDelete: (projectId: string) => void;
   onCreateTask: () => void;
   onCreateTicket: () => void;
-  onInvite: () => void;
+  // The same rules the database enforces, so nobody is offered something that will be refused.
+  canEditProject: (projectId: string) => boolean;
+  canDeleteProject: (projectId: string) => boolean;
+  /** Left out when this person can't invite to the open project. */
+  onInvite?: () => void;
+  inviteProjectName?: string;
 }
 
 export function Sidebar({
@@ -41,7 +46,10 @@ export function Sidebar({
   onProjectDelete,
   onCreateTask,
   onCreateTicket,
+  canEditProject,
+  canDeleteProject,
   onInvite,
+  inviteProjectName,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -147,6 +155,7 @@ export function Sidebar({
                 <span className="sidebar-project-name">{project.name}</span>
               )}
               {project.is_private && <Lock size={12} aria-label="Private" style={{ opacity: 0.6 }} />}
+              {(canEditProject(project.id) || canCreateProjects || (!project.is_private && canDeleteProject(project.id))) && (
               <button
                 type="button"
                 className={`sidebar-project-menu ${menuFor === project.id ? 'is-open' : ''}`}
@@ -160,22 +169,25 @@ export function Sidebar({
               >
                 <MoreVertical size={16} />
               </button>
+              )}
 
               {menuFor === project.id && (
                 <>
                   <div className="sidebar-menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
                   <div className="sidebar-menu" ref={flipIfOffscreen} role="menu" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuFor(null);
-                        setDraft(project.name);
-                        setRenamingId(project.id);
-                      }}
-                    >
-                      <Pencil size={14} /> Rename
-                    </button>
+                    {canEditProject(project.id) && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuFor(null);
+                          setDraft(project.name);
+                          setRenamingId(project.id);
+                        }}
+                      >
+                        <Pencil size={14} /> Rename
+                      </button>
+                    )}
                     {canCreateProjects && (
                       <button
                         type="button"
@@ -188,7 +200,7 @@ export function Sidebar({
                         <Copy size={14} /> Duplicate
                       </button>
                     )}
-                    {!project.is_private && (
+                    {!project.is_private && canDeleteProject(project.id) && (
                       <button
                         type="button"
                         role="menuitem"
@@ -207,20 +219,16 @@ export function Sidebar({
             </div>
           ))}
         </div>
-
-        {(projects || []).length > 5 && (
-          <div style={{ padding: '12px', fontSize: '13px', color: 'var(--chrome-text-dim)', cursor: 'pointer' }}>
-            Show more
-          </div>
-        )}
       </div>
 
-      <div className="sidebar-footer">
-        <button className="sidebar-invite-btn" onClick={onInvite}>
-          <Mail size={18} />
-          <span>Invite teammates</span>
-        </button>
-      </div>
+      {onInvite && (
+        <div className="sidebar-footer">
+          <button className="sidebar-invite-btn" onClick={onInvite} title={inviteProjectName && `Invite to ${inviteProjectName}`}>
+            <Mail size={18} />
+            <span>Invite teammates</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

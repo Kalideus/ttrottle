@@ -193,7 +193,7 @@ export function ProjectDuplicateModal({ sourceName, onDuplicate, onClose }: Dupl
           {box('dueDates', 'Due dates')}
           {box('completion', 'Done/not done (otherwise every task starts open)')}
           {box('members', 'Project members')}
-          <span className="modal-field-hint">Using it as a template? Untick everything for a clean copy.</span>
+          <span className="modal-field-hint">Using it as a template? Untick everything for a clean copy. Photos and comments are never copied.</span>
         </div>
 
         {error && <p className="modal-message" style={{ color: '#D64545' }}>{error}</p>}

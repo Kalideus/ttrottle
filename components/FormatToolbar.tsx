@@ -100,7 +100,7 @@ export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLT
       {photoTaskId && (
         <button
           type="button"
-          title="Add a photo"
+          title="Add a photo (kept until 180 days after the task is completed)"
           aria-label="Add a photo"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => fileRef.current?.click()}

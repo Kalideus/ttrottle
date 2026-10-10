@@ -2635,3 +2635,26 @@ button.project-members:hover { background: var(--surface-alt); }
   .ticket-name { flex-basis: calc(100% - 26px); white-space: normal; }
   .ticket-body { padding: 4px 16px 20px; }
 }
+
+/* ---- Printing a project: only the checklist (components/ProjectPrintSheet.tsx) goes on paper ---- */
+.print-sheet { display: none; }
+@media print {
+  @page { margin: 12mm; }
+  html, body, #__next, .app-container { height: auto; background: #fff; }
+  .app-container { display: block; }
+  /* modals are portalled to <body>, next to #__next */
+  body > :not(#__next), .app-container > :not(.print-sheet) { display: none !important; }
+  .print-sheet { display: block; color: #000; font-size: 11pt; }
+  .print-sheet h1 { margin: 0; font-size: 18pt; }
+  .print-sheet p { margin: 2pt 0 0; font-size: 9pt; color: #444; }
+  .print-sheet table { width: 100%; margin-top: 14pt; border-collapse: collapse; table-layout: fixed; }
+  .print-sheet th, .print-sheet td { border: 1px solid #888; padding: 5pt 6pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  .print-sheet th { font-size: 9pt; }
+  .print-sheet .print-section { border: none; padding-left: 0; font-size: 12pt; }
+  .print-sheet .print-tick { text-align: center; font-size: 13pt; line-height: 1; }
+  .print-sheet .print-sub { padding-left: 20pt; }
+  .print-sheet .print-priority { text-transform: capitalize; }
+  /* the column headings repeat on each page, and a task is never split across two */
+  .print-sheet thead { display: table-header-group; }
+  .print-sheet tr { break-inside: avoid; }
+}

@@ -28,6 +28,8 @@ interface ToolbarProps {
   availableTags?: Tag[];
   showCompleted: boolean;
   onShowCompletedChange: (show: boolean) => void;
+  /** My tasks only ever lists open tasks: the completed options there cover their subtasks, nothing else. */
+  openTasksOnly?: boolean;
 }
 
 export function Toolbar({
@@ -43,6 +45,7 @@ export function Toolbar({
   availableTags = [],
   showCompleted,
   onShowCompletedChange,
+  openTasksOnly = false,
 }: ToolbarProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [openMenu, setOpenMenu] = useState<'sort' | 'filter' | null>(null);
@@ -66,7 +69,7 @@ export function Toolbar({
     { label: 'Due this month', value: 'due-month' },
     { label: 'Created last 7 days', value: 'created-7d' },
     { label: 'Created last 30 days', value: 'created-30d' },
-    { label: 'Completed last 7 days', value: 'completed-7d' },
+    ...(openTasksOnly ? [] : [{ label: 'Completed last 7 days', value: 'completed-7d' as FilterValue }]),
     ...availableTags.map((tag) => ({ label: `Tag: ${tag.name}`, value: `tag:${tag.id}` as FilterValue })),
   ];
 
@@ -136,7 +139,7 @@ export function Toolbar({
                   style={{ marginRight: '8px', cursor: 'pointer' }}
                   onChange={(e) => onShowCompletedChange(e.target.checked)}
                 />
-                Show completed tasks
+                {openTasksOnly ? 'Show completed subtasks' : 'Show completed tasks'}
               </label>
               {filterOptions.map((opt) => (
                 <label
@@ -242,7 +245,13 @@ export function Toolbar({
             placeholder="Search tasks..."
             onChange={(e) => onSearchChange(e.target.value)}
             autoFocus
-            onBlur={() => {
+            // stays while it holds a search, so a result can be clicked; Esc clears it
+            onBlur={(e) => {
+              if (!e.target.value) setShowSearch(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.stopPropagation(); // close the search, not the task panel
               setShowSearch(false);
               onSearchChange('');
             }}

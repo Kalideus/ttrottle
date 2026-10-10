@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { photosAsText } from '@/lib/taskPhotos'
+import { photosAsText, PHOTO_PATTERN } from '@/lib/taskPhotos'
 import type { Repeat } from '@/lib/repeat'
 import type { NewTaskSpec } from '@/lib/csvImport'
 
@@ -15,6 +15,8 @@ export type Project = {
   is_private?: boolean
   // takes tickets from people outside the project (migration 031)
   accepts_tickets?: boolean
+  // the section tickets land in (migration 034); null until the first ticket makes one
+  ticket_heading_id?: string | null
 }
 
 export type Heading = {
@@ -274,7 +276,8 @@ export function projectToPlan(
   const section = new Map(headings.map((h) => [h.id, h.name]))
   const spec = (t: Task): NewTaskSpec => ({
     name: t.name,
-    description: t.description,
+    // photos stay with the original: the copy would only be pointing at that task's files
+    description: t.description && (t.description.replace(new RegExp(`${PHOTO_PATTERN}\\n?`, 'g'), '').trim() || null),
     assignee_id: assignees ? t.assignee_id : null,
     due_date: dueDates ? t.due_date : null,
     priority: t.priority,
@@ -612,6 +615,22 @@ export async function restoreTask(supabase: SupabaseClient, id: string) {
   return supabase.from('tasks').update({ deleted_at: null, deleted_by: null }).eq('id', id)
 }
 
+// Merge (migration 033): `removeId` is folded into `keepId`, then soft-deleted.
+// Its photos are copied into the kept task's folder first: a deleted task's folder gets purged,
+// and it may be in a project the kept task's people can't see. The database then repoints the links.
+export async function mergeTasks(supabase: SupabaseClient, keepId: string, removeId: string) {
+  const bucket = supabase.storage.from('task-photos')
+  // ponytail: first 1000 photos; page the list if a task ever has more
+  const { data: files, error } = await bucket.list(removeId, { limit: 1000 })
+  if (error) return { error }
+  for (const f of files) {
+    const copy = await bucket.copy(`${removeId}/${f.name}`, `${keepId}/${f.name}`)
+    // "already exists": an earlier attempt copied it and then failed
+    if (copy.error && !/exist/i.test(copy.error.message)) return { error: copy.error }
+  }
+  return supabase.rpc('merge_tasks', { p_keep: keepId, p_remove: removeId })
+}
+
 export async function getDeletedTasks(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('tasks')
@@ -759,13 +778,32 @@ export async function createComment(
   return result
 }
 
-export async function updateComment(supabase: SupabaseClient, id: string, { body }: { body: string }) {
-  return supabase
+// `newMentions`: people the edit @mentions who weren't mentioned before. They follow the task and
+// are told, the same as a mention in a new comment.
+export async function updateComment(supabase: SupabaseClient, id: string, { body, newMentions = [] }: { body: string; newMentions?: string[] }) {
+  const result = await supabase
     .from('comments')
     .update({ body, edited_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()
+
+  const others = result.data ? newMentions.filter((uid) => uid !== result.data.author_id) : []
+  if (others.length) {
+    const { task_id, author_id } = result.data
+    const text = photosAsText(body)
+    const detail = text.length > 140 ? `${text.slice(0, 140)}…` : text
+    const { error: followError } = await supabase
+      .from('followers')
+      .upsert(others.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
+    if (followError) console.error('Failed to add mentioned people as followers:', followError)
+    const { error: notifyError } = await supabase
+      .from('notifications')
+      .insert(others.map((user_id) => ({ user_id, task_id, type: 'mention', actor_id: author_id, comment_id: id, detail })))
+    if (notifyError) console.error('Failed to notify mentions of an edited comment:', notifyError)
+  }
+
+  return result
 }
 
 export async function deleteComment(supabase: SupabaseClient, id: string) {
@@ -1043,6 +1081,16 @@ export async function getMyTickets(supabase: SupabaseClient) {
 
 export async function setAcceptsTickets(supabase: SupabaseClient, projectId: string, on: boolean) {
   return supabase.rpc('set_accepts_tickets', { p_project_id: projectId, p_on: on })
+}
+
+// Who the sender of a ticket can @mention on it: the team it went to (migration 035).
+export async function getTicketPeople(supabase: SupabaseClient, taskId: string) {
+  const { data } = await supabase.rpc('ticket_people', { p_task_id: taskId })
+  return (data ?? []) as { id: string; name: string }[]
+}
+
+export async function setTicketHeading(supabase: SupabaseClient, projectId: string, headingId: string) {
+  return supabase.rpc('set_ticket_heading', { p_project_id: projectId, p_heading_id: headingId })
 }
 
 // project_id → my role, for the manager-only controls (lock a due date, answer extension requests)

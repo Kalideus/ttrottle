@@ -16,8 +16,10 @@ interface TicketsProps {
   onCreate: () => void;
   comments: CommentItem[];
   commentsLoading: boolean;
+  // the open ticket's team: who its sender can @mention
+  mentionableUsers: { id: string; name: string }[];
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
-  onCommentEdit: (commentId: string, body: string) => Promise<void>;
+  onCommentEdit: (commentId: string, body: string, newMentions?: string[]) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
   onCommentLike: (commentId: string) => Promise<void>;
 }
@@ -31,7 +33,7 @@ function status(t: Ticket) {
 }
 
 // "My tickets": everything I've sent to other teams. The sender can read and comment, not edit.
-export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, comments, commentsLoading, onCommentAdd, onCommentEdit, onCommentDelete, onCommentLike }: TicketsProps) {
+export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, comments, commentsLoading, mentionableUsers, onCommentAdd, onCommentEdit, onCommentDelete, onCommentLike }: TicketsProps) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -83,7 +85,7 @@ export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, co
                       taskId={t.id}
                       comments={comments}
                       loading={commentsLoading}
-                      mentionableUsers={[]}
+                      mentionableUsers={mentionableUsers}
                       onCommentAdd={onCommentAdd}
                       onCommentEdit={onCommentEdit}
                       onCommentDelete={onCommentDelete}

@@ -8,6 +8,7 @@ import { openPicker } from '@/lib/openPicker';
 import { formatKeyDown } from '@/components/FormatToolbar';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
+import { extractMentions } from '@/components/Comments';
 
 export interface NewTaskInput {
   name: string;
@@ -21,11 +22,15 @@ export interface NewTaskInput {
   follower_ids: string[];
   subtasks: string[];
   comment: string | null;
+  // who the comment @mentions
+  comment_mentions: string[];
 }
 
 const NEW_HEADING = '__new__';
 
 interface CreateTaskModalProps {
+  /** The project the task goes into: the one open now, or last open when created from My tasks or the inbox. */
+  projectName?: string;
   members: ProjectMember[];
   headings: Heading[];
   tags: Tag[];
@@ -44,7 +49,7 @@ const PRIORITIES = [
   { value: 'high', label: 'High' },
 ] as const;
 
-export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate, onClose }: CreateTaskModalProps) {
+export function CreateTaskModal({ projectName, members, headings, tags, onCreateTag, onCreate, onClose }: CreateTaskModalProps) {
   useEscapeToClose(onClose);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -121,6 +126,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
         // a subtask typed but not yet added with Enter still counts
         subtasks: subtaskDraft.trim() ? [...subtasks, subtaskDraft.trim()] : subtasks,
         comment: comment.trim() || null,
+        comment_mentions: extractMentions(comment, people.map((m) => ({ id: m.profile_id!, name: memberName(m) }))),
       });
       onClose();
     } finally {
@@ -144,7 +150,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
           }}
         >
           <div className="ct-head">
-            <span className="ct-eyebrow">New task</span>
+            <span className="ct-eyebrow">New task{projectName && ` in ${projectName}`}</span>
             <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
               <X size={16} />
             </button>
@@ -371,7 +377,7 @@ export function CreateTaskModal({ members, headings, tags, onCreateTag, onCreate
               <span className="ct-label">Comment</span>
               <textarea
                 className="ct-control ct-full ct-textarea"
-                placeholder="Add a comment…"
+                placeholder="Add a comment… (@name to mention)"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={2}

@@ -20,7 +20,7 @@ function Photo({ path }: { path: string }) {
     };
   }, [path]);
   if (url === undefined) return <span className="md-photo is-loading" />;
-  if (url === null) return <span className="md-photo-missing">[photo unavailable]</span>;
+  if (url === null) return <span className="md-photo-missing">[photo no longer available: photos are removed 180 days after a task is completed]</span>;
   return (
     // stopPropagation: clicking a photo in the description shouldn't also open the editor
     <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
