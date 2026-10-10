@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Search, CheckCircle2, Circle, Lock, User, X } from 'lucide-react';
-import type { Project } from '@/lib/supabase/queries';
+import type { Project, TaskSearch } from '@/lib/supabase/queries';
 import { formatDay } from '@/lib/dates';
 
 export interface TaskHit {
@@ -23,8 +23,11 @@ type Scope = { kind: 'person'; id: string; name: string } | { kind: 'tag'; id: s
 
 interface GlobalSearchProps {
   projects: Project[];
-  search: (query: string) => Promise<{ tasks: TaskHit[]; people: Person[]; tags: TagHit[] }>;
-  tasksFor: (by: { assignee_id: string } | { tag_id: string }) => Promise<TaskHit[]>;
+  // `projectId`: only that project's tasks (null = every project the user is in)
+  search: (query: string, projectId: string | null) => Promise<{ tasks: TaskHit[]; people: Person[]; tags: TagHit[] }>;
+  findTasks: (by: TaskSearch, projectId: string | null) => Promise<TaskHit[]>;
+  /** Show what's being searched as a full task list on the page, to work through. */
+  onOpenList: (by: TaskSearch, label: string, projectId: string | null) => void;
   onOpenTask: (projectId: string, taskId: string) => void;
   onOpenProject: (projectId: string) => void;
 }
@@ -39,11 +42,13 @@ const SECTION = { person: 'People', tag: 'Tags', project: 'Projects', task: 'Tas
 
 // Top-bar search across every task, person, tag and project the user can see (RLS limits
 // the tasks to their projects). Picking a person or tag lists all of their tasks. Ctrl/⌘+K focuses it.
-export function GlobalSearch({ projects, search, tasksFor, onOpenTask, onOpenProject }: GlobalSearchProps) {
+export function GlobalSearch({ projects, search, findTasks, onOpenList, onOpenTask, onOpenProject }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [found, setFound] = useState<{ tasks: TaskHit[]; people: Person[]; tags: TagHit[] }>({ tasks: [], people: [], tags: [] });
   const [scope, setScope] = useState<Scope | null>(null);
+  // which project to search: '' = all of them
+  const [where, setWhere] = useState('');
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const [modKey, setModKey] = useState('Ctrl');
@@ -74,8 +79,8 @@ export function GlobalSearch({ projects, search, tasksFor, onOpenTask, onOpenPro
     setLoading(true);
     const t = setTimeout(async () => {
       const next = scope
-        ? { tasks: await tasksFor(scope.kind === 'person' ? { assignee_id: scope.id } : { tag_id: scope.id }), people: [], tags: [] }
-        : await search(q);
+        ? { tasks: await findTasks(scope.kind === 'person' ? { assignee_id: scope.id } : { tag_id: scope.id }, where || null), people: [], tags: [] }
+        : await search(q, where || null);
       if (!cancelled) {
         setFound(next);
         setLoading(false);
@@ -85,7 +90,7 @@ export function GlobalSearch({ projects, search, tasksFor, onOpenTask, onOpenPro
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query, scope, search, tasksFor]);
+  }, [query, scope, where, search, findTasks]);
 
   const q = query.trim().toLowerCase();
   const projectHits = q && !scope ? projects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5) : [];
@@ -122,6 +127,15 @@ export function GlobalSearch({ projects, search, tasksFor, onOpenTask, onOpenPro
   };
 
   const showPanel = open && q.length > 0;
+
+  const openList = () => {
+    const by: TaskSearch = !scope ? { text: query.trim() } : scope.kind === 'person' ? { assignee_id: scope.id } : { tag_id: scope.id };
+    const label = !scope ? `“${query.trim()}”` : scope.kind === 'person' ? `Assigned to ${scope.name}` : `Tagged ${scope.name}`;
+    onOpenList(by, label, where || null);
+    setQuery('');
+    setScope(null);
+    close();
+  };
 
   return (
     <div className="gsearch">
@@ -172,6 +186,20 @@ export function GlobalSearch({ projects, search, tasksFor, onOpenTask, onOpenPro
         <>
           <div className="gsearch-backdrop" onClick={() => setOpen(false)} />
           <div className="gsearch-panel" id="gsearch-results" role="listbox">
+            <div className="gsearch-tools">
+              <select aria-label="Where to search" value={where} onChange={(e) => setWhere(e.target.value)}>
+                <option value="">All my projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {(scope || q.length >= 2) && (
+                // mousedown so the input doesn't blur before the click lands
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); openList(); }}>
+                  Open as a list
+                </button>
+              )}
+            </div>
             {scope && (
               <div className="gsearch-section" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {scope.kind === 'person' ? `Assigned to ${scope.name}` : `Tagged ${scope.name}`}

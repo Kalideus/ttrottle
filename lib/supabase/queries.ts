@@ -148,39 +148,54 @@ const taskHits = (supabase: SupabaseClient) =>
     .is('deleted_at', null)
     .order('completed', { ascending: true })
 
-// Top-bar search: the tasks, people and tags whose name contains `query`. Picking a person or
-// a tag then lists their tasks (tasksFor).
-export async function searchAll(supabase: SupabaseClient, query: string) {
-  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-  // inside or(): the pattern is quoted, so a comma or bracket in the search can't break the filter
+// name or description contains `text`, as a filter for or(). The pattern is quoted, so a comma
+// or bracket in the search can't break the filter.
+function textFilter(text: string) {
+  const pattern = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
   const quoted = `"${pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-  const [{ data: found }, { data: people }, { data: tags }] = await Promise.all([
-    // ponytail: first 50, newest first; page it if people need to scroll further back
-    taskHits(supabase).or(`name.ilike.${quoted},description.ilike.${quoted}`).order('created_at', { ascending: false }).limit(50),
+  return `name.ilike.${quoted},description.ilike.${quoted}`
+}
+
+// Top-bar search: the tasks, people and tags whose name contains `query`. Picking a person or
+// a tag then lists their tasks (findTasks). `projectId` keeps the tasks to one project.
+export async function searchAll(supabase: SupabaseClient, query: string, projectId?: string | null) {
+  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  let found = taskHits(supabase).or(textFilter(query))
+  if (projectId) found = found.eq('project_id', projectId)
+  const [{ data: hits }, { data: people }, { data: tags }] = await Promise.all([
+    // ponytail: first 50, newest first; "Open as a list" shows them all
+    found.order('created_at', { ascending: false }).limit(50),
     supabase.from('profiles').select('id, name').ilike('name', pattern).order('name').limit(5),
     supabase.from('tags').select('id, name, color').ilike('name', pattern).order('name').limit(5),
   ])
   // matched on the description alone: say so, since the name won't show why it's listed
   const q = query.toLowerCase()
-  const tasks = (found ?? []).map((t) => (t.name.toLowerCase().includes(q) ? t : { ...t, why: 'In description' }))
+  const tasks = (hits ?? []).map((t) => (t.name.toLowerCase().includes(q) ? t : { ...t, why: 'In description' }))
   return { tasks, people: people ?? [], tags: tags ?? [] }
 }
 
-// Every task assigned to one person, or carrying one tag. Open tasks first, soonest due date
-// at the top, ones with no date after those.
-// ponytail: no paging, the server stops at its own row limit (1000 by default)
-export async function tasksFor(supabase: SupabaseClient, by: { assignee_id: string } | { tag_id: string }) {
-  const sorted = (q: ReturnType<typeof taskHits>) => q.order('due_date', { ascending: true, nullsFirst: false })
-  if ('assignee_id' in by) return (await sorted(taskHits(supabase).eq('assignee_id', by.assignee_id))).data ?? []
-  const { data } = await sorted(
-    supabase
-      .from('tasks')
-      .select('id, name, project_id, completed, parent_task_id, assignee_id, due_date, task_tags!inner(tag_id)')
-      .eq('task_tags.tag_id', by.tag_id)
-      .is('deleted_at', null)
-      .order('completed', { ascending: true }) as unknown as ReturnType<typeof taskHits>
-  )
-  return data ?? []
+export type TaskSearch = { assignee_id: string } | { tag_id: string } | { text: string }
+
+// Every task assigned to one person, carrying one tag, or containing some text, as full rows
+// (the search list works on them like My tasks does). Open tasks first, soonest due date at
+// the top, ones with no date after those.
+// ponytail: no paging (the server stops at its own row limit, 1000 by default), and the rows come without their tags
+export async function findTasks(supabase: SupabaseClient, by: TaskSearch, projectId?: string | null) {
+  let q = supabase
+    .from('tasks')
+    .select(`*, project:projects!tasks_project_id_fkey(id, name, color), subtasks:tasks!parent_task_id(*)${'tag_id' in by ? ', task_tags!inner(tag_id)' : ''}`)
+    .is('deleted_at', null)
+  if ('assignee_id' in by) q = q.eq('assignee_id', by.assignee_id)
+  else if ('tag_id' in by) q = q.eq('task_tags.tag_id', by.tag_id)
+  else q = q.or(textFilter(by.text))
+  if (projectId) q = q.eq('project_id', projectId)
+  const { data } = await q
+    .order('completed', { ascending: true })
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('position', { referencedTable: 'subtasks', ascending: true })
+    .order('created_at', { referencedTable: 'subtasks', ascending: true })
+  const rows = ((data ?? []) as unknown as Task[]).map((t) => ({ ...t, subtasks: (t.subtasks ?? []).filter((st) => !st.deleted_at) }))
+  return (await attachProfilesById(supabase, rows, 'assignee_id', 'assignee')) as Task[]
 }
 
 // The merge picker's one flat list: tasks whose name contains `query`, then tasks assigned to

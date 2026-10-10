@@ -9,7 +9,6 @@ import { AddTaskForm } from '@/components/AddTaskForm';
 import { hexToRgba } from '@/components/TagPicker';
 import { avatarStyle } from '@/lib/avatar';
 import { isOverdue, formatDay } from '@/lib/dates';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { openPicker } from '@/lib/openPicker';
 
 interface TaskTableProps {
@@ -78,8 +77,6 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   // the line showing where a dragged row will land: before/after this row (and its subtasks)
   const [dropLine, setDropLine] = useState<{ id: string; after: boolean } | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
-  const [undoTask, setUndoTask] = useState<{ id: string; name: string } | null>(null);
-  const [confirmTask, setConfirmTask] = useState<Task | null>(null);
   const [openMenuTaskId, setOpenMenuTaskId] = useState<string | null>(null);
   const [addingSubtaskTo, setAddingSubtaskTo] = useState<string | null>(null);
   const [editingTaskNameId, setEditingTaskNameId] = useState<string | null>(null);
@@ -117,28 +114,12 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
       return;
     }
 
-    setConfirmTask(task);
-  };
-
-  const completeTask = (task: Task) => {
-    setConfirmTask(null);
+    // no "are you sure": the parent shows an Undo for a few seconds instead
     setCompletingTaskId(task.id);
     setTimeout(() => {
       setCompletingTaskId(null);
       onTaskUpdate(task.id, { completed: true });
-      // no Undo for a repeating task: its next copy already exists (or a subtask has rolled on), and un-ticking wouldn't take that back
-      if (task.repeat) return;
-      setUndoTask({ id: task.id, name: task.name });
-      setTimeout(() => {
-        setUndoTask((current) => (current?.id === task.id ? null : current));
-      }, 5000);
     }, 1000);
-  };
-
-  const undoComplete = () => {
-    if (!undoTask) return;
-    onTaskUpdate(undoTask.id, { completed: false });
-    setUndoTask(null);
   };
 
   const startHeadingEdit = (headingId: string, e: React.MouseEvent) => {
@@ -392,14 +373,15 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             // clicking the open task again (or the arrow) collapses them
             if (hasSubtasks) (task.id === selectedTaskId ? toggleTaskExpand : expandTask)(task.id);
           }}
-          draggable={!(isLevel2 && flat)}
+          // not in My tasks or a search list: those are always in due-date order and mix projects, so there's nowhere to drop
+          draggable={!flat}
           onDragStart={(e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
             setDraggedTaskId(task.id);
           }}
           onDragEnd={endDrag}
-          style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: isLevel2 && flat ? undefined : 'grab' }}
+          style={{ opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: flat ? undefined : 'grab' }}
         >
           <div className="task-row-content">
             {bulkSelected && (
@@ -482,7 +464,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
             {hasSubtasks && (
               <span className="task-subtask-count">
-                {task.subtasks?.filter((st) => !st.completed).length}/{task.subtasks?.length}
+                {task.subtasks?.filter((st) => st.completed).length}/{task.subtasks?.length}
               </span>
             )}
 
@@ -711,7 +693,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
         {!isLevel2 && (hasSubtasks || addingSubtaskTo === task.id) && isExpanded && (
           <>
             {(() => {
-              // completed subtasks follow the "Show completed" toggle; the n/m count above still includes them
+              // completed subtasks follow the "Show completed" toggle; the done/total count above still includes them
               const visible = (task.subtasks ?? []).filter((st) => showCompleted || !st.completed);
               return visible.map((subtask) => renderTask(subtask, true));
             })()}
@@ -751,23 +733,6 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
       </div>
     );
   };
-
-  const confirmDialog = confirmTask && (
-    <ConfirmModal
-      title="Complete task?"
-      message={`Mark "${confirmTask.name}" as complete?`}
-      confirmLabel="Complete"
-      onConfirm={() => completeTask(confirmTask)}
-      onCancel={() => setConfirmTask(null)}
-    />
-  );
-
-  const undoToast = undoTask && (
-    <div className="undo-toast">
-      <span>Task completed</span>
-      <button onClick={undoComplete}>Undo</button>
-    </div>
-  );
 
   if (tasks.length === 0 && headings.length === 0) {
     return (
@@ -824,8 +789,6 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             </button>
           )}
         </div>
-        {undoToast}
-        {confirmDialog}
       </div>
     );
   }
@@ -1012,8 +975,6 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
           </div>
         )}
       </div>
-      {undoToast}
-      {confirmDialog}
     </div>
   );
 }

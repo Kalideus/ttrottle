@@ -6,7 +6,8 @@ import type { Project } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface SidebarProps {
-  activeSection: 'my-tasks' | 'inbox' | 'tickets' | 'projects';
+  // 'search' (a search opened as a list) has no entry here: nothing is highlighted while it shows
+  activeSection: 'my-tasks' | 'inbox' | 'tickets' | 'projects' | 'search';
   activeProjectId?: string;
   projects: Project[];
   notificationsBadge?: number;

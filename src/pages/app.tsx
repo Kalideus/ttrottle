@@ -10,6 +10,7 @@ import type { NewTaskSpec } from '@/lib/csvImport';
 import { repeatLabel, type Repeat } from '@/lib/repeat';
 import { CreateTaskModal, type NewTaskInput } from '@/components/CreateTaskModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { CreateTicketModal, type NewTicketInput } from '@/components/CreateTicketModal';
 import { Tickets } from '@/components/Tickets';
 import { MembersModal } from '@/components/MembersModal';
@@ -57,7 +58,8 @@ import {
   getProfiles,
   searchTasks,
   searchAll,
-  tasksFor,
+  findTasks,
+  type TaskSearch,
   getComments,
   createComment,
   updateComment,
@@ -95,6 +97,11 @@ import {
   type TaskActivity,
 } from '@/lib/supabase/queries';
 
+type Section = 'my-tasks' | 'inbox' | 'tickets' | 'projects';
+// A search opened as a list from the top search bar, to work through like My tasks.
+// `projectId`: only that project (null = every project the user is in). `from`: where the cross goes back to.
+type SearchView = { by: TaskSearch; label: string; projectId: string | null; from: Section };
+
 const DAY_MS = 86400000;
 const NOTIFICATIONS_PAGE_SIZE = 50;
 
@@ -125,7 +132,7 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
 
 export default function AppPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<'my-tasks' | 'inbox' | 'tickets' | 'projects'>('my-tasks');
+  const [activeSection, setActiveSection] = useState<Section | 'search'>('my-tasks');
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
@@ -268,8 +275,26 @@ export default function AppPage() {
     if (!projectCache.current.has(id)) void loadProject(id);
   };
   // Current values for code that finishes after a later render (background saves and their resyncs).
-  const latest = useRef({ activeProjectId, selectedTaskId, currentUserId, currentProfile });
-  latest.current = { activeProjectId, selectedTaskId, currentUserId, currentProfile };
+  const [searchView, setSearchView] = useState<SearchView | null>(null);
+  const [searchResults, setSearchResults] = useState<Task[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const latest = useRef({ activeProjectId, selectedTaskId, currentUserId, currentProfile, searchView });
+  latest.current = { activeProjectId, selectedTaskId, currentUserId, currentProfile, searchView };
+  const loadSearch = async (view: SearchView | null) => {
+    if (!view) return;
+    const rows = await findTasks(supabase, view.by, view.projectId);
+    // like My tasks, the list mixes projects, so headings mean nothing in it
+    if (latest.current.searchView === view) setSearchResults(rows.map((t) => ({ ...t, heading_id: null })));
+  };
+  useEffect(() => {
+    setSearchResults([]);
+    if (!searchView) return;
+    setSearchLoading(true);
+    void loadSearch(searchView).finally(() => {
+      setSearchLoading(false);
+      setResortToken((n) => n + 1); // a new search starts in its own order, not the last one's
+    });
+  }, [searchView]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!activeProjectId) return;
     let stale = false;
@@ -306,7 +331,7 @@ export default function AppPage() {
   // My tasks spans projects, so its people pickers need each task's own project members,
   // not the members of whichever project was open last.
   const [myTaskMembers, setMyTaskMembers] = useState<Map<string, ProjectMember[]>>(new Map());
-  const myTaskProjectIds = useMemo(() => [...new Set(myTasks.map((t) => t.project_id).filter(Boolean))].sort().join(','), [myTasks]);
+  const myTaskProjectIds = useMemo(() => [...new Set([...myTasks, ...searchResults].map((t) => t.project_id).filter(Boolean))].sort().join(','), [myTasks, searchResults]);
   useEffect(() => {
     if (myTaskProjectIds) getMembersByProject(supabase, myTaskProjectIds.split(',')).then(setMyTaskMembers);
   }, [myTaskProjectIds, supabase]);
@@ -482,7 +507,7 @@ export default function AppPage() {
     [projects, activeProjectId]
   );
 
-  const taskPool = activeSection === 'my-tasks' ? myTasks : tasks;
+  const taskPool = activeSection === 'my-tasks' ? myTasks : activeSection === 'search' ? searchResults : tasks;
 
   const selectedTask = useMemo(
     () => taskPool.find((t) => t.id === selectedTaskId) ?? taskPool.flatMap((t) => t.subtasks ?? []).find((t) => t.id === selectedTaskId),
@@ -536,8 +561,8 @@ export default function AppPage() {
     const byDue = (a: Task, b: Task) => (a.due_date ? new Date(a.due_date).getTime() : Infinity) - (b.due_date ? new Date(b.due_date).getTime() : Infinity);
     const rank = { high: 0, medium: 1, low: 2 };
     const byPriority = (a: Task, b: Task) => (a.priority ? rank[a.priority] : 3) - (b.priority ? rank[b.priority] : 3);
-    if (activeSection === 'my-tasks') {
-      // My Tasks is always due-date order, overdue-first — not subject to the toolbar's sort picker.
+    if (activeSection === 'my-tasks' || activeSection === 'search') {
+      // My Tasks (and a search list) is always due-date order, overdue-first — not subject to the toolbar's sort picker.
       result.sort((a, b) => byDue(a, b) || byPriority(a, b));
     } else result.sort((a, b) => {
       let cmp = 0;
@@ -603,7 +628,7 @@ export default function AppPage() {
   // What a finished save may have changed; each reloads from the server for whatever is on screen now.
   const resyncers = {
     notifications: () => Promise.all([loadNotificationsBadge(), inboxOpen.current ? loadNotifications() : null]),
-    tasks: () => Promise.all([refreshTasks(), refreshMyTasks()]),
+    tasks: () => Promise.all([refreshTasks(), refreshMyTasks(), saves.pending === 0 ? loadSearch(latest.current.searchView) : null]),
     headings: async () => {
       const id = latest.current.activeProjectId;
       if (!id) return;
@@ -669,12 +694,14 @@ export default function AppPage() {
     const p = (t: Task): Task => (t.id === taskId ? fn(t) : t.subtasks ? { ...t, subtasks: t.subtasks.map(p) } : t);
     setTasks((ts) => ts.map(p));
     setMyTasks((ts) => ts.map(p));
+    setSearchResults((ts) => ts.map(p));
   };
 
   const removeTasks = (ids: Set<string>) => {
     const drop = (ts: Task[]): Task[] => ts.filter((t) => !ids.has(t.id)).map((t) => (t.subtasks ? { ...t, subtasks: drop(t.subtasks) } : t));
     setTasks(drop);
     setMyTasks(drop);
+    setSearchResults(drop);
     if (selectedTaskId && ids.has(selectedTaskId)) setSelectedTaskId(null);
   };
 
@@ -710,7 +737,7 @@ export default function AppPage() {
 
   const handleSubtaskAdd = async (parentTaskId: string, name: string) => {
     // from My tasks the parent may belong to any project, so the subtask goes in the parent's project
-    const parent = [...tasks, ...myTasks].find((t) => t.id === parentTaskId);
+    const parent = [...tasks, ...myTasks, ...searchResults].find((t) => t.id === parentTaskId);
     const sub = newTask({ parent_task_id: parentTaskId, name, position: nextPosition(parent?.subtasks ?? []), project_id: parent?.project_id ?? activeProjectId });
     patchTask(parentTaskId, (t) => ({ ...t, subtasks: [...(t.subtasks ?? []), sub] }));
     persist(async () => must(await createTask(supabase, { id: sub.id, position: sub.position, project_id: sub.project_id, parent_task_id: parentTaskId, name, created_by: currentUserId })), 'tasks');
@@ -802,15 +829,28 @@ export default function AppPage() {
     return messages;
   };
 
+  const [undoCompleteId, setUndoCompleteId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!undoCompleteId) return;
+    const t = setTimeout(() => setUndoCompleteId(null), 6000);
+    return () => clearTimeout(t);
+  }, [undoCompleteId]);
+
   const handleTaskUpdate = async (taskId: string, updates: Record<string, unknown>) => {
     // new key each time so a second completion mid-animation restarts it
-    if (updates.completed === true) setCelebration(Date.now());
+    if (updates.completed === true) {
+      setCelebration(Date.now());
+      // Completing asks nothing; an Undo shows for a few seconds instead. Not for a repeating task:
+      // its next copy already exists (or a subtask has rolled on), and un-ticking wouldn't take that back.
+      const task = [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
+      setUndoCompleteId(task?.repeat ? null : taskId);
+    }
     const optimistic: Partial<Task> = { ...updates };
     if ('assignee_id' in updates) optimistic.assignee = findMember(updates.assignee_id)?.profile ?? null;
     if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
     patchTask(taskId, (t) => ({ ...t, ...optimistic }));
     // My Tasks is due-date ordered, so a new date moves the row to its place straight away
-    if ('position' in updates || ('due_date' in updates && activeSection === 'my-tasks')) setResortToken((n) => n + 1);
+    if ('position' in updates || ('due_date' in updates && activeSection !== 'projects')) setResortToken((n) => n + 1);
 
     const messages = buildActivityMessages(updates, taskId);
     persist(async () => {
@@ -1204,15 +1244,9 @@ export default function AppPage() {
     return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
   };
 
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const handleChangePassword = async () => {
-    const next = window.prompt('New password (at least 6 characters):');
-    if (!next) return;
-    if (next.length < 6) {
-      window.alert('Password must be at least 6 characters.');
-      return;
-    }
-    const { error } = await supabase.auth.updateUser({ password: next });
-    window.alert(error ? `Could not update password: ${error.message}` : 'Password updated.');
+    setShowChangePassword(true);
   };
 
   const handleLogout = async () => {
@@ -1377,8 +1411,19 @@ export default function AppPage() {
 
   // stable identity so GlobalSearch's debounce effect doesn't re-run every render
   const runTaskSearch = useCallback((q: string) => searchTasks(supabase, q), [supabase]);
-  const runSearch = useCallback((q: string) => searchAll(supabase, q), [supabase]);
-  const runTasksFor = useCallback((by: Parameters<typeof tasksFor>[1]) => tasksFor(supabase, by), [supabase]);
+  const runSearch = useCallback((q: string, projectId: string | null) => searchAll(supabase, q, projectId), [supabase]);
+  const runFindTasks = useCallback((by: TaskSearch, projectId: string | null) => findTasks(supabase, by, projectId), [supabase]);
+  const openSearchList = (by: TaskSearch, label: string, projectId: string | null) => {
+    // a second search from inside the list still goes back to where the first one started
+    setSearchView({ by, label, projectId, from: activeSection === 'search' ? searchView?.from ?? 'my-tasks' : activeSection });
+    setSelectedTaskId(null);
+    setActiveSection('search');
+  };
+  const closeSearchList = () => {
+    setActiveSection(searchView?.from ?? 'my-tasks');
+    setSearchView(null);
+    setSelectedTaskId(null);
+  };
 
   const openInProject = (projectId: string, taskId?: string | null) => {
     setActiveProjectId(projectId);
@@ -1473,7 +1518,8 @@ export default function AppPage() {
           <GlobalSearch
             projects={projects}
             search={runSearch}
-            tasksFor={runTasksFor}
+            findTasks={runFindTasks}
+            onOpenList={openSearchList}
             onOpenTask={openInProject}
             onOpenProject={(projectId) => openInProject(projectId)}
           />
@@ -1533,6 +1579,25 @@ export default function AppPage() {
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showChangePassword && (
+        <ChangePasswordModal
+          onSave={async (password) => (await supabase.auth.updateUser({ password })).error?.message ?? null}
+          onClose={() => setShowChangePassword(false)}
+        />
+      )}
+      {undoCompleteId && (
+        <div className="undo-toast" role="status">
+          <span>Task completed</span>
+          <button
+            onClick={() => {
+              void handleTaskUpdate(undoCompleteId, { completed: false });
+              setUndoCompleteId(null);
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      )}
       {showCreateTicket && <CreateTicketModal teams={ticketTeams} onCreate={submitTicket} onClose={() => setShowCreateTicket(false)} />}
 
       {celebration && <TukTukCelebration key={celebration} onDone={endCelebration} />}
@@ -1697,8 +1762,25 @@ export default function AppPage() {
             </>
           )}
 
-          {activeSection === 'my-tasks' && (
+          {(activeSection === 'my-tasks' || activeSection === 'search') && (
             <>
+              {activeSection === 'search' && searchView && (
+                <div className="search-bar">
+                  <span className="search-bar-label">
+                    {searchView.label}
+                    <button type="button" title="Close this search" aria-label="Close this search" onClick={closeSearchList}>✕</button>
+                  </span>
+                  <select aria-label="Where to search" value={searchView.projectId ?? ''} onChange={(e) => setSearchView({ ...searchView, projectId: e.target.value || null })}>
+                    <option value="">All my projects</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <span className="search-bar-count">
+                    {searchLoading ? 'Searching…' : `${displayedTasks.length} task${displayedTasks.length === 1 ? '' : 's'}`}
+                  </span>
+                </div>
+              )}
               <Toolbar
                 onAddTask={handleCreateTaskClick}
                 activeFilters={activeFilters}
@@ -1710,7 +1792,8 @@ export default function AppPage() {
                 onShowCompletedChange={setShowCompleted}
                 sortField={sortField}
                 sortDirection={sortDirection}
-                openTasksOnly
+                // My tasks only loads open tasks; a search list has the completed ones too
+                openTasksOnly={activeSection === 'my-tasks'}
               />
 
               <div className="app-content">

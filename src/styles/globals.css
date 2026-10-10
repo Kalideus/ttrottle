@@ -2659,3 +2659,24 @@ button.project-members:hover { background: var(--surface-alt); }
   .print-sheet thead { display: table-header-group; }
   .print-sheet tr { break-inside: avoid; }
 }
+
+/* Search: the row above the results (which project, and "Open as a list") */
+.gsearch-tools { display: flex; align-items: center; gap: 8px; padding: 4px 6px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.gsearch-tools select, .search-bar select {
+  min-width: 0; max-width: 60%; height: 30px; padding: 0 8px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+.gsearch-tools button {
+  margin-left: auto; height: 30px; padding: 0 12px; white-space: nowrap; font-size: 13px; font-weight: 600;
+  border: none; border-radius: 6px; background: var(--accent); color: #fff;
+}
+
+/* A search opened as a list: what was searched, where, and a cross to go back */
+.search-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+.search-bar-label {
+  display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; font-size: 14px; font-weight: 600;
+  border-radius: 16px; background: var(--accent-soft); color: var(--text);
+}
+.search-bar-label button { display: flex; border: none; background: none; padding: 2px 4px; font-size: 14px; color: var(--text-muted); }
+.search-bar-label button:hover { color: var(--text); }
+.search-bar-count { font-size: 13px; color: var(--text-muted); }
