@@ -8,7 +8,7 @@ import { openPicker } from '@/lib/openPicker';
 import { formatKeyDown } from '@/components/FormatToolbar';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
-import { extractMentions } from '@/components/Comments';
+import { extractMentions } from '@/lib/mentions';
 
 export interface NewTaskInput {
   name: string;

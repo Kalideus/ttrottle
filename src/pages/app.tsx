@@ -27,6 +27,7 @@ import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
 import { createSaveQueue } from '@/lib/saveQueue';
 import { localYmd, isOverdue, formatDay } from '@/lib/dates';
+import { filterKinds } from '@/lib/filterKinds';
 import {
   getProjects,
   getTasksForProject,
@@ -55,6 +56,8 @@ import {
   removeProjectMember,
   getProfiles,
   searchTasks,
+  searchAll,
+  tasksFor,
   getComments,
   createComment,
   updateComment,
@@ -508,13 +511,9 @@ export default function AppPage() {
     }
 
     if (activeFilters.length > 0) {
-      // Same kind widens (High or Medium), different kinds narrow (High and Overdue).
-      const kindOf = (f: FilterValue) =>
-        f.startsWith('priority:') ? 'priority' : f.startsWith('tag:') ? 'tag' : f.startsWith('created') ? 'created' : f.startsWith('completed') ? 'completed' : 'due';
-      const kinds = new Map<string, FilterValue[]>();
-      for (const f of activeFilters) kinds.set(kindOf(f), [...(kinds.get(kindOf(f)) ?? []), f]);
+      const kinds = filterKinds(activeFilters);
       result = result.filter((task) => {
-        return [...kinds.values()].every((group) => group.some((filter) => {
+        return kinds.every((group) => group.some((filter) => {
           if (filter === 'priority:high') return task.priority === 'high';
           if (filter === 'priority:medium') return task.priority === 'medium';
           if (filter === 'priority:low') return task.priority === 'low';
@@ -848,7 +847,8 @@ export default function AppPage() {
     setHeadings((hs) => hs.filter((h) => h.id !== headingId));
     // tasks.heading_id is ON DELETE SET NULL
     setTasks((ts) => ts.map((t) => (t.heading_id === headingId ? { ...t, heading_id: null } : t)));
-    persist(async () => must(await deleteHeading(supabase, headingId)), 'headings', 'tasks');
+    // 'projects': deleting the section tickets go into clears that setting (migration 034)
+    persist(async () => must(await deleteHeading(supabase, headingId)), 'headings', 'tasks', 'projects');
   };
 
   const handleNoHeadingRename = async (name: string, taskIds: string[]) => {
@@ -1377,6 +1377,8 @@ export default function AppPage() {
 
   // stable identity so GlobalSearch's debounce effect doesn't re-run every render
   const runTaskSearch = useCallback((q: string) => searchTasks(supabase, q), [supabase]);
+  const runSearch = useCallback((q: string) => searchAll(supabase, q), [supabase]);
+  const runTasksFor = useCallback((by: Parameters<typeof tasksFor>[1]) => tasksFor(supabase, by), [supabase]);
 
   const openInProject = (projectId: string, taskId?: string | null) => {
     setActiveProjectId(projectId);
@@ -1470,7 +1472,8 @@ export default function AppPage() {
         search={
           <GlobalSearch
             projects={projects}
-            searchTasks={runTaskSearch}
+            search={runSearch}
+            tasksFor={runTasksFor}
             onOpenTask={openInProject}
             onOpenProject={(projectId) => openInProject(projectId)}
           />

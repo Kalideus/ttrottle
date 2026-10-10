@@ -2642,8 +2642,9 @@ button.project-members:hover { background: var(--surface-alt); }
   @page { margin: 12mm; }
   html, body, #__next, .app-container { height: auto; background: #fff; }
   .app-container { display: block; }
-  /* modals are portalled to <body>, next to #__next */
-  body > :not(#__next), .app-container > :not(.print-sheet) { display: none !important; }
+  /* Only while the checklist is there (a project is open): elsewhere the screen prints as it looks.
+     Modals are portalled to <body>, next to #__next. */
+  body:has(.print-sheet) > :not(#__next), .app-container:has(.print-sheet) > :not(.print-sheet) { display: none !important; }
   .print-sheet { display: block; color: #000; font-size: 11pt; }
   .print-sheet h1 { margin: 0; font-size: 18pt; }
   .print-sheet p { margin: 2pt 0 0; font-size: 9pt; color: #444; }

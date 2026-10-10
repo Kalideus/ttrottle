@@ -139,19 +139,79 @@ export type TaskWithRelations = Task & {
   comment_count: number
 }
 
-// Top-bar search: task names containing `query`, across every project the
-// user can see (RLS does the scoping). Open tasks first.
-export async function searchTasks(supabase: SupabaseClient, query: string) {
-  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-  const { data } = await supabase
+// Search only ever reaches the projects the user can see: RLS does the scoping, so nothing
+// from a project they aren't in (or someone else's private project) can come back.
+const taskHits = (supabase: SupabaseClient) =>
+  supabase
     .from('tasks')
-    .select('id, name, project_id, completed, parent_task_id')
-    .ilike('name', pattern)
+    .select('id, name, project_id, completed, parent_task_id, assignee_id, due_date')
     .is('deleted_at', null)
     .order('completed', { ascending: true })
-    .order('created_at', { ascending: false })
-    .limit(10)
+
+// Top-bar search: the tasks, people and tags whose name contains `query`. Picking a person or
+// a tag then lists their tasks (tasksFor).
+export async function searchAll(supabase: SupabaseClient, query: string) {
+  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  // inside or(): the pattern is quoted, so a comma or bracket in the search can't break the filter
+  const quoted = `"${pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  const [{ data: found }, { data: people }, { data: tags }] = await Promise.all([
+    // ponytail: first 50, newest first; page it if people need to scroll further back
+    taskHits(supabase).or(`name.ilike.${quoted},description.ilike.${quoted}`).order('created_at', { ascending: false }).limit(50),
+    supabase.from('profiles').select('id, name').ilike('name', pattern).order('name').limit(5),
+    supabase.from('tags').select('id, name, color').ilike('name', pattern).order('name').limit(5),
+  ])
+  // matched on the description alone: say so, since the name won't show why it's listed
+  const q = query.toLowerCase()
+  const tasks = (found ?? []).map((t) => (t.name.toLowerCase().includes(q) ? t : { ...t, why: 'In description' }))
+  return { tasks, people: people ?? [], tags: tags ?? [] }
+}
+
+// Every task assigned to one person, or carrying one tag. Open tasks first, soonest due date
+// at the top, ones with no date after those.
+// ponytail: no paging, the server stops at its own row limit (1000 by default)
+export async function tasksFor(supabase: SupabaseClient, by: { assignee_id: string } | { tag_id: string }) {
+  const sorted = (q: ReturnType<typeof taskHits>) => q.order('due_date', { ascending: true, nullsFirst: false })
+  if ('assignee_id' in by) return (await sorted(taskHits(supabase).eq('assignee_id', by.assignee_id))).data ?? []
+  const { data } = await sorted(
+    supabase
+      .from('tasks')
+      .select('id, name, project_id, completed, parent_task_id, assignee_id, due_date, task_tags!inner(tag_id)')
+      .eq('task_tags.tag_id', by.tag_id)
+      .is('deleted_at', null)
+      .order('completed', { ascending: true }) as unknown as ReturnType<typeof taskHits>
+  )
   return data ?? []
+}
+
+// The merge picker's one flat list: tasks whose name contains `query`, then tasks assigned to
+// a person, or carrying a tag, whose name does. Those say why they matched (`why`).
+export async function searchTasks(supabase: SupabaseClient, query: string) {
+  const tasks = () => taskHits(supabase).order('created_at', { ascending: false })
+  const { tasks: byName, people, tags } = await searchAll(supabase, query)
+
+  // ponytail: a tag's first 100 tasks (the ids travel in the URL); search by tag in the database if tags get that big
+  const { data: tagged } = tags?.length
+    ? await supabase.from('task_tags').select('task_id, tag_id').in('tag_id', tags.map((t) => t.id)).limit(100)
+    : { data: [] }
+  const either = [
+    people?.length && `assignee_id.in.(${people.map((p) => p.id).join(',')})`,
+    tagged?.length && `id.in.(${tagged.map((t) => t.task_id).join(',')})`,
+  ].filter(Boolean)
+  const { data: related } = either.length ? await tasks().or(either.join(',')).limit(30) : { data: [] }
+
+  const personName = new Map((people ?? []).map((p) => [p.id, p.name]))
+  const tagName = new Map((tags ?? []).map((t) => [t.id, t.name]))
+  const tagOfTask = new Map((tagged ?? []).map((t) => [t.task_id, tagName.get(t.tag_id)]))
+  const seen = new Set((byName ?? []).map((t) => t.id))
+  return [
+    ...(byName ?? []),
+    ...(related ?? [])
+      .filter((t) => !seen.has(t.id))
+      .map((t) => ({
+        ...t,
+        why: personName.has(t.assignee_id) ? `Assigned to ${personName.get(t.assignee_id)}` : `Tag: ${tagOfTask.get(t.id) ?? ''}`,
+      })),
+  ]
 }
 
 export async function getProjects(supabase: SupabaseClient) {
@@ -619,6 +679,10 @@ export async function restoreTask(supabase: SupabaseClient, id: string) {
 // Its photos are copied into the kept task's folder first: a deleted task's folder gets purged,
 // and it may be in a project the kept task's people can't see. The database then repoints the links.
 export async function mergeTasks(supabase: SupabaseClient, keepId: string, removeId: string) {
+  // the database refuses a repeating task too; checked here first so no photos are copied for nothing
+  const { data: pair } = await supabase.from('tasks').select('repeat').in('id', [keepId, removeId])
+  if (pair?.some((t) => t.repeat)) return { error: { message: "A repeating task can't be merged. Turn off its repeat first" } }
+
   const bucket = supabase.storage.from('task-photos')
   // ponytail: first 1000 photos; page the list if a task ever has more
   const { data: files, error } = await bucket.list(removeId, { limit: 1000 })

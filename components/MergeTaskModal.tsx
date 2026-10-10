@@ -101,7 +101,7 @@ export function MergeTaskModal({ task, projects, searchTasks, onMerge, onClose }
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tasks in any of your projects"
+                placeholder="Search by task name, person or tag"
                 autoFocus
               />
             </label>
@@ -120,6 +120,7 @@ export function MergeTaskModal({ task, projects, searchTasks, onMerge, onClose }
                     <Circle size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   )}
                   <span className={`gsearch-name ${hit.completed ? 'is-done' : ''}`}>{hit.name}</span>
+                  {hit.why && <span className="gsearch-project">{hit.why}</span>}
                   {projectLabel(hit.project_id)}
                 </button>
               ))}

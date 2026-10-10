@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, ChevronDown, Filter, ArrowUpDown, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Tag } from '@/lib/supabase/queries';
 
 export type FilterValue =
@@ -49,6 +49,9 @@ export function Toolbar({
 }: ToolbarProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [openMenu, setOpenMenu] = useState<'sort' | 'filter' | null>(null);
+  // The search text is kept by the parent. Leaving this screen takes the box away, so the search
+  // goes with it: otherwise the next list would be filtered by a search nobody can see.
+  useEffect(() => () => onSearchChange(''), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortOptions: Array<{ label: string; field: SortField }> = [
     { label: 'Manual order', field: 'position' },

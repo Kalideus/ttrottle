@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { Heading, Task } from '@/lib/supabase/queries';
 import { formatDay } from '@/lib/dates';
 
@@ -8,9 +10,23 @@ interface ProjectPrintSheetProps {
   showCompleted: boolean;
 }
 
-// The project as a paper checklist. Hidden on screen; when printing it's the only thing shown
+// The project as a paper checklist. Only built while printing, when it's the only thing shown
 // (see ".print-sheet" in globals.css). Empty cells are left blank to be filled in by hand.
 export function ProjectPrintSheet({ projectName, headings, tasks, showCompleted }: ProjectPrintSheetProps) {
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    // flushSync: the page is captured as soon as this handler returns
+    const start = () => flushSync(() => setPrinting(true));
+    const end = () => setPrinting(false);
+    window.addEventListener('beforeprint', start);
+    window.addEventListener('afterprint', end);
+    return () => {
+      window.removeEventListener('beforeprint', start);
+      window.removeEventListener('afterprint', end);
+    };
+  }, []);
+  if (!printing) return null;
+
   const wanted = (ts: Task[]) => ts.filter((t) => showCompleted || !t.completed).sort((a, b) => a.position - b.position);
   const known = new Set(headings.map((h) => h.id));
   const sections = [
@@ -31,8 +47,7 @@ export function ProjectPrintSheet({ projectName, headings, tasks, showCompleted 
   return (
     <div className="print-sheet">
       <h1>{projectName}</h1>
-      {/* the server's date can differ from the browser's around midnight */}
-      <p suppressHydrationWarning>Printed {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+      <p>Printed {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
       {sections.map((s) => (
         <table key={s.id}>
           {/* widths live here: the section title spans every column, so the first row can't set them */}
