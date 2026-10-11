@@ -48,7 +48,7 @@ function Brand() {
       <div className="login-brand-mark">
         <img src="/logo.svg" alt="" />
       </div>
-      <span className="login-brand-word brand-word">ttrottle</span>
+      <span className="login-brand-word brand-word">TRack</span>
     </div>
   );
 }

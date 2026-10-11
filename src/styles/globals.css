@@ -2405,6 +2405,8 @@ button.project-members:hover { background: var(--surface-alt); }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 9px; font-weight: 700; color: #fff; text-transform: uppercase; object-fit: cover;
 }
+/* the comment box's own text is see-through (the chip layer under it shows it); Firefox would hide the placeholder too */
+.mention-input::placeholder { color: var(--text-muted); opacity: 1; }
 .ct-avatar-empty { border: 1.5px dashed var(--border-strong); }
 .ct-muted { color: var(--text-muted); }
 .ct-chip-add { border-style: dashed; color: var(--accent); }
@@ -2576,7 +2578,7 @@ button.project-members:hover { background: var(--surface-alt); }
   .inbox-grid-head { padding-left: 12px; padding-right: 12px; }
 
   /* iOS zooms into any focused field under 16px */
-  input, textarea, select, [contenteditable] { font-size: 16px !important; }
+  input, textarea, select, [contenteditable], .mention-backdrop { font-size: 16px !important; }
 }
 
 /* Touch screens have no hover: show the controls that otherwise only appear on mouse-over */

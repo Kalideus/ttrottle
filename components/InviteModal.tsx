@@ -58,7 +58,7 @@ export function InviteModal({ projectName, onInvite, onAddExisting, onClose }: I
 
         {onAddExisting && (
           <div className="modal-field">
-            <span className="modal-field-label">Already in TTROTTLE?</span>
+            <span className="modal-field-label">Already in TRack?</span>
             <button type="button" className="modal-btn ghost" onClick={onAddExisting}>
               Add someone from your team
             </button>
@@ -67,7 +67,7 @@ export function InviteModal({ projectName, onInvite, onAddExisting, onClose }: I
         )}
 
         <label className="modal-field">
-          <span className="modal-field-label">{onAddExisting ? 'New to TTROTTLE? Their email' : 'Email'}</span>
+          <span className="modal-field-label">{onAddExisting ? 'New to TRack? Their email' : 'Email'}</span>
           <input
             className="modal-input"
             type="email"

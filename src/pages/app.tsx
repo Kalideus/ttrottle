@@ -124,6 +124,7 @@ function mapComments(rows: any[], currentUserId: string | null): CommentItem[] {
     editedAt: c.edited_at ?? undefined,
     likes: c.like_user_ids?.length ?? 0,
     liked: !!currentUserId && !!c.like_user_ids?.includes(currentUserId),
+    likedBy: c.like_user_ids ?? [],
     isOwn: c.author_id === currentUserId,
     requestedDueDate: c.requested_due_date ?? null,
     requestStatus: c.request_status ?? null,
@@ -1360,7 +1361,7 @@ export default function AppPage() {
     const liked = !c.liked;
     const apply = (l: boolean) =>
       setComments((prev) =>
-        prev.map((x) => (x.id === commentId ? { ...x, liked: l, likes: Math.max(0, x.likes + (l ? 1 : -1)) } : x))
+        prev.map((x) => (x.id === commentId ? { ...x, liked: l, likes: Math.max(0, x.likes + (l ? 1 : -1)), likedBy: l ? [...x.likedBy, currentUserId] : x.likedBy.filter((id) => id !== currentUserId) } : x))
       );
     apply(liked);
     const { error } = await setCommentLike(supabase, commentId, currentUserId, liked);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Trash2, MoreVertical } from 'lucide-react';
-import { avatarStyle } from '@/lib/avatar';
+import { avatarStyle, avatarInitials } from '@/lib/avatar';
 import { formatDay } from '@/lib/dates';
 import { MemberAvatar } from '@/components/PeoplePicker';
 import type { ProjectMember } from '@/lib/supabase/queries';
@@ -24,6 +24,7 @@ export interface CommentItem {
   editedAt?: string;
   likes: number;
   liked: boolean;
+  likedBy: string[];
   isOwn: boolean;
   requestedDueDate?: string | null;
   requestStatus?: 'pending' | 'approved' | 'declined' | null;
@@ -73,7 +74,8 @@ function renderBody(body: string, users: { id: string; name: string }[]) {
   return body.split(/(@[a-zA-Z][\w'-]*)/g).map((part, i) => {
     if (part[0] === '@' && mentioned(part, users)) {
       return (
-        <span key={i} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+        // no padding or bold: the composer draws this under its textarea, so the chip can't change the text's width
+        <span key={i} style={{ color: 'var(--accent)', background: 'var(--accent-soft)', borderRadius: 4, boxShadow: '0 0 0 2px var(--accent-soft)' }}>
           {part}
         </span>
       );
@@ -102,14 +104,21 @@ export function Comments({
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Grow with the text (wrapped lines too), and shrink back after sending
-  useEffect(() => autoGrow(composerRef.current), [composerValue]);
+  useEffect(() => {
+    const el = composerRef.current;
+    autoGrow(el);
+    // once the box scrolls, its scrollbar narrows the text: wrap the chip layer at the same width
+    if (el && backdropRef.current) backdropRef.current.style.paddingRight = `${12 + el.offsetWidth - el.clientWidth - 2}px`;
+  }, [composerValue]);
 
   const mentionMatches = mention
     ? mentionableUsers
-        .filter((u) => handle(u.name).toLowerCase().startsWith(mention.query.toLowerCase()))
+        // any part of the name: "@cor" finds Tom Cornish, as well as "@tomc"
+        .filter((u) => [handle(u.name), ...u.name.split(/\s+/)].some((w) => w.toLowerCase().startsWith(mention.query.toLowerCase())))
         .slice(0, 6)
     : [];
 
@@ -313,6 +322,7 @@ export function Comments({
                     >
                       <button
                         onClick={() => onCommentLike(comment.id)}
+                        title={comment.likedBy.map((id) => mentionableUsers.find((u) => u.id === id)?.name ?? 'Someone').join(', ') || undefined}
                         style={{
                           background: 'none',
                           border: 'none',
@@ -403,11 +413,38 @@ export function Comments({
         <form onSubmit={handleSubmit}>
           <FormatToolbar target={composerRef} photoTaskId={taskId} />
           <div style={{ position: 'relative' }}>
+            {/* ponytail: the text is drawn here, with @mentions as chips, under a see-through textarea.
+                A chip is still plain "@TomC" text to the keyboard; a real rich editor is the upgrade if it must act as one unit. */}
+            <div
+              ref={backdropRef}
+              className="mention-backdrop"
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: '0 0 8px 0',
+                padding: '12px',
+                border: '1px solid transparent',
+                borderRadius: '8px',
+                background: 'var(--surface)',
+                fontSize: '14px',
+                color: 'var(--text)',
+                whiteSpace: 'pre-wrap',
+                overflowWrap: 'break-word',
+                overflow: 'hidden',
+              }}
+            >
+              {renderBody(composerValue, mentionableUsers)}
+              {'\n'}
+            </div>
             <textarea
               ref={composerRef}
+              className="mention-input"
               {...photoEvents(taskId)}
               value={composerValue}
               onChange={handleComposerChange}
+              onScroll={(e) => {
+                if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+              }}
               onSelect={(e) => updateMentionState(composerValue, e.currentTarget.selectionStart)}
               onKeyDown={handleComposerKeyDown}
               onBlur={() => setTimeout(() => setMention(null), 150)}
@@ -419,7 +456,11 @@ export function Comments({
                 borderRadius: '8px',
                 fontSize: '14px',
                 fontFamily: 'inherit',
-                color: 'var(--text)',
+                position: 'relative',
+                display: 'block',
+                background: 'transparent',
+                color: 'transparent',
+                caretColor: 'var(--text)',
                 resize: 'vertical',
                 marginBottom: '8px',
                 maxHeight: '40vh',
@@ -434,13 +475,14 @@ export function Comments({
                   position: 'absolute',
                   top: '100%',
                   left: 0,
+                  right: 0,
                   marginTop: '-4px',
                   zIndex: 50,
                   background: 'var(--surface)',
                   border: '1px solid var(--border)',
                   borderRadius: '8px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  minWidth: '240px',
+                  padding: '4px 0',
                   overflow: 'hidden',
                 }}
               >
@@ -457,22 +499,31 @@ export function Comments({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
+                      gap: 10,
                       width: '100%',
                       textAlign: 'left',
-                      padding: '6px 12px',
+                      padding: '7px 12px',
                       border: 'none',
                       background: i === activeMentionIndex ? 'var(--surface-alt)' : 'transparent',
                       color: 'var(--text)',
-                      fontSize: '13px',
+                      fontSize: '14px',
                       cursor: 'pointer',
                     }}
                   >
-                    {u.member && <MemberAvatar member={u.member} size={24} />}
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontWeight: 500 }}>{u.name}</span>
-                      {u.member && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{u.member.email}</span>}
+                    {u.member ? (
+                      <MemberAvatar member={u.member} size={24} />
+                    ) : (
+                      <span className="ct-avatar" style={{ width: 24, height: 24, fontSize: 11, ...avatarStyle() }} aria-hidden>
+                        {avatarInitials(u.name)}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{u.name}</span>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      @{handle(u.name)}
                     </span>
+                    {i === activeMentionIndex && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px' }}>Enter</span>
+                    )}
                   </button>
                 ))}
               </div>

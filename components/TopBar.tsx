@@ -68,7 +68,7 @@ export function TopBar({
           <div className="topbar-logo-mark">
             <img src="/logo.svg" alt="" />
           </div>
-          <span className="brand-word">ttrottle</span>
+          <span className="brand-word">TRack</span>
         </div>
       </div>
 
