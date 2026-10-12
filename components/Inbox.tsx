@@ -236,6 +236,11 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   {notif.type === 'due_soon' && `"${notif.taskName}" is due soon`}
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
                   {notif.type === 'updated' && `${actorList(actors)} updated "${notif.taskName}"`}
+                  {/* the time sits on the headline's line: a row of its own made every notification taller */}
+                  <span style={{ marginLeft: 8, fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {relativeTime(group[0].createdAt)}
+                    {group.length > 1 && ` · ${group.length} updates`}
+                  </span>
                 </p>
                 {detail && (
                   <p
@@ -249,10 +254,6 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                     {detail}
                   </p>
                 )}
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  {relativeTime(group[0].createdAt)}
-                  {group.length > 1 && ` · ${group.length} updates`}
-                </span>
               </div>
             </div>
 

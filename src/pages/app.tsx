@@ -29,6 +29,7 @@ import { createClient } from '@/lib/supabase/client';
 import { createSaveQueue } from '@/lib/saveQueue';
 import { localYmd, isOverdue, formatDay } from '@/lib/dates';
 import { filterKinds } from '@/lib/filterKinds';
+import { extractMentions } from '@/lib/mentions';
 import {
   getProjects,
   getTasksForProject,
@@ -63,6 +64,7 @@ import {
   getComments,
   createComment,
   updateComment,
+  notifyMentions,
   deleteComment,
   setCommentLike,
   getHeadings,
@@ -846,6 +848,14 @@ export default function AppPage() {
       const task = [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
       setUndoCompleteId(task?.repeat ? null : taskId);
     }
+    // People newly @mentioned in the description follow the task and are told, as in a comment.
+    let newMentions: string[] = [];
+    if (typeof updates.description === 'string') {
+      const task = [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
+      const people = membersFor(task?.project_id).filter((m) => m.profile_id).map((m) => ({ id: m.profile_id!, name: m.profile?.name ?? m.email }));
+      const before = extractMentions(task?.description ?? '', people);
+      newMentions = extractMentions(updates.description, people).filter((id) => !before.includes(id));
+    }
     const optimistic: Partial<Task> = { ...updates };
     if ('assignee_id' in updates) optimistic.assignee = findMember(updates.assignee_id)?.profile ?? null;
     if ('completed' in updates) optimistic.completed_at = updates.completed ? new Date().toISOString() : null;
@@ -860,6 +870,7 @@ export default function AppPage() {
       // the new assignee follows the task (creating a task already does this)
       if (updates.assignee_id) must(await addFollower(supabase, taskId, updates.assignee_id as string));
       if (!currentUserId) return;
+      await notifyMentions(supabase, { task_id: taskId, actor_id: currentUserId, user_ids: newMentions, text: updates.description as string });
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);

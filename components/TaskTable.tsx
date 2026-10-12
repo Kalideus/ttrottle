@@ -374,7 +374,8 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
             if (hasSubtasks) (task.id === selectedTaskId ? toggleTaskExpand : expandTask)(task.id);
           }}
           // not in My tasks or a search list: those are always in due-date order and mix projects, so there's nowhere to drop
-          draggable={!flat}
+          // nor while its name is being edited, so dragging in the box selects text
+          draggable={!flat && editingTaskNameId !== task.id}
           onDragStart={(e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
@@ -428,7 +429,19 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                 }}
               />
             ) : (
-              <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
+              <div
+                className={`task-name ${isCompleted ? 'completed' : ''}`}
+                title="Double-click to rename"
+                // the second click of a double-click mustn't reach the row, or it would collapse the subtasks the first one opened
+                onClick={(e) => {
+                  if (e.detail > 1) e.stopPropagation();
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setTaskNameDraft(task.name);
+                  setEditingTaskNameId(task.id);
+                }}
+              >
                 {task.name}
               </div>
             )}

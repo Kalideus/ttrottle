@@ -6,7 +6,7 @@ import type { TaskHit } from '@/components/GlobalSearch';
 import { repeatOptions, repeatLabel } from '@/lib/repeat';
 import { useEffect, useRef, useState } from 'react';
 import type { Task, Project, ProjectMember, Tag, Follower, TaskActivity } from '@/lib/supabase/queries';
-import { Comments, type CommentItem } from '@/components/Comments';
+import { Comments, renderBody, useMentionPicker, type CommentItem } from '@/components/Comments';
 import { TagPicker, hexToRgba } from '@/components/TagPicker';
 import { AddTaskForm } from '@/components/AddTaskForm';
 import { autoGrow } from '@/lib/autoGrow';
@@ -112,6 +112,11 @@ export function TaskDetailPanel({
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [description, setDescription] = useState(task.description ?? '');
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const mentionableUsers = projectMembers
+    .filter((m) => m.profile_id)
+    .map((m) => ({ id: m.profile_id as string, name: m.profile?.name ?? m.email, member: m }));
+  // who a new @mention in the description reaches is worked out where it is saved (handleTaskUpdate)
+  const descriptionPicker = useMentionPicker(mentionableUsers, description, setDescription, descriptionRef, 4);
   // one menu open at a time: opening another closes the last
   const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'follower' | 'options' | 'merge'>(null);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -353,10 +358,13 @@ export function TaskDetailPanel({
         ) : (
           <div
             className="detail-panel-title"
-            onClick={() => setIsEditingTitle(true)}
+            onClick={() => {
+              setTitle(task.name); // it may have been renamed in the list while this panel was open
+              setIsEditingTitle(true);
+            }}
             style={{ cursor: 'pointer', padding: '8px' }}
           >
-            {title}
+            {task.name}
           </div>
         )}
 
@@ -779,6 +787,7 @@ export function TaskDetailPanel({
           {isEditingDescription ? (
             <>
             <FormatToolbar target={descriptionRef} photoTaskId={task.id} />
+            <div style={{ position: 'relative' }}>
             <textarea
               autoFocus
               {...photoEvents(task.id)}
@@ -789,13 +798,22 @@ export function TaskDetailPanel({
               onInput={(e) => autoGrow(e.currentTarget)}
               className="detail-description-textarea"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                descriptionPicker.track(e.target.value, e.target.selectionStart);
+              }}
+              onSelect={(e) => descriptionPicker.track(description, e.currentTarget.selectionStart)}
               // Still the focused box = the window lost focus (the photo picker, alt-tab): save, but keep editing
-              onBlur={(e) => handleSaveDescription(document.activeElement === e.currentTarget)}
+              onBlur={(e) => {
+                descriptionPicker.close();
+                handleSaveDescription(document.activeElement === e.currentTarget);
+              }}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                   e.preventDefault();
                   handleSaveDescription();
+                } else if (descriptionPicker.onKeyDown(e)) {
+                  // the @ picker took the key (Escape closes it, not the editor)
                 } else if (e.key === 'Escape') {
                   setDescription(task.description ?? '');
                   setIsEditingDescription(false);
@@ -803,8 +821,10 @@ export function TaskDetailPanel({
                   formatKeyDown(e);
                 }
               }}
-              placeholder="Add a description…"
+              placeholder={mentionableUsers.length > 0 ? 'Add a description… (@name to mention)' : 'Add a description…'}
             />
+            {descriptionPicker.dropdown}
+            </div>
             </>
           ) : (
             <div
@@ -823,7 +843,7 @@ export function TaskDetailPanel({
                 wordBreak: 'break-word',
               }}
             >
-              {description ? <Markdown text={description} /> : 'Add a description…'}
+              {description ? <Markdown text={description} plain={(s) => renderBody(s, mentionableUsers)} /> : 'Add a description…'}
             </div>
           )}
         </div>
@@ -832,9 +852,7 @@ export function TaskDetailPanel({
           taskId={task.id}
           comments={comments}
           loading={commentsLoading}
-          mentionableUsers={projectMembers
-            .filter((m) => m.profile_id)
-            .map((m) => ({ id: m.profile_id as string, name: m.profile?.name ?? m.email, member: m }))}
+          mentionableUsers={mentionableUsers}
           onCommentAdd={onCommentAdd}
           onCommentEdit={onCommentEdit}
           onCommentDelete={onCommentDelete}
@@ -844,6 +862,38 @@ export function TaskDetailPanel({
             <div>
               <label className="detail-field-label"><FieldIcon icon={Users} color="#2BA5A0" />Followers</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                {/* first in the row, so it (and its open picker) stays put as followers are added */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setMenu(menu === 'follower' ? null : 'follower')}
+                    style={{
+                      padding: '6px 10px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      background: 'var(--surface)',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <Plus size={13} />
+                    Add follower
+                  </button>
+
+                  {menu === 'follower' && (
+                    <PeoplePicker
+                      people={followableMembers}
+                      emptyText="Everyone is already following."
+                      onPick={(id) => {
+                        if (id) onFollowerAdd(id); // stays open so several can be added in a row
+                      }}
+                      onClose={() => setMenu(null)}
+                    />
+                  )}
+                </div>
                 {followers.map((f) => (
                   <div
                     key={f.user_id}
@@ -886,37 +936,6 @@ export function TaskDetailPanel({
                   </div>
                 ))}
                 {followers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No followers yet</span>}
-                <div style={{ position: 'relative' }}>
-                  <button
-                    onClick={() => setMenu(menu === 'follower' ? null : 'follower')}
-                    style={{
-                      padding: '6px 10px',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      background: 'var(--surface)',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Plus size={13} />
-                    Add follower
-                  </button>
-
-                  {menu === 'follower' && (
-                    <PeoplePicker
-                      people={followableMembers}
-                      emptyText="Everyone is already following."
-                      onPick={(id) => {
-                        if (id) onFollowerAdd(id); // stays open so several can be added in a row
-                      }}
-                      onClose={() => setMenu(null)}
-                    />
-                  )}
-                </div>
               </div>
             </div>
           }

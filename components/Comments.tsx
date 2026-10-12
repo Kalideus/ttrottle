@@ -70,7 +70,7 @@ function activeMentionAt(value: string, cursor: number): { start: number; query:
 // Highlights "@name" tokens that actually resolve to a real project member
 // (same rule as extractMentions) -- an "@" that doesn't match anyone stays
 // plain text rather than being colored as if it worked.
-function renderBody(body: string, users: { id: string; name: string }[]) {
+export function renderBody(body: string, users: { id: string; name: string }[]) {
   return body.split(/(@[a-zA-Z][\w'-]*)/g).map((part, i) => {
     if (part[0] === '@' && mentioned(part, users)) {
       return (
@@ -82,6 +82,127 @@ function renderBody(body: string, users: { id: string; name: string }[]) {
     }
     return part;
   });
+}
+
+// The "@name" picker for a textarea: its dropdown and the keys that drive it.
+// Shared by the comment box and the task description.
+export function useMentionPicker(
+  users: CommentsProps['mentionableUsers'],
+  value: string,
+  setValue: (value: string) => void,
+  input: { current: HTMLTextAreaElement | null },
+  marginTop = -4
+) {
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const matches = mention
+    ? users
+        // any part of the name: "@cor" finds Tom Cornish, as well as "@tomc"
+        .filter((u) => [handle(u.name), ...u.name.split(/\s+/)].some((w) => w.toLowerCase().startsWith(mention.query.toLowerCase())))
+        .slice(0, 6)
+    : [];
+
+  const track = (text: string, cursor: number) => {
+    setMention(activeMentionAt(text, cursor));
+    setActiveIndex(0);
+  };
+
+  const select = (user: { id: string; name: string }) => {
+    if (!mention) return;
+    const insertion = `@${handle(user.name)} `;
+    const before = value.slice(0, mention.start);
+    const after = value.slice(mention.start + 1 + mention.query.length);
+    setValue(before + insertion + after);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const pos = before.length + insertion.length;
+      input.current?.focus();
+      input.current?.setSelectionRange(pos, pos);
+    });
+  };
+
+  // true while the picker is open: the key was its to handle, so the caller leaves it alone
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!mention || !matches.length) return false;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % matches.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => (i - 1 + matches.length) % matches.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      select(matches[activeIndex]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setMention(null);
+    }
+    return true;
+  };
+
+  const dropdown = mention && matches.length > 0 && (
+    <div
+      ref={flipIfOffscreen}
+      style={{
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        marginTop,
+        zIndex: 50,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: '8px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        padding: '4px 0',
+        overflow: 'hidden',
+      }}
+    >
+      {matches.map((u, i) => (
+        <button
+          key={u.id}
+          type="button"
+          // onMouseDown, not onClick: fires before the textarea's onBlur, so the
+          // dropdown doesn't close (and unmount this button) first.
+          onMouseDown={(e) => {
+            e.preventDefault();
+            select(u);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            width: '100%',
+            textAlign: 'left',
+            padding: '7px 12px',
+            border: 'none',
+            background: i === activeIndex ? 'var(--surface-alt)' : 'transparent',
+            color: 'var(--text)',
+            fontSize: '14px',
+            cursor: 'pointer',
+          }}
+        >
+          {u.member ? (
+            <MemberAvatar member={u.member} size={24} />
+          ) : (
+            <span className="ct-avatar" style={{ width: 24, height: 24, fontSize: 11, ...avatarStyle() }} aria-hidden>
+              {avatarInitials(u.name)}
+            </span>
+          )}
+          <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{u.name}</span>
+          <span style={{ flex: 1, minWidth: 0, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            @{handle(u.name)}
+          </span>
+          {i === activeIndex && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px' }}>Enter</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
+  return { track, onKeyDown, close: () => setMention(null), dropdown };
 }
 
 export function Comments({
@@ -101,11 +222,10 @@ export function Comments({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
-  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLTextAreaElement | null>(null);
+  const picker = useMentionPicker(mentionableUsers, composerValue, setComposerValue, composerRef);
 
   // Grow with the text (wrapped lines too), and shrink back after sending
   useEffect(() => {
@@ -115,37 +235,10 @@ export function Comments({
     if (el && backdropRef.current) backdropRef.current.style.paddingRight = `${12 + el.offsetWidth - el.clientWidth - 2}px`;
   }, [composerValue]);
 
-  const mentionMatches = mention
-    ? mentionableUsers
-        // any part of the name: "@cor" finds Tom Cornish, as well as "@tomc"
-        .filter((u) => [handle(u.name), ...u.name.split(/\s+/)].some((w) => w.toLowerCase().startsWith(mention.query.toLowerCase())))
-        .slice(0, 6)
-    : [];
-
-  const updateMentionState = (value: string, cursor: number) => {
-    setMention(activeMentionAt(value, cursor));
-    setActiveMentionIndex(0);
-  };
-
   const handleComposerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setComposerValue(value);
-    updateMentionState(value, e.target.selectionStart);
-  };
-
-  const selectMention = (user: { id: string; name: string }) => {
-    if (!mention) return;
-    const insertion = `@${handle(user.name)} `;
-    const before = composerValue.slice(0, mention.start);
-    const after = composerValue.slice(mention.start + 1 + mention.query.length);
-    const next = before + insertion + after;
-    setComposerValue(next);
-    setMention(null);
-    requestAnimationFrame(() => {
-      const pos = before.length + insertion.length;
-      composerRef.current?.focus();
-      composerRef.current?.setSelectionRange(pos, pos);
-    });
+    picker.track(value, e.target.selectionStart);
   };
 
   const submitComment = async () => {
@@ -154,7 +247,7 @@ export function Comments({
     try {
       await onCommentAdd(composerValue, extractMentions(composerValue, mentionableUsers));
       setComposerValue('');
-      setMention(null);
+      picker.close();
     } finally {
       setIsSubmitting(false);
     }
@@ -166,23 +259,7 @@ export function Comments({
       void submitComment();
       return;
     }
-    if (!mention || !mentionMatches.length) {
-      formatKeyDown(e);
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveMentionIndex((i) => (i + 1) % mentionMatches.length);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
-      e.preventDefault();
-      selectMention(mentionMatches[activeMentionIndex]);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setMention(null);
-    }
+    if (!picker.onKeyDown(e)) formatKeyDown(e);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -445,9 +522,9 @@ export function Comments({
               onScroll={(e) => {
                 if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop;
               }}
-              onSelect={(e) => updateMentionState(composerValue, e.currentTarget.selectionStart)}
+              onSelect={(e) => picker.track(composerValue, e.currentTarget.selectionStart)}
               onKeyDown={handleComposerKeyDown}
-              onBlur={() => setTimeout(() => setMention(null), 150)}
+              onBlur={() => setTimeout(picker.close, 150)}
               rows={1}
               style={{
                 width: '100%',
@@ -468,66 +545,7 @@ export function Comments({
               placeholder="Add a comment…"
             />
 
-            {mention && mentionMatches.length > 0 && (
-              <div
-                ref={flipIfOffscreen}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  marginTop: '-4px',
-                  zIndex: 50,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  padding: '4px 0',
-                  overflow: 'hidden',
-                }}
-              >
-                {mentionMatches.map((u, i) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    // onMouseDown, not onClick: fires before the textarea's onBlur, so the
-                    // dropdown doesn't close (and unmount this button) first.
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      selectMention(u);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '7px 12px',
-                      border: 'none',
-                      background: i === activeMentionIndex ? 'var(--surface-alt)' : 'transparent',
-                      color: 'var(--text)',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {u.member ? (
-                      <MemberAvatar member={u.member} size={24} />
-                    ) : (
-                      <span className="ct-avatar" style={{ width: 24, height: 24, fontSize: 11, ...avatarStyle() }} aria-hidden>
-                        {avatarInitials(u.name)}
-                      </span>
-                    )}
-                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{u.name}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      @{handle(u.name)}
-                    </span>
-                    {i === activeMentionIndex && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px' }}>Enter</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            {picker.dropdown}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

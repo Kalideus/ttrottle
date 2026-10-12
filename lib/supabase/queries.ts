@@ -867,22 +867,32 @@ export async function updateComment(supabase: SupabaseClient, id: string, { body
     .select()
     .single()
 
-  const others = result.data ? newMentions.filter((uid) => uid !== result.data.author_id) : []
-  if (others.length) {
+  if (result.data) {
     const { task_id, author_id } = result.data
-    const text = photosAsText(body)
-    const detail = text.length > 140 ? `${text.slice(0, 140)}…` : text
-    const { error: followError } = await supabase
-      .from('followers')
-      .upsert(others.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
-    if (followError) console.error('Failed to add mentioned people as followers:', followError)
-    const { error: notifyError } = await supabase
-      .from('notifications')
-      .insert(others.map((user_id) => ({ user_id, task_id, type: 'mention', actor_id: author_id, comment_id: id, detail })))
-    if (notifyError) console.error('Failed to notify mentions of an edited comment:', notifyError)
+    await notifyMentions(supabase, { task_id, actor_id: author_id, user_ids: newMentions, text: body, comment_id: id })
   }
 
   return result
+}
+
+// People newly @mentioned in an edited comment, or in a task's description (no comment_id):
+// they follow the task and get a 'mention' notification. Never the person who wrote it.
+export async function notifyMentions(
+  supabase: SupabaseClient,
+  { task_id, actor_id, user_ids, text, comment_id = null }: { task_id: string; actor_id: string; user_ids: string[]; text: string; comment_id?: string | null }
+) {
+  const others = user_ids.filter((uid) => uid !== actor_id)
+  if (!others.length) return
+  const plain = photosAsText(text)
+  const detail = plain.length > 140 ? `${plain.slice(0, 140)}…` : plain
+  const { error: followError } = await supabase
+    .from('followers')
+    .upsert(others.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
+  if (followError) console.error('Failed to add mentioned people as followers:', followError)
+  const { error: notifyError } = await supabase
+    .from('notifications')
+    .insert(others.map((user_id) => ({ user_id, task_id, type: 'mention', actor_id, comment_id, detail })))
+  if (notifyError) console.error('Failed to notify mentions:', notifyError)
 }
 
 export async function deleteComment(supabase: SupabaseClient, id: string) {
