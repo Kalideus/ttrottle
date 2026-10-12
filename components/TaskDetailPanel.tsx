@@ -15,7 +15,7 @@ import { FormatToolbar, formatKeyDown, photoEvents } from '@/components/FormatTo
 import { Markdown } from '@/components/Markdown';
 import { avatarStyle } from '@/lib/avatar';
 import { isOverdue, formatDay } from '@/lib/dates';
-import { PeoplePicker } from '@/components/PeoplePicker';
+import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface TaskDetailPanelProps {
@@ -116,10 +116,11 @@ export function TaskDetailPanel({
   const [menu, setMenu] = useState<null | 'assignee' | 'dueDate' | 'priority' | 'follower' | 'options' | 'merge'>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [subAssigningId, setSubAssigningId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const anyEditorOpen =
-    isEditingTitle || isEditingDescription || menu !== null || isAddingSubtask;
+    isEditingTitle || isEditingDescription || menu !== null || isAddingSubtask || subAssigningId !== null;
 
   // Esc closes the panel, unless an inline editor / menu is open (Esc cancels that first).
   useEffect(() => {
@@ -670,9 +671,69 @@ export function TaskDetailPanel({
                   >
                     {subtask.completed && <Check size={10} strokeWidth={3} />}
                   </div>
-                  <span style={{ textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? 'var(--text-muted)' : 'var(--text)' }}>
+                  <span style={{ flex: 1, minWidth: 0, textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? 'var(--text-muted)' : 'var(--text)' }}>
                     {subtask.name}
                   </span>
+                  {/* assignee and due date, editable here as in the main list */}
+                  {(() => {
+                    const member = projectMembers.find((m) => m.profile_id === subtask.assignee_id);
+                    const subOverdue = isOverdue(subtask.due_date, subtask.completed);
+                    const subDateReadOnly = !!subtask.due_locked && !canManage;
+                    return (
+                      <>
+                        <div
+                          title={member ? member.profile?.name ?? member.email : 'Assign'}
+                          style={{ position: 'relative', display: 'flex', zIndex: subAssigningId === subtask.id ? 50 : undefined }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSubAssigningId(subtask.id);
+                          }}
+                        >
+                          {member ? <MemberAvatar member={member} size={24} /> : <div className="empty-cell" style={{ width: 24, height: 24, fontSize: 11 }}>👤</div>}
+                          {subAssigningId === subtask.id && (
+                            <PeoplePicker
+                              people={projectMembers}
+                              selectedId={subtask.assignee_id}
+                              allowNone
+                              alignRight
+                              emptyText="No members yet — invite someone from the project header."
+                              onPick={(id) => {
+                                onTaskUpdate(subtask.id, { assignee_id: id });
+                                setSubAssigningId(null);
+                              }}
+                              onClose={() => setSubAssigningId(null)}
+                            />
+                          )}
+                        </div>
+                        <div
+                          title={subtask.due_locked ? (subDateReadOnly ? 'Locked by a manager. Open the subtask to request an extension' : 'Due date locked') : 'Due date'}
+                          style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end', minWidth: 64, cursor: subDateReadOnly ? 'default' : 'pointer' }}
+                          // invisible date input; the click itself opens its calendar (as in TaskTable)
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!subDateReadOnly) openPicker(e.currentTarget.querySelector('input'));
+                          }}
+                        >
+                          {subtask.due_date ? (
+                            <span className="due-date-cell" style={{ color: subOverdue ? '#D64545' : undefined, fontWeight: subOverdue ? 600 : undefined }}>
+                              {formatDay(subtask.due_date, false)}
+                              {subtask.due_locked && <Lock size={11} aria-label="Locked" style={{ marginLeft: 4, verticalAlign: -1, opacity: 0.7 }} />}
+                            </span>
+                          ) : (
+                            <div className="empty-cell" style={{ width: 24, height: 24, fontSize: 11, borderRadius: 4 }}>📅</div>
+                          )}
+                          <input
+                            type="date"
+                            tabIndex={-1}
+                            aria-label={`Due date for ${subtask.name}`}
+                            value={subtask.due_date ?? ''}
+                            onChange={(e) => onTaskUpdate(subtask.id, { due_date: e.target.value || null })}
+                            style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
               {(task.subtasks ?? []).length === 0 && (
