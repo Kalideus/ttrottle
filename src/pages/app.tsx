@@ -1819,6 +1819,7 @@ export default function AppPage() {
                   tasks={displayedTasks}
                   headings={[]}
                   flat
+                  showAssignee={activeSection !== 'my-tasks'}
                   onOpenProject={openInProject}
                   onTaskSelect={setSelectedTaskId}
                   selectedTaskId={selectedTaskId}

@@ -839,14 +839,14 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
-  background: var(--surface);
+  background: var(--accent-soft);
   cursor: pointer;
   transition: background-color 150ms;
   user-select: none;
 }
 
 .section-header:hover {
-  background: var(--surface-alt);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
 
 .section-header-content {
@@ -2491,7 +2491,7 @@ button.project-members:hover { background: var(--surface-alt); }
 .is-flat.is-compact .table-header,
 .is-flat.is-compact .task-row,
 .is-flat.is-compact .add-task-row { grid-template-columns: minmax(0, 1fr) minmax(80px, 100px); }
-/* My tasks (flat): every task is yours, so no Assignee column */
+/* My tasks (is-flat): every task is yours, so no Assignee column. A search list is flat too but keeps it. */
 .is-flat .table-header-cell:nth-child(2),
 .is-flat .task-cell-assignee { display: none; }
 .is-flat:not(.is-compact) .table-header,

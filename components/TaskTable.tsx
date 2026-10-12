@@ -31,6 +31,8 @@ interface TaskTableProps {
   manualOrder?: boolean;
   /** Flat list with no section headers or "+ Add section" — used by My Tasks. */
   flat?: boolean;
+  /** Keep the Assignee column in a flat list — a search list holds other people's tasks, My Tasks doesn't. */
+  showAssignee?: boolean;
   // Bulk-select mode: when set, each row gets a checkbox.
   bulkSelected?: Set<string> | null;
   onBulkToggle?: (taskId: string) => void;
@@ -48,7 +50,7 @@ interface TaskTableProps {
   canManage?: (projectId: string) => boolean;
 }
 
-export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskMove, manualOrder = false, flat = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskMove, manualOrder = false, flat = false, showAssignee = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -429,20 +431,19 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
                 }}
               />
             ) : (
-              <div
-                className={`task-name ${isCompleted ? 'completed' : ''}`}
-                title="Double-click to rename"
-                // the second click of a double-click mustn't reach the row, or it would collapse the subtasks the first one opened
-                onClick={(e) => {
-                  if (e.detail > 1) e.stopPropagation();
-                }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setTaskNameDraft(task.name);
-                  setEditingTaskNameId(task.id);
-                }}
-              >
-                {task.name}
+              <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
+                {/* only the words rename; the empty space beside them still opens the task */}
+                <span
+                  title="Click to rename"
+                  style={{ cursor: 'text' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTaskNameDraft(task.name);
+                    setEditingTaskNameId(task.id);
+                  }}
+                >
+                  {task.name}
+                </span>
               </div>
             )}
 
@@ -749,7 +750,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
   if (tasks.length === 0 && headings.length === 0) {
     return (
-      <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
+      <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat && !showAssignee ? 'is-flat' : ''}`} ref={watchWidth}>
         <div className="table-header">
           <div className="table-header-cell">Name</div>
           <div className="table-header-cell">Assignee</div>
@@ -807,7 +808,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   }
 
   return (
-    <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat ? 'is-flat' : ''}`} ref={watchWidth}>
+    <div className={`app-table-area ${compact ? 'is-compact' : ''} ${flat && !showAssignee ? 'is-flat' : ''}`} ref={watchWidth}>
       <div className="table-header">
         <div className="table-header-cell">Name</div>
         <div className="table-header-cell">Assignee</div>
