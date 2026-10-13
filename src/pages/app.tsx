@@ -1466,7 +1466,6 @@ export default function AppPage() {
   // stable identity so GlobalSearch's debounce effect doesn't re-run every render
   const runTaskSearch = useCallback((q: string) => searchTasks(supabase, q), [supabase]);
   const runSearch = useCallback((q: string, projectId: string | null) => searchAll(supabase, q, projectId), [supabase]);
-  const runFindTasks = useCallback((by: TaskSearch, projectId: string | null) => findTasks(supabase, by, projectId), [supabase]);
   const openSearchList = (by: TaskSearch, label: string, projectId: string | null) => {
     // a second search from inside the list still goes back to where the first one started
     setSearchView({ by, label, projectId, from: activeSection === 'search' ? searchView?.from ?? 'my-tasks' : activeSection });
@@ -1572,7 +1571,6 @@ export default function AppPage() {
           <GlobalSearch
             projects={projects}
             search={runSearch}
-            findTasks={runFindTasks}
             onOpenList={openSearchList}
             onOpenTask={openInProject}
             onOpenProject={(projectId) => openInProject(projectId)}

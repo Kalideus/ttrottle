@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
-import { Bold, Italic, Strikethrough, Code, List, ListOrdered, ImagePlus } from 'lucide-react';
+import { Bold, Italic, Strikethrough, Code, List, ListOrdered, ImagePlus, Paperclip } from 'lucide-react';
 import { wrapEdit, listEdit, enterEdit, type Edit } from '@/lib/format';
-import { uploadTaskPhoto } from '@/lib/taskPhotos';
+import { uploadTaskPhoto, uploadTaskFile } from '@/lib/taskPhotos';
+import { FILE_ACCEPT, fileExt } from '@/lib/taskFiles';
 
 function apply(el: HTMLTextAreaElement, edit: Edit) {
   el.focus();
@@ -26,24 +27,26 @@ const TOOLS: { icon: typeof Bold; label: string; run: Run }[] = [
   { icon: ListOrdered, label: 'Numbered list', run: (v, s, e) => listEdit(v, s, e, 'ol') },
 ];
 
-// Uploads the images one by one and drops each in at the cursor, on its own line.
+// Uploads the photos and documents one by one and drops each in at the cursor, on its own line.
 async function insertPhotos(el: HTMLTextAreaElement, taskId: string, files: File[]) {
   for (const file of files) {
     try {
-      const token = await uploadTaskPhoto(taskId, file);
+      const token = await (isImage(file) ? uploadTaskPhoto : uploadTaskFile)(taskId, file);
       if (!el.isConnected) return; // the box was closed while it uploaded
       const { value, selectionStart: s, selectionEnd: e } = el;
       const text = `${s > 0 && value[s - 1] !== '\n' ? '\n' : ''}${token}\n`;
       apply(el, { start: s, end: e, text, selStart: s + text.length, selEnd: s + text.length });
     } catch (err) {
-      window.alert(`Couldn't add that photo: ${err instanceof Error ? err.message : 'unknown error'}`);
+      window.alert(`Couldn't add ${file.name || 'that photo'}: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
   }
 }
 
-const images = (list: FileList | null) => Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
+const isImage = (f: File) => f.type.startsWith('image/');
+// photos, and the documents that can be attached (PDF, Word, Excel); anything else is left to the browser
+const images = (list: FileList | null) => Array.from(list ?? []).filter((f) => isImage(f) || fileExt(f.name));
 
-// Paste or drag a photo straight into a description/comment box: spread onto the textarea.
+// Paste or drag a photo or document straight into a description/comment box: spread onto the textarea.
 export function photoEvents(taskId: string) {
   return {
     onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -65,13 +68,18 @@ export function photoEvents(taskId: string) {
 // photoTaskId: the task whose folder photos go into; leave it out for a toolbar without the photo button.
 export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLTextAreaElement | null>; photoTaskId?: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  // one hidden picker for both buttons: each sets what it offers before opening it
+  const pick = (accept: string) => {
+    if (!fileRef.current) return;
+    fileRef.current.accept = accept;
+    fileRef.current.click();
+  };
   return (
     <div className="fmt-toolbar">
       {photoTaskId && (
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
           multiple
           hidden
           onChange={(e) => {
@@ -103,9 +111,20 @@ export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLT
           title="Add a photo (kept until 180 days after the task is completed)"
           aria-label="Add a photo"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => pick('image/*')}
         >
           <ImagePlus size={14} />
+        </button>
+      )}
+      {photoTaskId && (
+        <button
+          type="button"
+          title="Attach a PDF, Word or Excel file (up to 10 MB; kept until 180 days after the task is completed)"
+          aria-label="Attach a file"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => pick(FILE_ACCEPT)}
+        >
+          <Paperclip size={14} />
         </button>
       )}
     </div>

@@ -1,24 +1,46 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Paperclip } from 'lucide-react';
 import { PHOTO_PATTERN, photoPath, taskPhotoUrl } from '@/lib/taskPhotos';
+import { FILE_PATTERN, parseFileToken } from '@/lib/taskFiles';
 
 // Renders the markdown-lite written via FormatToolbar (see lib/format). Builds React nodes, never HTML,
 // so user text can't inject markup. ponytail: no nesting/links/headings; swap for a real parser if needed.
-const INLINE = new RegExp(`(${PHOTO_PATTERN}|\\*\\*[^*\\n]+\\*\\*|~~[^~\\n]+~~|\`[^\`\\n]+\`|\\*[^*\\s\\n][^*\\n]*\\*)`, 'g');
+const INLINE = new RegExp(`(${PHOTO_PATTERN}|${FILE_PATTERN}|\\*\\*[^*\\n]+\\*\\*|~~[^~\\n]+~~|\`[^\`\\n]+\`|\\*[^*\\s\\n][^*\\n]*\\*)`, 'g');
 const URL = /(https?:\/\/[^\s<>"']+)/gi;
 
-// A photo from the private bucket, shown through a signed link; click opens it full size.
-function Photo({ path }: { path: string }) {
+// A signed link into the private bucket: undefined while it's fetched, null if the file is gone.
+function useSignedUrl(path: string, downloadAs?: string) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let current = true;
-    taskPhotoUrl(path).then(
+    taskPhotoUrl(path, downloadAs).then(
       (u) => current && setUrl(u),
       () => current && setUrl(null)
     );
     return () => {
       current = false;
     };
-  }, [path]);
+  }, [path, downloadAs]);
+  return url;
+}
+
+// An attached PDF, Word or Excel file: a chip with its name. A PDF opens in a new tab; the others
+// download under their own name (the browser can't show them, and the stored file is named by its id).
+function FileChip({ name, path }: { name: string; path: string }) {
+  const url = useSignedUrl(path, path.endsWith('.pdf') ? undefined : name);
+  if (url === null) return <span className="md-photo-missing">[{name} is no longer available: files are removed 180 days after a task is completed]</span>;
+  return (
+    // stopPropagation: clicking a file in the description shouldn't also open the editor
+    <a className="md-file" href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+      <Paperclip size={13} />
+      {name}
+    </a>
+  );
+}
+
+// A photo from the private bucket, shown through a signed link; click opens it full size.
+function Photo({ path }: { path: string }) {
+  const url = useSignedUrl(path);
   if (url === undefined) return <span className="md-photo is-loading" />;
   if (url === null) return <span className="md-photo-missing">[photo no longer available: photos are removed 180 days after a task is completed]</span>;
   return (
@@ -48,6 +70,7 @@ function inline(text: string, plain: (s: string) => ReactNode) {
   return text.split(INLINE).map((part, i) => {
     if (i % 2 === 0) return <Fragment key={i}>{linkify(part, plain)}</Fragment>;
     if (part.startsWith('![')) return <Photo key={i} path={photoPath(part)} />;
+    if (part.startsWith('[file:')) return <FileChip key={i} {...parseFileToken(part)} />;
     if (part.startsWith('**')) return <strong key={i}>{linkify(part.slice(2, -2), plain)}</strong>;
     if (part.startsWith('~~')) return <s key={i}>{linkify(part.slice(2, -2), plain)}</s>;
     if (part[0] === '`') return <code key={i}>{part.slice(1, -1)}</code>;

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { photosAsText, PHOTO_PATTERN } from '@/lib/taskPhotos'
+import { photosAsText, ATTACHMENT_PATTERN } from '@/lib/taskPhotos'
 import type { Repeat } from '@/lib/repeat'
 import type { NewTaskSpec } from '@/lib/csvImport'
 
@@ -351,8 +351,8 @@ export function projectToPlan(
   const section = new Map(headings.map((h) => [h.id, h.name]))
   const spec = (t: Task): NewTaskSpec => ({
     name: t.name,
-    // photos stay with the original: the copy would only be pointing at that task's files
-    description: t.description && (t.description.replace(new RegExp(`${PHOTO_PATTERN}\\n?`, 'g'), '').trim() || null),
+    // photos and attached files stay with the original: the copy would only be pointing at that task's files
+    description: t.description && (t.description.replace(new RegExp(`${ATTACHMENT_PATTERN}\\n?`, 'g'), '').trim() || null),
     assignee_id: assignees ? t.assignee_id : null,
     due_date: dueDates ? t.due_date : null,
     priority: t.priority,
