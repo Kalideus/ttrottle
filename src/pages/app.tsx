@@ -435,9 +435,13 @@ export default function AppPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` },
-        () => {
+        (payload) => {
           // my own clears/reads still saving would come back stale; the save queue reloads once they land
           if (saves.pending > 0) return;
+          // a task someone just gave me shows up in my lists now, in its due-date place, not after a refresh
+          if (payload.eventType === 'INSERT' && (payload.new as { type?: string }).type === 'assigned') {
+            void resyncRef.current.tasks().then(() => setResortToken((n) => n + 1));
+          }
           void loadNotificationsBadge();
           // the full list only matters while it's on screen; opening the inbox loads it anyway
           if (inboxOpen.current) void loadNotifications();

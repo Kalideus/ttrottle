@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreVertical, Trash2, Check, Plus, Pencil, CornerLeftUp, Lock, MoveRight } from 'lucide-react';
 import type { Task, Heading, ProjectMember } from '@/lib/supabase/queries';
 import { PeoplePicker } from '@/components/PeoplePicker';
@@ -58,6 +58,22 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
   // shifted the whole list under the pointer.
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
   const expandTask = (taskId: string) => setExpandedTaskIds((prev) => (prev.has(taskId) ? prev : new Set(prev).add(taskId)));
+  // A task opened from elsewhere (search, the inbox) is brought into view, once: its row may be far down the
+  // list, or inside a closed parent. No deps: the row only exists after the project has loaded and the parent opened.
+  const scrolledToId = useRef<string | null>(null);
+  useEffect(() => {
+    if (scrolledToId.current === (selectedTaskId ?? null)) return;
+    if (!selectedTaskId) {
+      scrolledToId.current = null;
+      return;
+    }
+    const parent = tasks.find((t) => t.subtasks?.some((s) => s.id === selectedTaskId));
+    if (parent) expandTask(parent.id);
+    const row = document.querySelector('.task-row.selected');
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' }); // nearest: a row already on screen (one you just clicked) doesn't move
+    scrolledToId.current = selectedTaskId;
+  });
   const [addingToHeading, setAddingToHeading] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   // Below this width (e.g. with the task panel open) rows drop to just name + due date.

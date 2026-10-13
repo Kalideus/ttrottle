@@ -122,10 +122,11 @@ export function TaskDetailPanel({
   const [linkCopied, setLinkCopied] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [subAssigningId, setSubAssigningId] = useState<string | null>(null);
+  const [subRename, setSubRename] = useState<{ id: string; draft: string } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const anyEditorOpen =
-    isEditingTitle || isEditingDescription || menu !== null || isAddingSubtask || subAssigningId !== null;
+    isEditingTitle || isEditingDescription || menu !== null || isAddingSubtask || subAssigningId !== null || subRename !== null;
 
   // Esc closes the panel, unless an inline editor / menu is open (Esc cancels that first).
   useEffect(() => {
@@ -688,9 +689,40 @@ export function TaskDetailPanel({
                   >
                     {subtask.completed && <Check size={10} strokeWidth={3} />}
                   </div>
-                  <span style={{ flex: 1, minWidth: 0, textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? 'var(--text-muted)' : 'var(--text)' }}>
-                    {subtask.name}
-                  </span>
+                  {subRename?.id === subtask.id ? (
+                    <input
+                      className="task-name-input"
+                      style={{ fontSize: '13px' }}
+                      autoFocus
+                      aria-label={`Rename ${subtask.name}`}
+                      value={subRename.draft}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setSubRename({ id: subtask.id, draft: e.target.value })}
+                      onBlur={() => {
+                        const trimmed = subRename.draft.trim();
+                        if (trimmed && trimmed !== subtask.name) onTaskUpdate(subtask.id, { name: trimmed });
+                        setSubRename(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        if (e.key === 'Escape') setSubRename(null);
+                      }}
+                    />
+                  ) : (
+                    <span style={{ flex: 1, minWidth: 0, textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? 'var(--text-muted)' : 'var(--text)' }}>
+                      {/* only the words rename (as in TaskTable); the empty space beside them still opens the subtask */}
+                      <span
+                        title="Click to rename"
+                        style={{ cursor: 'text' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSubRename({ id: subtask.id, draft: subtask.name });
+                        }}
+                      >
+                        {subtask.name}
+                      </span>
+                    </span>
+                  )}
                   {/* assignee and due date, editable here as in the main list */}
                   {(() => {
                     const member = projectMembers.find((m) => m.profile_id === subtask.assignee_id);
