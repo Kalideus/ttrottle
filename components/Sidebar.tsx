@@ -65,15 +65,17 @@ export function Sidebar({
 
   return (
     <div className="app-sidebar">
-      <button className="sidebar-create-btn" onClick={onCreateTask}>
-        <Plus size={20} />
-        <span>Create task</span>
-      </button>
-      {/* a request for another team's project; see CreateTicketModal */}
-      <button className="sidebar-create-btn is-ticket" onClick={onCreateTicket}>
-        <Ticket size={18} />
-        <span>Create ticket</span>
-      </button>
+      <div className="sidebar-create">
+        <button className="sidebar-create-btn" onClick={onCreateTask}>
+          <Plus size={16} />
+          <span>Create task</span>
+        </button>
+        {/* a request for another team's project; see CreateTicketModal */}
+        <button className="sidebar-create-btn is-ticket" onClick={onCreateTicket}>
+          <Ticket size={16} />
+          <span>Create ticket</span>
+        </button>
+      </div>
 
       <div className="sidebar-nav">
         <button
@@ -104,7 +106,8 @@ export function Sidebar({
 
       <div className="sidebar-divider" />
 
-      <div>
+      {/* only the project list scrolls: the buttons and links above, and Invite below, stay put */}
+      <div className="sidebar-projects-section">
         <div className="sidebar-projects-header">
           <span>Projects</span>
           {canCreateProjects && (
