@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { autoGrow } from '@/lib/autoGrow';
@@ -9,6 +9,7 @@ import { formatKeyDown } from '@/components/FormatToolbar';
 import type { Heading, ProjectMember, Tag } from '@/lib/supabase/queries';
 import { PeoplePicker, MemberAvatar } from '@/components/PeoplePicker';
 import { extractMentions } from '@/lib/mentions';
+import { useMentionPicker } from '@/components/Comments';
 
 export interface NewTaskInput {
   name: string;
@@ -70,6 +71,10 @@ export function CreateTaskModal({ projectName, members, headings, tags, onCreate
   const [creatingTag, setCreatingTag] = useState(false);
 
   const people = members.filter((m) => m.profile_id);
+  // who a mention in the description reaches is worked out where the task is saved (submitCreateTask)
+  const mentionable = people.map((m) => ({ id: m.profile_id!, name: memberName(m), member: m }));
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const descriptionPicker = useMentionPicker(mentionable, description, setDescription, descriptionRef, 4);
 
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const assignee = people.find((m) => m.profile_id === assigneeId);
@@ -164,17 +169,32 @@ export function CreateTaskModal({ projectName, members, headings, tags, onCreate
             aria-label="Task name"
             autoFocus
           />
-          <textarea
-            className="ct-notes"
-            ref={autoGrow}
-            onInput={(e) => autoGrow(e.currentTarget)}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={formatKeyDown}
-            placeholder="Add a description…"
-            aria-label="Description"
-            rows={3}
-          />
+          <div style={{ position: 'relative' }}>
+            <textarea
+              className="ct-notes"
+              ref={(el) => {
+                descriptionRef.current = el;
+                autoGrow(el);
+              }}
+              onInput={(e) => autoGrow(e.currentTarget)}
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                descriptionPicker.track(e.target.value, e.target.selectionStart);
+              }}
+              onSelect={(e) => descriptionPicker.track(description, e.currentTarget.selectionStart)}
+              onBlur={descriptionPicker.close}
+              onKeyDown={(e) => {
+                // the @ picker took the key: stopped so Escape closes it, not the whole dialog
+                if (descriptionPicker.onKeyDown(e)) e.stopPropagation();
+                else formatKeyDown(e);
+              }}
+              placeholder={mentionable.length > 0 ? 'Add a description… (@name to mention)' : 'Add a description…'}
+              aria-label="Description"
+              rows={3}
+            />
+            {descriptionPicker.dropdown}
+          </div>
 
           <div className="ct-props">
             <div className="ct-row">

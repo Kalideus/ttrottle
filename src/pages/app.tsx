@@ -1162,11 +1162,19 @@ export default function AppPage() {
     setTasks((ts) => [...ts, task]);
     setActiveSection('projects');
     setSelectedTaskId(task.id);
+    const descriptionMentions = extractMentions(
+      fields.description ?? '',
+      projectMembers.filter((m) => m.profile_id).map((m) => ({ id: m.profile_id!, name: m.profile?.name ?? m.email }))
+    );
 
     persist(async () => {
       if (heading) await saveHeading(heading);
       must(await createTask(supabase, { ...taskFields, follower_ids, id: task.id, position: task.position, heading_id: task.heading_id, project_id: task.project_id, created_by: currentUserId }));
       await Promise.all([
+        // people @mentioned in the description follow the task and are told, as when it's edited later
+        currentUserId && descriptionMentions.length
+          ? notifyMentions(supabase, { task_id: task.id, actor_id: currentUserId, user_ids: descriptionMentions, text: fields.description ?? '' })
+          : null,
         ...tag_ids.map((tagId) => addTagToTask(supabase, task.id, tagId).then(must)),
         ...(task.subtasks ?? []).map((s) =>
           createTask(supabase, { id: s.id, position: s.position, project_id: task.project_id, parent_task_id: task.id, name: s.name, created_by: currentUserId }).then(must)
