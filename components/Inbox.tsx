@@ -49,25 +49,6 @@ function actorList(names: string[]) {
   return `${names[0]} and ${names.length - 1} others`;
 }
 
-// What one notification did, as a phrase after the person's name.
-function phrase(n: NotificationItem) {
-  if (n.type === 'comment') return n.detail ? `commented “${n.detail}”` : 'commented';
-  if (n.type === 'mention') return 'mentioned you';
-  if (n.type === 'assigned') return 'assigned it to you';
-  if (n.type === 'ticket') return 'raised it as a ticket';
-  if (n.type === 'completed') return 'completed it';
-  if (n.type === 'due_soon') return 'it is due soon';
-  return n.detail ?? 'updated it';
-}
-
-// The detail line of a grouped row: everything that happened, oldest first so it reads in order.
-function groupSummary(group: NotificationItem[]) {
-  const items = [...group].reverse();
-  const actors = [...new Set(items.map((n) => n.actorName))];
-  if (actors.length === 1) return `${actors[0]} ${[...new Set(items.map(phrase))].join(', ')}`;
-  return [...new Set(items.map((n) => `${n.actorName} ${phrase(n)}`))].join('; ');
-}
-
 // A grouped row's headline uses its most important notification: a mention beats an edit.
 const RANK: NotificationItem['type'][] = ['mention', 'ticket', 'assigned', 'comment', 'completed', 'due_soon', 'updated'];
 const headOf = (group: NotificationItem[]) => [...group].sort((a, b) => RANK.indexOf(a.type) - RANK.indexOf(b.type))[0];
@@ -160,11 +141,13 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
           <span className="inbox-col">Priority</span>
         </div>
         {groups.map((group) => {
-          const notif = group.length > 1 ? headOf(group) : group[0];
+          // a row is a whole task's history: while any of it is unread, the headline and count are about the unread part
+          const fresh = group.filter((n) => !n.readAt);
+          const unread = fresh.length > 0;
+          const news = unread ? fresh : group;
+          const notif = headOf(news);
           const ids = [notif.id, ...group.filter((n) => n !== notif).map((n) => n.id)]; // headline first: a click jumps to its comment
-          const unread = group.some((n) => !n.readAt);
-          const actors = [...new Set(group.map((n) => n.actorName))];
-          const detail = group.length > 1 ? groupSummary(group) : notif.type === 'updated' ? notif.detail && `${notif.actorName} ${notif.detail}` : notif.detail ? `“${notif.detail}”` : null;
+          const actors = [...new Set(news.map((n) => n.actorName))];
           const project = projects.find((p) => p.id === notif.projectId);
           const isOpen = !!notif.taskId && notif.taskId === openTaskId;
           return (
@@ -185,7 +168,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
               }
             }}
             style={{
-              padding: '16px 24px',
+              padding: '8px 24px',
               borderBottom: '1px solid var(--border)',
               borderLeft: `3px solid ${isOpen ? 'var(--accent)' : 'transparent'}`,
               cursor: 'pointer',
@@ -193,7 +176,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
             }}
           >
             <div className="inbox-grid">
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: 0 }}>
               {/* tick off = clear it from the inbox (and every notification grouped into this row) */}
               <button
                 type="button"
@@ -216,14 +199,13 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   height: '8px',
                   borderRadius: '50%',
                   backgroundColor: unread ? 'var(--accent)' : 'transparent',
-                  marginTop: '6px',
                   flexShrink: 0,
                 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p
                   style={{
-                    margin: '0 0 4px 0',
+                    margin: 0,
                     fontSize: '14px',
                     fontWeight: unread ? 500 : 400,
                     color: 'var(--text)',
@@ -239,21 +221,10 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   {/* the time sits on the headline's line: a row of its own made every notification taller */}
                   <span style={{ marginLeft: 8, fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     {relativeTime(group[0].createdAt)}
-                    {group.length > 1 && ` · ${group.length} updates`}
+                    {news.length > 1 && ` · ${news.length} updates`}
                   </span>
                 </p>
-                {detail && (
-                  <p
-                    style={{
-                      margin: '0 0 4px 0',
-                      fontSize: '13px',
-                      color: 'var(--text)',
-                      opacity: 0.85,
-                    }}
-                  >
-                    {detail}
-                  </p>
-                )}
+                {/* no detail line: the row says what and who; opening the task shows the updates themselves */}
               </div>
             </div>
 

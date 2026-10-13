@@ -77,6 +77,7 @@ import {
   getNotifications,
   getUnreadCount,
   markNotificationsRead,
+  markTaskNotificationsRead,
   clearNotifications,
   clearAllNotifications,
   markAllNotificationsRead,
@@ -452,6 +453,33 @@ export default function AppPage() {
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, supabase, loadNotifications, loadNotificationsBadge]);
+
+  // Safety net for the live push: a sleeping tab or a dropped socket misses events and Realtime doesn't
+  // replay them. Checking each minute (and on coming back to the tab) keeps the inbox under two minutes behind.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.hidden || saves.pending > 0) return;
+      void loadNotificationsBadge();
+      if (inboxOpen.current) void loadNotifications();
+    };
+    const timer = setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [loadNotifications, loadNotificationsBadge]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Opening a task anywhere shows its latest comments and activity, so its notifications count as read
+  // from then on, not only when it was opened from the inbox.
+  useEffect(() => {
+    if (!selectedTaskId || !currentUserId || notificationsBadge === 0) return;
+    const taskId = selectedTaskId;
+    const uid = currentUserId;
+    const now = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => (n.taskId === taskId && !n.readAt ? { ...n, readAt: now } : n)));
+    persist(async () => must(await markTaskNotificationsRead(supabase, uid, taskId)), 'notifications');
+  }, [selectedTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Task panel extras, cached per task like projects: reopening a task is instant, and resting the
   // pointer on a row loads them before the click.

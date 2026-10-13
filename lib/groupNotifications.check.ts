@@ -5,20 +5,19 @@ import { groupNotifications } from './groupNotifications.ts';
 const at = (min: number) => new Date(Date.UTC(2026, 9, 5, 12, min)).toISOString();
 const ids = (gs: { id: string }[][]) => gs.map((g) => g.map((n) => n.id).join(','));
 
-// newest first: a, b (other task) and c within 3 min on task 1 -> a+c together, b alone
+// newest first: a and c on task 1 go together around b (other task); the row sits where its newest is
 assert.deepEqual(ids(groupNotifications([
   { id: 'a', taskId: 't1', createdAt: at(10) },
   { id: 'b', taskId: 't2', createdAt: at(9) },
   { id: 'c', taskId: 't1', createdAt: at(8) },
 ])), ['a,c', 'b']);
 
-// a gap over 3 minutes starts a new row; a chain of short gaps keeps going
+// however far apart: one task is one row
 assert.deepEqual(ids(groupNotifications([
-  { id: 'a', taskId: 't1', createdAt: at(20) },
+  { id: 'a', taskId: 't1', createdAt: at(50) },
   { id: 'b', taskId: 't1', createdAt: at(18) },
-  { id: 'c', taskId: 't1', createdAt: at(16) },
-  { id: 'd', taskId: 't1', createdAt: at(10) },
-])), ['a,b,c', 'd']);
+  { id: 'c', taskId: 't1', createdAt: at(0) },
+])), ['a,b,c']);
 
 // no task -> never grouped
 assert.deepEqual(ids(groupNotifications([

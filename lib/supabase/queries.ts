@@ -963,6 +963,16 @@ export async function markNotificationsRead(supabase: SupabaseClient, ids: strin
     .in('id', ids)
 }
 
+// every unread one for a task, including ones on inbox pages not loaded yet
+export async function markTaskNotificationsRead(supabase: SupabaseClient, userId: string, taskId: string) {
+  return supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('task_id', taskId)
+    .is('read_at', null)
+}
+
 // "Clear" removes notifications for good (RLS: only your own)
 export async function clearNotifications(supabase: SupabaseClient, ids: string[]) {
   return supabase.from('notifications').delete().in('id', ids)
