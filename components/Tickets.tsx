@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import type { Ticket } from '@/lib/supabase/queries';
 import { Comments, type CommentItem } from '@/components/Comments';
@@ -34,6 +35,11 @@ function status(t: Ticket) {
 
 // "My tickets": everything I've sent to other teams. The sender can read and comment, not edit.
 export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, comments, commentsLoading, mentionableUsers, onCommentAdd, onCommentEdit, onCommentDelete, onCommentLike }: TicketsProps) {
+  // A finished ticket drops off the list. The one that's open stays (a "completed" notification opens it here),
+  // and the rest come back with "Show completed", as in the task lists.
+  const [showCompleted, setShowCompleted] = useState(false);
+  const doneCount = tickets.filter((t) => t.completed).length;
+  const shown = tickets.filter((t) => showCompleted || !t.completed || t.id === openTicketId);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -41,10 +47,17 @@ export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, co
           <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>My tickets</h2>
           <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: 'var(--text-muted)' }}>Requests you&rsquo;ve sent to other teams.</p>
         </div>
-        <button className="inbox-head-btn" onClick={onCreate}>
-          <Plus size={15} />
-          Create ticket
-        </button>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          {doneCount > 0 && (
+            <button className="inbox-head-btn" onClick={() => setShowCompleted(!showCompleted)}>
+              {showCompleted ? 'Hide completed' : `Show completed (${doneCount})`}
+            </button>
+          )}
+          <button className="inbox-head-btn" onClick={onCreate}>
+            <Plus size={15} />
+            Create ticket
+          </button>
+        </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -52,8 +65,10 @@ export function Tickets({ tickets, loading, openTicketId, onToggle, onCreate, co
           <p className="ticket-empty">Loading…</p>
         ) : tickets.length === 0 ? (
           <p className="ticket-empty">You haven&rsquo;t sent any tickets yet.</p>
+        ) : shown.length === 0 ? (
+          <p className="ticket-empty">No open tickets.</p>
         ) : (
-          tickets.map((t) => {
+          shown.map((t) => {
             const open = t.id === openTicketId;
             const s = status(t);
             const overdue = isOverdue(t.due_date, t.completed || !!t.deleted_at);
