@@ -2153,7 +2153,7 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 /* Same column rhythm as the task table: wide text column, then fixed metadata columns */
 .inbox-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px 80px 90px 100px;
+  grid-template-columns: minmax(0, 1fr) 200px 80px 90px 110px;
   align-items: center;
   column-gap: 16px;
 }
@@ -2480,6 +2480,13 @@ button.project-members:hover { background: var(--surface-alt); }
   padding: 0;
   margin-top: 1px;
 }
+/* heart beside "Done" on a finished task's row */
+.inbox-like {
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.inbox-like:hover, .inbox-like:focus-visible, .inbox-like.is-on { color: var(--accent); border-color: var(--accent); }
+.inbox-like.is-on { background: var(--accent-soft); }
 .inbox-clear:hover,
 .inbox-clear:focus-visible {
   background: var(--accent);

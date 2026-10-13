@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, Check, CheckCheck, Mail, MailOpen, Trash2 } from 'lucide-react';
+import { Bell, Check, CheckCheck, Mail, Heart, MailOpen, Trash2 } from 'lucide-react';
 import { avatarStyle } from '@/lib/avatar';
 import { isOverdue, formatDay } from '@/lib/dates';
 import { groupNotifications } from '@/lib/groupNotifications';
@@ -9,7 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 
 export interface NotificationItem {
   id: string;
-  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket';
+  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket' | 'liked';
   taskName: string;
   taskId?: string | null;
   projectId?: string | null;
@@ -18,6 +18,7 @@ export interface NotificationItem {
   dueDate?: string | null;
   priority?: 'low' | 'medium' | 'high' | null;
   completed?: boolean;
+  liked?: boolean; // I've given this finished task a heart
   assignee?: { name: string; initials: string; avatar_color: string | null; avatar_url: string | null } | null;
   actorName: string;
   detail?: string | null;
@@ -41,6 +42,7 @@ interface InboxProps {
   onMarkRead: (ids: string[], read: boolean) => void;
   onClear: (ids: string[]) => void;
   onClearAll: () => void;
+  onLike: (taskId: string, liked: boolean) => void;
 }
 
 // "Natalie S", "Natalie S and Tom", "Natalie S and 2 others"
@@ -50,7 +52,7 @@ function actorList(names: string[]) {
 }
 
 // A grouped row's headline uses its most important notification: a mention beats an edit.
-const RANK: NotificationItem['type'][] = ['mention', 'ticket', 'assigned', 'comment', 'completed', 'due_soon', 'updated'];
+const RANK: NotificationItem['type'][] = ['mention', 'ticket', 'assigned', 'comment', 'liked', 'completed', 'due_soon', 'updated'];
 const headOf = (group: NotificationItem[]) => [...group].sort((a, b) => RANK.indexOf(a.type) - RANK.indexOf(b.type))[0];
 
 function relativeTime(iso: string) {
@@ -64,7 +66,7 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
-export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCount, openTaskId, projects, onNotificationClick, onOpenProject, onLoadMore, onMarkAllRead, onMarkRead, onClear, onClearAll }: InboxProps) {
+export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCount, openTaskId, projects, onNotificationClick, onOpenProject, onLoadMore, onMarkAllRead, onMarkRead, onClear, onClearAll, onLike }: InboxProps) {
   const groups = groupNotifications(notifications);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[]; unread: boolean } | null>(null);
@@ -217,6 +219,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   {notif.type === 'ticket' && `${notif.actorName} raised a ticket: "${notif.taskName}"`}
                   {notif.type === 'due_soon' && `"${notif.taskName}" is due soon`}
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
+                  {notif.type === 'liked' && `${actorList(actors)} gave a ❤️ for completing "${notif.taskName}"`}
                   {notif.type === 'updated' && `${actorList(actors)} updated "${notif.taskName}"`}
                   {/* the time sits on the headline's line: a row of its own made every notification taller */}
                   <span style={{ marginLeft: 8, fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -271,7 +274,25 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
             </div>
             <div className="inbox-col">
               {notif.completed ? (
-                <span style={{ color: '#2E9E6B', fontWeight: 600 }}>✓ Done</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#2E9E6B', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  ✓ Done
+                  {notif.taskId && (
+                    <button
+                      type="button"
+                      className={`inbox-like ${notif.liked ? 'is-on' : ''}`}
+                      title={notif.liked ? 'Take back your heart' : 'Give a heart'}
+                      aria-label="Heart"
+                      aria-pressed={!!notif.liked}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLike(notif.taskId!, !notif.liked);
+                      }}
+                      onKeyDown={(e) => e.stopPropagation()} // Enter/Space on the button shouldn't also open the row
+                    >
+                      <Heart size={15} fill={notif.liked ? 'currentColor' : 'none'} />
+                    </button>
+                  )}
+                </span>
               ) : (
                 notif.priority && (
                   <span className={`priority-chip priority-${notif.priority}`}>

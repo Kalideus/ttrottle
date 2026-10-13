@@ -78,6 +78,7 @@ import {
   getUnreadCount,
   markNotificationsRead,
   markTaskNotificationsRead,
+  setTaskLike,
   clearNotifications,
   clearAllNotifications,
   markAllNotificationsRead,
@@ -379,6 +380,7 @@ export default function AppPage() {
       dueDate: n.task?.due_date ?? null,
       priority: n.task?.priority ?? null,
       completed: !!n.task?.completed,
+      liked: !!n.task_liked,
       assignee: n.task_assignee ?? null,
       actorName: n.actor?.name ?? 'Someone',
       detail: n.detail ?? null,
@@ -1503,6 +1505,14 @@ export default function AppPage() {
     persist(async () => must(await clearNotifications(supabase, ids)), 'notifications');
   };
 
+  // a heart on a finished task, from its inbox row; every row about that task shows it
+  const handleTaskLike = (taskId: string, liked: boolean) => {
+    if (!currentUserId) return;
+    const uid = currentUserId;
+    setNotifications((prev) => prev.map((n) => (n.taskId === taskId ? { ...n, liked } : n)));
+    persist(async () => must(await setTaskLike(supabase, taskId, uid, liked)), 'notifications');
+  };
+
   const handleClearAllNotifications = () => {
     if (!currentUserId) return;
     const uid = currentUserId;
@@ -1914,6 +1924,7 @@ export default function AppPage() {
                 onMarkRead={handleNotificationsMarkRead}
                 onClear={handleNotificationsClear}
                 onClearAll={handleClearAllNotifications}
+                onLike={handleTaskLike}
               />
               {taskPanel}
             </div>

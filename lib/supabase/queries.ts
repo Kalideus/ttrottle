@@ -94,7 +94,7 @@ export type Notification = {
   id: string
   user_id: string
   task_id: string
-  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket'
+  type: 'comment' | 'mention' | 'assigned' | 'due_soon' | 'completed' | 'updated' | 'ticket' | 'liked'
   actor_id: string
   comment_id: string | null
   read_at: string | null
@@ -945,14 +945,29 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
   const rows = notifications ?? []
   const assigneeOf = (n: { task?: { assignee_id?: string | null } | null }) => n.task?.assignee_id ?? null
   const ids = Array.from(new Set(rows.flatMap((n) => [n.actor_id, assigneeOf(n)]).filter(Boolean))) as string[]
-  const { data: profiles } = ids.length ? await supabase.from('profiles').select('*').in('id', ids) : { data: [] }
+  // which of the finished tasks I've already given a heart (040); a failed lookup reads as none
+  const doneIds = Array.from(new Set(rows.filter((n) => n.task?.completed).map((n) => n.task.id))) as string[]
+  const [{ data: profiles }, { data: likes }] = await Promise.all([
+    ids.length ? supabase.from('profiles').select('*').in('id', ids) : { data: [] },
+    doneIds.length ? supabase.from('task_likes').select('task_id').eq('user_id', userId).in('task_id', doneIds) : { data: [] },
+  ])
   const byId = new Map(((profiles ?? []) as Profile[]).map((p) => [p.id, p]))
+  const liked = new Set((likes ?? []).map((l) => l.task_id as string))
   const withPeople = rows.map((n) => ({
     ...n,
     actor: byId.get(n.actor_id) ?? null,
     task_assignee: byId.get(assigneeOf(n) ?? '') ?? null,
+    task_liked: liked.has(n.task?.id),
   }))
   return { data: withPeople, error: null }
+}
+
+// A heart on a finished task. The database tells whoever completed it (040_task_likes.sql).
+export async function setTaskLike(supabase: SupabaseClient, taskId: string, userId: string, liked: boolean) {
+  const q = supabase.from('task_likes')
+  return liked
+    ? q.upsert({ task_id: taskId, user_id: userId }, { ignoreDuplicates: true })
+    : q.delete().eq('task_id', taskId).eq('user_id', userId)
 }
 
 // several at once: the inbox groups a task's consecutive updates into one row
