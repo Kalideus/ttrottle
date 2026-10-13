@@ -797,7 +797,11 @@ export default function AppPage() {
     if ('name' in updates && typeof updates.name === 'string') {
       messages.push(`renamed the task to "${updates.name}"`);
     }
-    // no line for the description: it autosaves as you type, which would log one per pause
+    // ponytail: the description autosaves, so this logs a row per pause; the panel shows a run of them as one line.
+    // Log once per editing session if task_activity ever grows too large.
+    if ('description' in updates) {
+      messages.push('updated the description');
+    }
     if ('assignee_id' in updates) {
       const id = updates.assignee_id as string | null;
       const member = id ? findMember(id) : null;

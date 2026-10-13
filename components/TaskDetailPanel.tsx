@@ -955,7 +955,12 @@ export function TaskDetailPanel({
           <div className="detail-description-label">Activity</div>
           {activity.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {activity.map((entry) => (
+              {/* the same person doing the same thing again within the hour reads as one line (the latest) */}
+              {activity.filter((entry, i) => {
+                const next = activity[i + 1];
+                return !(next && next.actor_id === entry.actor_id && next.message === entry.message &&
+                  new Date(next.created_at).getTime() - new Date(entry.created_at).getTime() < 60 * 60 * 1000);
+              }).map((entry) => (
                 <div key={entry.id} style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                   <span style={{ color: 'var(--text)', fontWeight: 500 }}>{entry.actor?.name ?? 'Someone'}</span>
                   {' '}{entry.message} · {relativeTime(entry.created_at)}
