@@ -179,6 +179,15 @@ export function TaskDetailPanel({
     []
   );
 
+  // Autosave: a pause in typing saves the description, so nothing depends on clicking out of the box.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const u = unsaved.current;
+      if (u.isEditingDescription && u.description !== (u.task.description ?? '')) u.onTaskUpdate(u.task.id, { description: u.description });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [description]);
+
   const handleSaveDescription = (keepEditing = false) => {
     if (description !== (task.description ?? '')) {
       onTaskUpdate(task.id, { description });
@@ -815,8 +824,8 @@ export function TaskDetailPanel({
                 } else if (descriptionPicker.onKeyDown(e)) {
                   // the @ picker took the key (Escape closes it, not the editor)
                 } else if (e.key === 'Escape') {
-                  setDescription(task.description ?? '');
-                  setIsEditingDescription(false);
+                  // autosave means there is no older text to go back to: Escape just closes the editor
+                  handleSaveDescription();
                 } else {
                   formatKeyDown(e);
                 }

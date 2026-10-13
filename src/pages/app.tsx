@@ -797,9 +797,7 @@ export default function AppPage() {
     if ('name' in updates && typeof updates.name === 'string') {
       messages.push(`renamed the task to "${updates.name}"`);
     }
-    if ('description' in updates) {
-      messages.push('updated the description');
-    }
+    // no line for the description: it autosaves as you type, which would log one per pause
     if ('assignee_id' in updates) {
       const id = updates.assignee_id as string | null;
       const member = id ? findMember(id) : null;

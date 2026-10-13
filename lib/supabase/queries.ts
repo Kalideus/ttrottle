@@ -650,8 +650,9 @@ export async function updateTask(
     }
 
     // Followers care about substantive edits, not manual drag-reorder (`position`) or the
-    // assignment itself (already covered by notifyAssignee above).
-    const notifiableFields: Array<keyof typeof updates> = ['name', 'description', 'due_date', 'priority', 'heading_id', 'completed']
+    // assignment itself (already covered by notifyAssignee above). Not `description` either: it autosaves
+    // as you type, and an @mention in it is told separately (notifyMentions).
+    const notifiableFields: Array<keyof typeof updates> = ['name', 'due_date', 'priority', 'heading_id', 'completed']
     const changed = notifiableFields.some((field) => field in updates)
 
     if (changed && actorId) {

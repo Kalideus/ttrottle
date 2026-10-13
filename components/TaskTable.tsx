@@ -432,12 +432,14 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
               />
             ) : (
               <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
-                {/* only the words rename; the empty space beside them still opens the task */}
+                {/* the words open the task and rename in place; stopped so a second click on them can't collapse its subtasks */}
                 <span
                   title="Click to rename"
                   style={{ cursor: 'text' }}
                   onClick={(e) => {
                     e.stopPropagation();
+                    onTaskSelect(task.id);
+                    if (hasSubtasks) expandTask(task.id);
                     setTaskNameDraft(task.name);
                     setEditingTaskNameId(task.id);
                   }}
