@@ -41,6 +41,8 @@ interface TaskDetailPanelProps {
   /** The task's project, shown as a coloured label above the title. */
   project?: Project | null;
   onTaskUpdate: (taskId: string, updates: Record<string, unknown>) => Promise<void>;
+  /** The description editor closed: its text when opened and now (for who was newly @mentioned). */
+  onDescriptionDone: (taskId: string, before: string, after: string) => void;
   onTaskDelete: (taskId: string) => Promise<void>;
   // Merge with a duplicate (migration 033): the other task is searched for across `projects`.
   projects: Project[];
@@ -90,6 +92,7 @@ export function TaskDetailPanel({
   onClearNotification,
   project,
   onTaskUpdate,
+  onDescriptionDone,
   onTaskDelete,
   projects,
   searchTasks,
@@ -167,8 +170,10 @@ export function TaskDetailPanel({
 
   // Clicking outside the panel or onto another task unmounts it before the textarea/input blur fires,
   // so an edit still open at that point is saved on the way out.
-  const unsaved = useRef({ task, onTaskUpdate, title, description, isEditingTitle, isEditingDescription });
-  unsaved.current = { task, onTaskUpdate, title, description, isEditingTitle, isEditingDescription };
+  const unsaved = useRef({ task, onTaskUpdate, onDescriptionDone, title, description, isEditingTitle, isEditingDescription });
+  unsaved.current = { task, onTaskUpdate, onDescriptionDone, title, description, isEditingTitle, isEditingDescription };
+  // the description as it was when its editor opened
+  const descriptionAtOpen = useRef('');
   useEffect(
     () => () => {
       const u = unsaved.current;
@@ -176,6 +181,7 @@ export function TaskDetailPanel({
       if (u.isEditingTitle && u.title.trim() && u.title !== u.task.name) updates.name = u.title;
       if (u.isEditingDescription && u.description !== (u.task.description ?? '')) updates.description = u.description;
       if (Object.keys(updates).length) u.onTaskUpdate(u.task.id, updates);
+      if (u.isEditingDescription) u.onDescriptionDone(u.task.id, descriptionAtOpen.current, u.description);
     },
     []
   );
@@ -193,7 +199,9 @@ export function TaskDetailPanel({
     if (description !== (task.description ?? '')) {
       onTaskUpdate(task.id, { description });
     }
-    if (!keepEditing) setIsEditingDescription(false);
+    if (keepEditing) return;
+    setIsEditingDescription(false);
+    onDescriptionDone(task.id, descriptionAtOpen.current, description);
   };
 
   return (
@@ -869,7 +877,10 @@ export function TaskDetailPanel({
             </>
           ) : (
             <div
-              onClick={() => setIsEditingDescription(true)}
+              onClick={() => {
+                descriptionAtOpen.current = description;
+                setIsEditingDescription(true);
+              }}
               style={{
                 width: '100%',
                 minHeight: '72px',

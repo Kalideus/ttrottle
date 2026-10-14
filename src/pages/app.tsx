@@ -23,7 +23,8 @@ import { ProjectPrintSheet } from '@/components/ProjectPrintSheet';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
 import { TaskTable } from '@/components/TaskTable';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
-import { Inbox, type NotificationItem } from '@/components/Inbox';
+import { Inbox } from '@/components/Inbox';
+import { useInbox } from '@/lib/useInbox';
 import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
 import { createSaveQueue } from '@/lib/saveQueue';
@@ -74,8 +75,6 @@ import {
   getMyTasks,
   getCurrentProfile,
   updateProfile,
-  getNotifications,
-  getUnreadCount,
   markNotificationsRead,
   markTaskNotificationsRead,
   setTaskLike,
@@ -107,7 +106,6 @@ type Section = 'my-tasks' | 'inbox' | 'tickets' | 'projects';
 type SearchView = { by: TaskSearch; label: string; projectId: string | null; from: Section };
 
 const DAY_MS = 86400000;
-const NOTIFICATIONS_PAGE_SIZE = 50;
 
 // Supabase returns { error } instead of throwing; background saves need a throw to report the failure.
 function must<T extends { error: unknown }>(result: T): T {
@@ -171,15 +169,6 @@ export default function AppPage() {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const notificationsRef = useRef<NotificationItem[]>([]);
-  notificationsRef.current = notifications;
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [notificationsLoadingMore, setNotificationsLoadingMore] = useState(false);
-  const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
-  const loadingMoreNotifications = useRef(false);
-  const notificationLoadRequest = useRef(0);
-  const [notificationsBadge, setNotificationsBadge] = useState(0);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -345,132 +334,24 @@ export default function AppPage() {
   const findMember = (userId: unknown) =>
     projectMembers.find((m) => m.profile_id === userId) ?? [...myTaskMembers.values()].flat().find((m) => m.profile_id === userId);
 
-  const loadNotificationsBadge = useCallback(async () => {
-    if (!currentUserId) return;
-    setNotificationsBadge(await getUnreadCount(supabase, currentUserId));
-  }, [currentUserId, supabase]);
-
-  const loadNotifications = useCallback(async ({ append = false } = {}) => {
-    if (!currentUserId) return;
-    const requestId = append ? notificationLoadRequest.current : ++notificationLoadRequest.current;
-    const loadedCount = notificationsRef.current.length;
-    const offsets = append
-      ? [loadedCount]
-      : Array.from(
-          { length: Math.max(1, Math.ceil(Math.max(NOTIFICATIONS_PAGE_SIZE, loadedCount) / NOTIFICATIONS_PAGE_SIZE)) },
-          (_, page) => page * NOTIFICATIONS_PAGE_SIZE
-        );
-    const pages = await Promise.all(
-      offsets.map((offset) => getNotifications(supabase, currentUserId, { limit: NOTIFICATIONS_PAGE_SIZE, offset }))
-    );
-    const failedPage = pages.find((page) => page.error);
-    if (failedPage?.error) {
-      console.error('Error loading notifications:', failedPage.error);
-      return;
-    }
-    if (requestId !== notificationLoadRequest.current) return;
-    const rows = pages.flatMap((page) => page.data ?? []);
-    const mapped = rows.map((n: any) => ({
-      id: n.id,
-      type: n.type,
-      taskName: n.task?.name ?? 'a task',
-      taskId: n.task?.id ?? null,
-      projectId: n.task?.project_id ?? null,
-      commentId: n.comment_id ?? null,
-      dueDate: n.task?.due_date ?? null,
-      priority: n.task?.priority ?? null,
-      completed: !!n.task?.completed,
-      liked: !!n.task_liked,
-      assignee: n.task_assignee ?? null,
-      actorName: n.actor?.name ?? 'Someone',
-      detail: n.detail ?? null,
-      createdAt: n.created_at,
-      readAt: n.read_at,
-    }));
-    if (append) {
-      setNotifications((prev) => {
-        const existing = new Set(prev.map((n) => n.id));
-        return [...prev, ...mapped.filter((n) => !existing.has(n.id))]
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      });
-    } else {
-      setNotifications(mapped);
-    }
-    setHasMoreNotifications((pages[pages.length - 1]?.data?.length ?? 0) === NOTIFICATIONS_PAGE_SIZE);
-  }, [currentUserId, supabase]);
-
-  const loadMoreNotifications = useCallback(async () => {
-    if (!hasMoreNotifications || loadingMoreNotifications.current) return;
-    loadingMoreNotifications.current = true;
-    setNotificationsLoadingMore(true);
-    try {
-      await loadNotifications({ append: true });
-    } finally {
-      loadingMoreNotifications.current = false;
-      setNotificationsLoadingMore(false);
-    }
-  }, [hasMoreNotifications, loadNotifications]);
-
-  useEffect(() => {
-    void loadNotificationsBadge();
-  }, [loadNotificationsBadge, activeSection]);
-
-  const notificationsLoaded = useRef(false);
-  const inboxOpen = useRef(false);
-  inboxOpen.current = activeSection === 'inbox';
-
-  useEffect(() => {
-    if (activeSection !== 'inbox') return;
-    // reopening shows the last list straight away and refreshes it underneath
-    if (!notificationsLoaded.current) setNotificationsLoading(true);
-    loadNotifications().finally(() => {
-      notificationsLoaded.current = true;
-      setNotificationsLoading(false);
-    });
-  }, [activeSection, loadNotifications]);
-
-  // Live push: Supabase Realtime on my notification rows. Any insert/update
-  // refreshes the badge and the list so it lands without navigating.
-  useEffect(() => {
-    if (!currentUserId) return;
-    const channel = supabase
-      .channel(`notifications:${currentUserId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` },
-        (payload) => {
-          // my own clears/reads still saving would come back stale; the save queue reloads once they land
-          if (saves.pending > 0) return;
-          // a task someone just gave me shows up in my lists now, in its due-date place, not after a refresh
-          if (payload.eventType === 'INSERT' && (payload.new as { type?: string }).type === 'assigned') {
-            void resyncRef.current.tasks().then(() => setResortToken((n) => n + 1));
-          }
-          void loadNotificationsBadge();
-          // the full list only matters while it's on screen; opening the inbox loads it anyway
-          if (inboxOpen.current) void loadNotifications();
-        }
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [currentUserId, supabase, loadNotifications, loadNotificationsBadge]);
-
-  // Safety net for the live push: a sleeping tab or a dropped socket misses events and Realtime doesn't
-  // replay them. Checking each minute (and on coming back to the tab) keeps the inbox under two minutes behind.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.hidden || saves.pending > 0) return;
-      void loadNotificationsBadge();
-      if (inboxOpen.current) void loadNotifications();
-    };
-    const timer = setInterval(refresh, 60_000);
-    document.addEventListener('visibilitychange', refresh);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', refresh);
-    };
-  }, [loadNotifications, loadNotificationsBadge]); // eslint-disable-line react-hooks/exhaustive-deps
+  const {
+    notifications,
+    setNotifications,
+    badge: notificationsBadge,
+    setBadge: setNotificationsBadge,
+    loading: notificationsLoading,
+    loadingMore: notificationsLoadingMore,
+    hasMore: hasMoreNotifications,
+    loadMore: loadMoreNotifications,
+    refresh: refreshInbox,
+  } = useInbox(
+    supabase,
+    currentUserId,
+    activeSection,
+    () => saves.pending > 0,
+    // a task someone just gave me shows up in my lists now, in its due-date place, not after a refresh
+    () => void resyncRef.current.tasks().then(() => setResortToken((n) => n + 1))
+  );
 
   // Opening a task anywhere shows its latest comments and activity, so its notifications count as read
   // from then on, not only when it was opened from the inbox.
@@ -664,7 +545,7 @@ export default function AppPage() {
 
   // What a finished save may have changed; each reloads from the server for whatever is on screen now.
   const resyncers = {
-    notifications: () => Promise.all([loadNotificationsBadge(), inboxOpen.current ? loadNotifications() : null]),
+    notifications: refreshInbox,
     tasks: () => Promise.all([refreshTasks(), refreshMyTasks(), saves.pending === 0 ? loadSearch(latest.current.searchView) : null]),
     headings: async () => {
       const id = latest.current.activeProjectId;
@@ -733,6 +614,9 @@ export default function AppPage() {
     setMyTasks((ts) => ts.map(p));
     setSearchResults((ts) => ts.map(p));
   };
+  // ...and find it there
+  const findShownTask = (taskId: string) =>
+    [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
 
   const removeTasks = (ids: Set<string>) => {
     const drop = (ts: Task[]): Task[] => ts.filter((t) => !ids.has(t.id)).map((t) => (t.subtasks ? { ...t, subtasks: drop(t.subtasks) } : t));
@@ -857,7 +741,7 @@ export default function AppPage() {
       messages.push(updates.due_locked ? 'locked the due date' : 'unlocked the due date');
     }
     if ('repeat' in updates) {
-      const due = [...tasks, ...myTasks].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId)?.due_date ?? null;
+      const due = (taskId ? findShownTask(taskId)?.due_date : null) ?? null;
       const label = updates.repeat ? repeatLabel(updates.repeat as Repeat, due) : '';
       messages.push(label ? `set the task to repeat ${label.charAt(0).toLowerCase() + label.slice(1)}` : 'stopped the task repeating');
     }
@@ -881,16 +765,7 @@ export default function AppPage() {
       setCelebration(Date.now());
       // Completing asks nothing; an Undo shows for a few seconds instead. Not for a repeating task:
       // its next copy already exists (or a subtask has rolled on), and un-ticking wouldn't take that back.
-      const task = [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
-      setUndoCompleteId(task?.repeat ? null : taskId);
-    }
-    // People newly @mentioned in the description follow the task and are told, as in a comment.
-    let newMentions: string[] = [];
-    if (typeof updates.description === 'string') {
-      const task = [...tasks, ...myTasks, ...searchResults].flatMap((t) => [t, ...(t.subtasks ?? [])]).find((t) => t.id === taskId);
-      const people = membersFor(task?.project_id).filter((m) => m.profile_id).map((m) => ({ id: m.profile_id!, name: m.profile?.name ?? m.email }));
-      const before = extractMentions(task?.description ?? '', people);
-      newMentions = extractMentions(updates.description, people).filter((id) => !before.includes(id));
+      setUndoCompleteId(findShownTask(taskId)?.repeat ? null : taskId);
     }
     const optimistic: Partial<Task> = { ...updates };
     if ('assignee_id' in updates) optimistic.assignee = findMember(updates.assignee_id)?.profile ?? null;
@@ -906,12 +781,21 @@ export default function AppPage() {
       // the new assignee follows the task (creating a task already does this)
       if (updates.assignee_id) must(await addFollower(supabase, taskId, updates.assignee_id as string));
       if (!currentUserId) return;
-      await notifyMentions(supabase, { task_id: taskId, actor_id: currentUserId, user_ids: newMentions, text: updates.description as string });
       const results = await Promise.all(messages.map((message) => logActivity(supabase, { task_id: taskId, actor_id: currentUserId, message })));
       results.forEach((r) => {
         if (r.error) console.error('Failed to log task activity:', r.error);
       });
     }, 'tasks', 'activity', 'followers');
+  };
+
+  // People newly @mentioned in a description follow the task and are told, as in a comment. Counted
+  // when the editor closes, not on each autosave, so a pause on "@Tom" before "@TomA" tags nobody.
+  const handleDescriptionDone = (taskId: string, before: string, after: string) => {
+    const people = membersFor(findShownTask(taskId)?.project_id).filter((m) => m.profile_id).map((m) => ({ id: m.profile_id!, name: m.profile?.name ?? m.email }));
+    const was = extractMentions(before, people);
+    const added = extractMentions(after, people).filter((id) => !was.includes(id));
+    if (!added.length || !currentUserId) return;
+    persist(() => notifyMentions(supabase, { task_id: taskId, actor_id: currentUserId, user_ids: added, text: after }), 'followers');
   };
 
   const handleHeadingRename = async (headingId: string, name: string) => {
@@ -1551,6 +1435,7 @@ export default function AppPage() {
         onParentSelect={() => parentTask && setSelectedTaskId(parentTask.id)}
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdate={handleTaskUpdate}
+        onDescriptionDone={handleDescriptionDone}
         onTaskDelete={handleTaskDelete}
         projects={projects}
         searchTasks={runTaskSearch}

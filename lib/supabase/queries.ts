@@ -117,28 +117,6 @@ export type TaskActivity = {
   actor?: Profile | null
 }
 
-export type FilterDef = {
-  field: 'assignee' | 'due_date' | 'priority' | 'tag' | 'completion'
-  operator: string
-  value: string | string[] | null
-}
-
-export type UserViewPrefs = {
-  user_id: string
-  view_key: string
-  filters: FilterDef[]
-  sort_field: string | null
-  sort_direction: 'asc' | 'desc'
-  updated_at: string
-}
-
-export type TaskWithRelations = Task & {
-  assignee: Profile | null
-  subtasks: Task[]
-  tags: Tag[]
-  comment_count: number
-}
-
 // Search only ever reaches the projects the user can see: RLS does the scoping, so nothing
 // from a project they aren't in (or someone else's private project) can come back.
 const taskHits = (supabase: SupabaseClient) =>
@@ -183,10 +161,11 @@ export type TaskSearch = { assignee_id: string } | { tag_id: string } | { text: 
 export async function findTasks(supabase: SupabaseClient, by: TaskSearch, projectId?: string | null) {
   let q = supabase
     .from('tasks')
-    .select(`*, project:projects!tasks_project_id_fkey(id, name, color), ${TAG_ROWS}, subtasks:tasks!parent_task_id(*, ${TAG_ROWS})${'tag_id' in by ? ', task_tags!inner(tag_id)' : ''}`)
+    .select(`*, project:projects!tasks_project_id_fkey(id, name, color), ${TAG_ROWS}, subtasks:tasks!parent_task_id(*, ${TAG_ROWS})${'tag_id' in by ? ', tag_match:task_tags!inner(tag_id)' : ''}`)
     .is('deleted_at', null)
   if ('assignee_id' in by) q = q.eq('assignee_id', by.assignee_id)
-  else if ('tag_id' in by) q = q.eq('task_tags.tag_id', by.tag_id)
+  // named apart from TAG_ROWS: with both on task_tags, a filter by table name hit the wrong one
+  else if ('tag_id' in by) q = q.eq('tag_match.tag_id', by.tag_id)
   else q = q.or(textFilter(by.text))
   if (projectId) q = q.eq('project_id', projectId)
   const { data } = await q
@@ -194,11 +173,13 @@ export async function findTasks(supabase: SupabaseClient, by: TaskSearch, projec
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('position', { referencedTable: 'subtasks', ascending: true })
     .order('created_at', { referencedTable: 'subtasks', ascending: true })
-  return (await attachProfilesById(supabase, withTags(data ?? []), 'assignee_id', 'assignee')) as Task[]
+  // a tag search only ever lists tasks carrying that tag, whatever the query above let through
+  const rows = withTags(data ?? []).filter((t) => !('tag_id' in by) || t.tags?.some((tag) => tag.id === by.tag_id))
+  return (await attachProfilesById(supabase, rows, 'assignee_id', 'assignee')) as Task[]
 }
 
 // A task's (and its subtasks') tags, embedded in the task query: for the lists that mix projects
-// (search, My tasks). Aliased so it can sit beside findTasks' own task_tags filter.
+// (search, My tasks, projects).
 const TAG_ROWS = 'tag_rows:task_tags(tags(*))'
 function withTags(rows: any[]): Task[] {
   const one = ({ tag_rows, ...t }: any) => ({ ...t, tags: (tag_rows ?? []).map((r: any) => r.tags).filter(Boolean) })
@@ -450,7 +431,8 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
     .from('tasks')
     .select(`
       *,
-      subtasks:tasks!parent_task_id(*)
+      ${TAG_ROWS},
+      subtasks:tasks!parent_task_id(*, ${TAG_ROWS})
     `)
     .eq('project_id', projectId)
     .is('parent_task_id', null)
@@ -464,8 +446,6 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
   if (tasksError) return { data: [], error: tasksError }
 
   const taskIds = (tasks ?? []).map((task) => task.id)
-  // subtasks have tags too
-  const allTaskIds = (tasks ?? []).flatMap((task) => [task.id, ...(task.subtasks ?? []).map((st: Task) => st.id)])
 
   const assigneeIds = new Set<string>()
   ;(tasks ?? []).forEach((task) => {
@@ -475,48 +455,33 @@ export async function getTasksForProject(supabase: SupabaseClient, projectId: st
     ;(task.subtasks ?? []).forEach((st: Task) => st.assignee_id && assigneeIds.add(st.assignee_id))
   })
 
-  // The three lookups only depend on the task rows, so fetch them in parallel.
+  // Both lookups only depend on the task rows, so fetch them in parallel.
   const empty = Promise.resolve({ data: null })
-  const [{ data: counts }, { data: profiles }, { data: taskTagRows }] = await Promise.all([
+  const [{ data: counts }, { data: profiles }] = await Promise.all([
     taskIds.length ? supabase.rpc('get_comment_counts', { task_ids: taskIds }) : empty,
     assigneeIds.size ? supabase.from('profiles').select('*').in('id', Array.from(assigneeIds)) : empty,
-    // Fetched separately (not embedded) so a missing task_tags table can't fail task loading itself.
-    allTaskIds.length ? supabase.from('task_tags').select('task_id, tags(*)').in('task_id', allTaskIds) : empty,
   ])
 
   const countMap = new Map((counts ?? []).map((row: { task_id: string; count: number }) => [row.task_id, row.count]))
   const profileMap = new Map<string, Profile>()
   ;(profiles ?? []).forEach((p: Profile) => profileMap.set(p.id, p))
 
-  const tagsByTask = new Map<string, Tag[]>()
-  ;(taskTagRows ?? []).forEach((row: any) => {
-    const tag = row.tags as Tag | null
-    if (!tag) return
-    const existing = tagsByTask.get(row.task_id) ?? []
-    existing.push(tag)
-    tagsByTask.set(row.task_id, existing)
-  })
-
-  const normalized = (tasks ?? []).map((task) => ({
+  const normalized = withTags(tasks ?? []).map((task) => ({
     ...task,
     assignee: task.assignee_id ? profileMap.get(task.assignee_id) ?? null : null,
     requester: task.ticket_by ? profileMap.get(task.ticket_by) ?? null : null,
-    subtasks: (task.subtasks ?? [])
-      .filter((subtask: Task) => !subtask.deleted_at)
-      .map((subtask: Task) => ({
-        ...subtask,
-        assignee: subtask.assignee_id ? profileMap.get(subtask.assignee_id) ?? null : null,
-        tags: tagsByTask.get(subtask.id) ?? [],
-      })),
+    subtasks: (task.subtasks ?? []).map((subtask) => ({
+      ...subtask,
+      assignee: subtask.assignee_id ? profileMap.get(subtask.assignee_id) ?? null : null,
+    })),
     comment_count: countMap.get(task.id) ?? 0,
-    tags: tagsByTask.get(task.id) ?? [],
   }))
 
   return { data: normalized, error: null }
 }
 
 async function notifyAssignee(supabase: SupabaseClient, { taskId, assigneeId, actorId }: { taskId: string; assigneeId: string; actorId: string | null }) {
-  await supabase.from('followers').upsert({ task_id: taskId, user_id: assigneeId }, { onConflict: 'task_id,user_id', ignoreDuplicates: true })
+  await addFollower(supabase, taskId, assigneeId)
 
   if (actorId && actorId !== assigneeId) {
     await supabase.from('notifications').insert({
@@ -727,22 +692,10 @@ export async function getDeletedTasks(supabase: SupabaseClient) {
 
   if (error) return { data: [], error }
 
-  const deleterIds = Array.from(new Set((data ?? []).map((t) => t.deleted_by).filter(Boolean))) as string[]
-  const deleterMap = new Map<string, Profile>()
-  if (deleterIds.length) {
-    const { data: profiles } = await supabase.from('profiles').select('*').in('id', deleterIds)
-    ;(profiles ?? []).forEach((p: Profile) => deleterMap.set(p.id, p))
-  }
-
   // subtasks that went with their parent aren't listed: restoring the parent brings them back
   const deletedAt = new Map((data ?? []).map((t) => [t.id, t.deleted_at]))
-  const withDeleter = (data ?? [])
-    .filter((t) => !t.parent_task_id || deletedAt.get(t.parent_task_id) !== t.deleted_at)
-    .map((t) => ({
-      ...t,
-      deletedByProfile: t.deleted_by ? deleterMap.get(t.deleted_by) ?? null : null,
-    }))
-  return { data: withDeleter, error: null }
+  const listed = (data ?? []).filter((t) => !t.parent_task_id || deletedAt.get(t.parent_task_id) !== t.deleted_at)
+  return { data: await attachProfilesById(supabase, listed, 'deleted_by', 'deletedByProfile'), error: null }
 }
 
 export async function getMyTasks(supabase: SupabaseClient, userId: string) {
@@ -841,26 +794,19 @@ export async function createComment(
     ])
     ;(result.data as Record<string, unknown>).author = authorProfile ?? null
 
-    const text = photosAsText(body)
-    const snippet = text.length > 140 ? `${text.slice(0, 140)}…` : text
-    const row = (user_id: string, type: string) => ({ user_id, task_id, type, actor_id: author_id, comment_id: result.data.id, detail: snippet })
-
-    // followers get a 'comment' notification; mentioned non-followers get a 'mention' one
-    const followerIds = new Set((followers ?? []).map((f) => f.user_id))
-    const mentionOnly = (mentions ?? []).filter((uid) => uid !== author_id && !followerIds.has(uid))
-    // being mentioned makes you a follower, so you hear about what happens next (after the list
-    // above was read: this mention still reaches them as a 'mention', not a 'comment')
-    if (mentionOnly.length) {
-      const { error: followError } = await supabase
-        .from('followers')
-        .upsert(mentionOnly.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
-      if (followError) console.error('Failed to add mentioned people as followers:', followError)
+    // followers get a 'comment' notification; mentioned non-followers get a 'mention' one, and
+    // follow from now on (the follower list was read first, so this one isn't a 'comment' too)
+    const followerIds = (followers ?? []).map((f) => f.user_id)
+    const comment_id = result.data.id
+    const detail = preview(body)
+    if (followerIds.length) {
+      const { error: notifyError } = await supabase
+        .from('notifications')
+        .insert(followerIds.map((user_id) => ({ user_id, task_id, type: 'comment', actor_id: author_id, comment_id, detail })))
+      if (notifyError) console.error('Failed to notify followers of comment:', notifyError)
     }
-    const notifications = [...[...followerIds].map((uid) => row(uid, 'comment')), ...mentionOnly.map((uid) => row(uid, 'mention'))]
-    if (notifications.length) {
-      const { error: notifyError } = await supabase.from('notifications').insert(notifications)
-      if (notifyError) console.error('Failed to notify followers/mentions of comment:', notifyError)
-    }
+    const mentionOnly = (mentions ?? []).filter((uid) => !followerIds.includes(uid))
+    await notifyMentions(supabase, { task_id, actor_id: author_id, user_ids: mentionOnly, text: body, comment_id })
   }
 
   return result
@@ -884,7 +830,13 @@ export async function updateComment(supabase: SupabaseClient, id: string, { body
   return result
 }
 
-// People newly @mentioned in an edited comment, or in a task's description (no comment_id):
+// a notification's one-line preview of a comment or description
+function preview(text: string) {
+  const plain = photosAsText(text)
+  return plain.length > 140 ? `${plain.slice(0, 140)}…` : plain
+}
+
+// People newly @mentioned in a comment, or in a task's description (no comment_id):
 // they follow the task and get a 'mention' notification. Never the person who wrote it.
 export async function notifyMentions(
   supabase: SupabaseClient,
@@ -892,8 +844,7 @@ export async function notifyMentions(
 ) {
   const others = user_ids.filter((uid) => uid !== actor_id)
   if (!others.length) return
-  const plain = photosAsText(text)
-  const detail = plain.length > 140 ? `${plain.slice(0, 140)}…` : plain
+  const detail = preview(text)
   const { error: followError } = await supabase
     .from('followers')
     .upsert(others.map((user_id) => ({ task_id, user_id })), { onConflict: 'task_id,user_id', ignoreDuplicates: true })
@@ -928,10 +879,6 @@ export async function addTagToTask(supabase: SupabaseClient, taskId: string, tag
 
 export async function removeTagFromTask(supabase: SupabaseClient, taskId: string, tagId: string) {
   return supabase.from('task_tags').delete().eq('task_id', taskId).eq('tag_id', tagId)
-}
-
-export async function getTaskTags(supabase: SupabaseClient, taskId: string) {
-  return supabase.from('task_tags').select('tags(*)').eq('task_id', taskId)
 }
 
 export async function getNotifications(supabase: SupabaseClient, userId: string, { limit = 50, offset = 0 } = {}) {
@@ -1023,46 +970,6 @@ export async function getUnreadCount(supabase: SupabaseClient, userId: string) {
   return count ?? 0
 }
 
-export async function getViewPrefs(supabase: SupabaseClient, userId: string, viewKey: string) {
-  const { data, error } = await supabase
-    .from('user_view_prefs')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('view_key', viewKey)
-    .single()
-
-  return { data, error }
-}
-
-export async function saveViewPrefs(
-  supabase: SupabaseClient,
-  {
-    user_id,
-    view_key,
-    filters,
-    sort_field,
-    sort_direction,
-  }: {
-    user_id: string
-    view_key: string
-    filters: FilterDef[]
-    sort_field: string | null
-    sort_direction: 'asc' | 'desc'
-  }
-) {
-  return supabase.from('user_view_prefs').upsert(
-    {
-      user_id,
-      view_key,
-      filters,
-      sort_field,
-      sort_direction,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,view_key' }
-  )
-}
-
 export async function getProfiles(supabase: SupabaseClient) {
   return supabase.from('profiles').select('*').order('name', { ascending: true })
 }
@@ -1081,16 +988,6 @@ export async function updateProfile(
   updates: { name?: string; initials?: string; avatar_color?: string; avatar_url?: string | null }
 ) {
   return supabase.from('profiles').update(updates).eq('id', userId).select('*').single()
-}
-
-// "My tasks" badge = tasks assigned to me since this timestamp (my previous session).
-export async function getLastSeen(supabase: SupabaseClient, userId: string) {
-  const { data } = await supabase.from('profiles').select('last_seen_at').eq('id', userId).single()
-  return (data?.last_seen_at as string | null) ?? null
-}
-
-export async function touchLastSeen(supabase: SupabaseClient, userId: string) {
-  return supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', userId)
 }
 
 export type ProjectMember = {
