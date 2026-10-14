@@ -69,6 +69,10 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
     }
     const parent = tasks.find((t) => t.subtasks?.some((s) => s.id === selectedTaskId));
     if (parent) expandTask(parent.id);
+    // ...or inside a closed section
+    const top = parent ?? tasks.find((t) => t.id === selectedTaskId);
+    const section = top && (top.heading_id || '__no_heading__');
+    if (section && expandedSections[section] === false) setExpandedSections((prev) => ({ ...prev, [section]: true }));
     const row = document.querySelector('.task-row.selected');
     if (!row) return;
     row.scrollIntoView({ block: 'nearest' }); // nearest: a row already on screen (one you just clicked) doesn't move

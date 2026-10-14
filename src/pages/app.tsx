@@ -147,6 +147,9 @@ export default function AppPage() {
   const [activeFilters, setActiveFilters] = useState<FilterValue[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
+  // a task opened from the top search or the inbox: its row shows in the project list (while it's the open task)
+  // even if "hide completed", a filter or the list's own search would hide it
+  const [revealTaskId, setRevealTaskId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('position');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
@@ -211,7 +214,10 @@ export default function AppPage() {
     if (typeof project !== 'string') return;
     setActiveSection('projects');
     setActiveProjectId(project);
-    if (typeof task === 'string') setSelectedTaskId(task);
+    if (typeof task === 'string') {
+      setSelectedTaskId(task);
+      setRevealTaskId(task);
+    }
     void router.replace('/app', undefined, { shallow: true });
   }, [router.isReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -443,20 +449,22 @@ export default function AppPage() {
 
   const displayedTasks = useMemo(() => {
     let result = [...taskPool];
+    const reveal = revealTaskId && revealTaskId === selectedTaskId ? revealTaskId : null;
+    const revealed = (task: Task) => !!reveal && (task.id === reveal || !!task.subtasks?.some((s) => s.id === reveal));
 
     if (!showCompleted && !activeFilters.includes('completed-7d')) {
-      result = result.filter((task) => !task.completed);
+      result = result.filter((task) => !task.completed || revealed(task));
     }
 
     const query = searchQuery.trim().toLowerCase();
     if (query) {
-      result = result.filter((task) => task.name.toLowerCase().includes(query));
+      result = result.filter((task) => task.name.toLowerCase().includes(query) || revealed(task));
     }
 
     if (activeFilters.length > 0) {
       const kinds = filterKinds(activeFilters);
       result = result.filter((task) => {
-        return kinds.every((group) => group.some((filter) => {
+        return revealed(task) || kinds.every((group) => group.some((filter) => {
           if (filter === 'priority:high') return task.priority === 'high';
           if (filter === 'priority:medium') return task.priority === 'medium';
           if (filter === 'priority:low') return task.priority === 'low';
@@ -494,7 +502,7 @@ export default function AppPage() {
 
     // Rows don't move while you edit them (changing a date mid-list made the next click land on the wrong task).
     // The order is re-sorted only when the view itself changes; rows added meanwhile go at the bottom.
-    const viewKey = JSON.stringify([activeSection, activeProjectId, sortField, sortDirection, activeFilters, searchQuery, showCompleted, resortToken]);
+    const viewKey = JSON.stringify([activeSection, activeProjectId, sortField, sortDirection, activeFilters, searchQuery, showCompleted, resortToken, reveal]);
     const prev = frozenOrder.current;
     if (prev.key === viewKey) {
       const byId = new Map(result.map((t) => [t.id, t]));
@@ -505,7 +513,7 @@ export default function AppPage() {
     frozenOrder.current = { key: viewKey, ids: result.map((t) => t.id) };
 
     return result;
-  }, [taskPool, activeFilters, searchQuery, showCompleted, sortField, sortDirection, activeSection, activeProjectId, resortToken]);
+  }, [taskPool, activeFilters, searchQuery, showCompleted, sortField, sortDirection, activeSection, activeProjectId, resortToken, revealTaskId, selectedTaskId]);
 
   const allVisibleTaskIds = useMemo(
     () => displayedTasks.flatMap((t) => [t.id, ...(t.subtasks ?? []).map((s) => s.id)]),
@@ -1336,6 +1344,7 @@ export default function AppPage() {
     } else if (notif?.projectId && notif?.taskId) {
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
+      setRevealTaskId(notif.taskId);
       setFocusCommentId(notif.commentId ?? null);
     }
   };
@@ -1367,6 +1376,7 @@ export default function AppPage() {
   const openInProject = (projectId: string, taskId?: string | null) => {
     setActiveProjectId(projectId);
     setSelectedTaskId(taskId ?? null);
+    setRevealTaskId(taskId ?? null);
     setActiveSection('projects');
   };
 
