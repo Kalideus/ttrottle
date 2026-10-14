@@ -179,11 +179,11 @@ export type TaskSearch = { assignee_id: string } | { tag_id: string } | { text: 
 // Every task assigned to one person, carrying one tag, or containing some text, as full rows
 // (the search list works on them like My tasks does). Open tasks first, soonest due date at
 // the top, ones with no date after those.
-// ponytail: no paging (the server stops at its own row limit, 1000 by default), and the rows come without their tags
+// ponytail: no paging (the server stops at its own row limit, 1000 by default)
 export async function findTasks(supabase: SupabaseClient, by: TaskSearch, projectId?: string | null) {
   let q = supabase
     .from('tasks')
-    .select(`*, project:projects!tasks_project_id_fkey(id, name, color), subtasks:tasks!parent_task_id(*)${'tag_id' in by ? ', task_tags!inner(tag_id)' : ''}`)
+    .select(`*, project:projects!tasks_project_id_fkey(id, name, color), ${TAG_ROWS}, subtasks:tasks!parent_task_id(*, ${TAG_ROWS})${'tag_id' in by ? ', task_tags!inner(tag_id)' : ''}`)
     .is('deleted_at', null)
   if ('assignee_id' in by) q = q.eq('assignee_id', by.assignee_id)
   else if ('tag_id' in by) q = q.eq('task_tags.tag_id', by.tag_id)
@@ -194,8 +194,15 @@ export async function findTasks(supabase: SupabaseClient, by: TaskSearch, projec
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('position', { referencedTable: 'subtasks', ascending: true })
     .order('created_at', { referencedTable: 'subtasks', ascending: true })
-  const rows = ((data ?? []) as unknown as Task[]).map((t) => ({ ...t, subtasks: (t.subtasks ?? []).filter((st) => !st.deleted_at) }))
-  return (await attachProfilesById(supabase, rows, 'assignee_id', 'assignee')) as Task[]
+  return (await attachProfilesById(supabase, withTags(data ?? []), 'assignee_id', 'assignee')) as Task[]
+}
+
+// A task's (and its subtasks') tags, embedded in the task query: for the lists that mix projects
+// (search, My tasks). Aliased so it can sit beside findTasks' own task_tags filter.
+const TAG_ROWS = 'tag_rows:task_tags(tags(*))'
+function withTags(rows: any[]): Task[] {
+  const one = ({ tag_rows, ...t }: any) => ({ ...t, tags: (tag_rows ?? []).map((r: any) => r.tags).filter(Boolean) })
+  return rows.map((t) => ({ ...one(t), subtasks: (t.subtasks ?? []).filter((st: Task) => !st.deleted_at).map(one) }))
 }
 
 // The merge picker's one flat list: tasks whose name contains `query`, then tasks assigned to
@@ -744,7 +751,8 @@ export async function getMyTasks(supabase: SupabaseClient, userId: string) {
     .select(`
       *,
       project:projects!tasks_project_id_fkey(id, name, color),
-      subtasks:tasks!parent_task_id(*)
+      ${TAG_ROWS},
+      subtasks:tasks!parent_task_id(*, ${TAG_ROWS})
     `)
     .eq('assignee_id', userId)
     .eq('completed', false)
@@ -755,7 +763,7 @@ export async function getMyTasks(supabase: SupabaseClient, userId: string) {
 
   // ponytail: subtasks come without assignee profiles here; join them like getTasksForProject if avatars are wanted
   return {
-    data: (data ?? []).map((t) => ({ ...t, subtasks: (t.subtasks ?? []).filter((st: Task) => !st.deleted_at) })),
+    data: withTags(data ?? []),
     error,
   }
 }
