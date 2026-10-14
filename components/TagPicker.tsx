@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Pencil } from 'lucide-react';
 import type { Tag } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
@@ -19,6 +19,8 @@ interface TagPickerProps {
   onTagAdd: (tag: Tag) => void;
   onTagRemove: (tagId: string) => void;
   onNewTag?: (name: string, color: string) => Promise<void>;
+  /** Renames the tag everywhere (tags are shared by every project). */
+  onTagRename?: (tagId: string, name: string) => void;
 }
 
 export function TagPicker({
@@ -27,7 +29,48 @@ export function TagPicker({
   onTagAdd,
   onTagRemove,
   onNewTag,
+  onTagRename,
 }: TagPickerProps) {
+  // a tag being renamed: from its chip on the task, or the pencil in the list
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
+  const renameTo = renaming?.draft.trim() ?? '';
+  // names are unique (the database refuses a twin), so a clash is shown instead of saved
+  const renameClash = !!renaming && availableTags.some((t) => t.id !== renaming.id && t.name.toLowerCase() === renameTo.toLowerCase());
+  const saveRename = () => {
+    if (!renaming || renameClash) return;
+    const old = availableTags.find((t) => t.id === renaming.id)?.name;
+    if (renameTo && renameTo !== old) onTagRename?.(renaming.id, renameTo);
+    setRenaming(null);
+  };
+  const renameInput = (tag: Tag) => (
+    <input
+      autoFocus
+      aria-label={`Rename tag ${tag.name}`}
+      value={renaming?.draft ?? ''}
+      onChange={(e) => setRenaming({ id: tag.id, draft: e.target.value })}
+      onBlur={() => (renameClash ? setRenaming(null) : saveRename())}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveRename();
+        } else if (e.key === 'Escape') {
+          e.stopPropagation(); // cancel the rename, not close the task panel
+          setRenaming(null);
+        }
+      }}
+      title={renameClash ? 'There is already a tag with that name' : 'Enter to save, Esc to cancel'}
+      style={{
+        flex: 1,
+        minWidth: '80px',
+        padding: '2px 6px',
+        fontSize: '12px',
+        color: 'var(--text)',
+        border: `1px solid ${renameClash ? '#D64545' : 'var(--border-strong)'}`,
+        borderRadius: '4px',
+      }}
+    />
+  );
   const [showDropdown, setShowDropdown] = useState(false);
   // what's typed in the dropdown's box: filters the tags, and names a new one if none matches
   const [newTagName, setNewTagName] = useState('');
@@ -81,8 +124,20 @@ export function TagPicker({
               color: tag.color,
             }}
           >
-            {tag.name}
+            {renaming?.id === tag.id ? renameInput(tag) : tag.name}
+            {onTagRename && renaming?.id !== tag.id && (
+              <button
+                type="button"
+                aria-label={`Rename tag ${tag.name}`}
+                title="Rename (everywhere it's used)"
+                onClick={() => setRenaming({ id: tag.id, draft: tag.name })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', display: 'flex', alignItems: 'center', color: tag.color }}
+              >
+                <Pencil size={11} />
+              </button>
+            )}
             <button
+              aria-label={`Remove tag ${tag.name}`}
               onClick={() => onTagRemove(tag.id)}
               style={{
                 background: 'none',
@@ -170,34 +225,56 @@ export function TagPicker({
           {unselectedTags.length > 0 ? (
             <>
               {unselectedTags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => pick(tag)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    borderBottom: '1px solid var(--border)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    fontSize: '13px',
-                    color: 'var(--text)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      backgroundColor: tag.color,
-                    }}
-                  />
-                  {tag.name}
-                </button>
+                <div key={tag.id} className="tag-option" style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+                  {renaming?.id === tag.id ? (
+                    <div style={{ flex: 1, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: tag.color, flexShrink: 0 }} />
+                      {renameInput(tag)}
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => pick(tag)}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          padding: '10px 12px',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          fontSize: '13px',
+                          color: 'var(--text)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            backgroundColor: tag.color,
+                          }}
+                        />
+                        {tag.name}
+                      </button>
+                      {onTagRename && (
+                        <button
+                          type="button"
+                          className="tag-option-rename"
+                          aria-label={`Rename tag ${tag.name}`}
+                          title="Rename (everywhere it's used)"
+                          onClick={() => setRenaming({ id: tag.id, draft: tag.name })}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 12px', color: 'var(--text-muted)', display: 'flex' }}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               ))}
             </>
           ) : null}

@@ -1032,6 +1032,10 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   text-overflow: ellipsis;
 }
 
+/* Add tags list: the rename pencil darkens on the row you're pointing at */
+.tag-option:hover .tag-option-rename,
+.tag-option-rename:focus-visible { color: var(--text) !important; }
+
 /* My tasks: given to you and not opened yet */
 .task-new-dot {
   display: inline-block;

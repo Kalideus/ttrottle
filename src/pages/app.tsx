@@ -85,6 +85,7 @@ import {
   createTag,
   addTagToTask,
   removeTagFromTask,
+  renameTag,
   getFollowers,
   addFollower,
   removeFollower,
@@ -942,6 +943,17 @@ export default function AppPage() {
     return tag;
   };
 
+  // A tag is shared by every project: renamed in the tag list and on every task showing it.
+  const handleTagRename = (tagId: string, name: string) => {
+    const rename = (tags?: Tag[]) => tags?.map((t) => (t.id === tagId ? { ...t, name } : t));
+    const inTasks = (ts: Task[]): Task[] => ts.map((t) => ({ ...t, tags: rename(t.tags), subtasks: t.subtasks && inTasks(t.subtasks) }));
+    setAvailableTags((prev) => rename(prev) ?? prev);
+    setTasks(inTasks);
+    setMyTasks(inTasks);
+    setSearchResults(inTasks);
+    persist(async () => must(await renameTag(supabase, tagId, name)), 'tasks');
+  };
+
   const handleNewTag = async (name: string, color: string) => {
     await handleTagAdd(addTagLocally(name, color));
   };
@@ -1456,6 +1468,7 @@ export default function AppPage() {
         onTagAdd={handleTagAdd}
         onTagRemove={handleTagRemove}
         onNewTag={handleNewTag}
+        onTagRename={handleTagRename}
         onCommentAdd={handleCommentAdd}
         onCommentEdit={handleCommentEdit}
         onCommentDelete={handleCommentDelete}

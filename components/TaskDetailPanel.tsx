@@ -51,6 +51,7 @@ interface TaskDetailPanelProps {
   onTagAdd: (tag: Tag) => void;
   onTagRemove: (tagId: string) => void;
   onNewTag: (name: string, color: string) => Promise<void>;
+  onTagRename: (tagId: string, name: string) => void;
   onCommentAdd: (body: string, mentions: string[]) => Promise<void>;
   onCommentEdit: (commentId: string, body: string, newMentions?: string[]) => Promise<void>;
   onCommentDelete: (commentId: string) => Promise<void>;
@@ -100,6 +101,7 @@ export function TaskDetailPanel({
   onTagAdd,
   onTagRemove,
   onNewTag,
+  onTagRename,
   onCommentAdd,
   onCommentEdit,
   onCommentDelete,
@@ -671,6 +673,7 @@ export function TaskDetailPanel({
               onTagAdd={onTagAdd}
               onTagRemove={onTagRemove}
               onNewTag={onNewTag}
+              onTagRename={onTagRename}
             />
           </div>
         </div>

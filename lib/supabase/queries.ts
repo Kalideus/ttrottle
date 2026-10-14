@@ -879,6 +879,11 @@ export async function createTag(
   return supabase.from('tags').insert({ ...(id && { id }), name, color, created_by }).select().single()
 }
 
+// tags are shared by every project, so this renames it everywhere
+export async function renameTag(supabase: SupabaseClient, id: string, name: string) {
+  return supabase.from('tags').update({ name }).eq('id', id)
+}
+
 export async function addTagToTask(supabase: SupabaseClient, taskId: string, tagId: string) {
   return supabase.from('task_tags').insert({ task_id: taskId, tag_id: tagId })
 }
