@@ -1030,6 +1030,17 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   text-overflow: ellipsis;
 }
 
+/* My tasks: given to you and not opened yet */
+.task-new-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
 .task-name.completed {
   text-decoration: line-through;
   color: var(--text-muted);

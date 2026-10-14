@@ -315,13 +315,19 @@ export async function createProjectWithContent(
   if (top.length) must(await supabase.from('tasks').insert(top.map((t) => t.row)))
   if (subs.length) must(await supabase.from('tasks').insert(subs.map((t) => t.row)))
 
-  // ponytail: no "assigned" notifications, a 200-row import would flood everyone's inbox
   const followers = all.flatMap(({ row: r }) => [...new Set([created_by, r.assignee_id].filter(Boolean))].map((user_id) => ({ task_id: r.id, user_id })))
+  // whoever is given an open task here is told, as when one task is assigned (the inbox groups them, the chime plays once)
+  const assigned = all
+    .filter(({ row: r }) => r.assignee_id && r.assignee_id !== created_by && !r.completed)
+    .map(({ row: r }) => ({ user_id: r.assignee_id, task_id: r.id, type: 'assigned', actor_id: created_by }))
   const taskTags = all.flatMap(({ spec, row: r }) => (spec.tag_ids ?? []).map((tag_id) => ({ task_id: r.id, tag_id })))
   const extraMembers = [...new Set([...member_ids, ...all.map((t) => t.row.assignee_id)])].filter((id): id is string => !!id && id !== created_by)
   const { data: profiles } = extraMembers.length ? await supabase.from('profiles').select('id, email').in('id', extraMembers) : { data: [] }
   await Promise.all([
     followers.length && supabase.from('followers').insert(followers).then(must),
+    // not must(): a notification that can't be sent mustn't fail an import that has already saved
+    assigned.length &&
+      supabase.from('notifications').insert(assigned).then(({ error }) => error && console.error('Failed to notify assignees of imported tasks:', error)),
     taskTags.length && supabase.from('task_tags').insert(taskTags).then(must),
     profiles?.length &&
       supabase.from('project_members').insert(profiles.map((p) => ({ project_id: project.id, profile_id: p.id, email: p.email, role: 'member', joined_at: now }))).then(must),
@@ -958,6 +964,12 @@ export async function markAllNotificationsRead(supabase: SupabaseClient, userId:
     .update({ read_at: new Date().toISOString() })
     .eq('user_id', userId)
     .is('read_at', null)
+}
+
+// My tasks marks these "new": given to me by someone else and not opened since (opening reads the notification)
+export async function getNewlyAssignedTaskIds(supabase: SupabaseClient, userId: string) {
+  const { data } = await supabase.from('notifications').select('task_id').eq('user_id', userId).eq('type', 'assigned').is('read_at', null)
+  return new Set((data ?? []).map((n) => n.task_id as string))
 }
 
 export async function getUnreadCount(supabase: SupabaseClient, userId: string) {

@@ -345,6 +345,8 @@ export default function AppPage() {
     setNotifications,
     badge: notificationsBadge,
     setBadge: setNotificationsBadge,
+    newTaskIds,
+    setNewTaskIds,
     loading: notificationsLoading,
     loadingMore: notificationsLoadingMore,
     hasMore: hasMoreNotifications,
@@ -367,6 +369,7 @@ export default function AppPage() {
     const uid = currentUserId;
     const now = new Date().toISOString();
     setNotifications((prev) => prev.map((n) => (n.taskId === taskId && !n.readAt ? { ...n, readAt: now } : n)));
+    setNewTaskIds((prev) => (prev.has(taskId) ? new Set([...prev].filter((id) => id !== taskId)) : prev));
     persist(async () => must(await markTaskNotificationsRead(supabase, uid, taskId)), 'notifications');
   }, [selectedTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1578,6 +1581,8 @@ export default function AppPage() {
           activeProjectId={activeProjectId}
           projects={projects}
           notificationsBadge={notificationsBadge}
+          // only ones still in My tasks: a new task since done or handed on isn't waiting for me
+          newTasksBadge={myTasks.filter((t) => newTaskIds.has(t.id)).length}
           onSectionChange={(section) => {
             // don't carry a task open elsewhere into the inbox's side panel
             // (My tickets uses the selected task as its open ticket, so the same goes for it, both ways)
@@ -1765,6 +1770,7 @@ export default function AppPage() {
                   headings={[]}
                   flat
                   showAssignee={activeSection !== 'my-tasks'}
+                  newTaskIds={activeSection === 'my-tasks' ? newTaskIds : undefined}
                   onOpenProject={openInProject}
                   onTaskSelect={setSelectedTaskId}
                   selectedTaskId={selectedTaskId}

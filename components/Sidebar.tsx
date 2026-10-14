@@ -11,6 +11,8 @@ interface SidebarProps {
   activeProjectId?: string;
   projects: Project[];
   notificationsBadge?: number;
+  /** Tasks given to me that I haven't opened yet. */
+  newTasksBadge?: number;
   onSectionChange: (section: 'my-tasks' | 'inbox' | 'tickets' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectHover?: (projectId: string) => void;
@@ -36,6 +38,7 @@ export function Sidebar({
   activeProjectId,
   projects,
   notificationsBadge = 0,
+  newTasksBadge = 0,
   onSectionChange,
   onProjectSelect,
   onProjectHover,
@@ -84,6 +87,11 @@ export function Sidebar({
         >
           <CheckSquare size={20} className="sidebar-nav-icon" />
           <span>My tasks</span>
+          {newTasksBadge > 0 && (
+            <div className="sidebar-nav-badge" title={`${newTasksBadge} new task${newTasksBadge === 1 ? '' : 's'} not opened yet`}>
+              {newTasksBadge}
+            </div>
+          )}
         </button>
 
         <button

@@ -31,6 +31,8 @@ interface TaskTableProps {
   manualOrder?: boolean;
   /** Flat list with no section headers or "+ Add section" — used by My Tasks. */
   flat?: boolean;
+  /** Tasks marked with a blue "new" dot (My tasks: given to you, not opened yet). */
+  newTaskIds?: Set<string>;
   /** Keep the Assignee column in a flat list — a search list holds other people's tasks, My Tasks doesn't. */
   showAssignee?: boolean;
   // Bulk-select mode: when set, each row gets a checkbox.
@@ -50,7 +52,7 @@ interface TaskTableProps {
   canManage?: (projectId: string) => boolean;
 }
 
-export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskMove, manualOrder = false, flat = false, showAssignee = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
+export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect, selectedTaskId, currentUserId, onTaskAdd, onSubtaskAdd, onTaskUpdate, onTaskDelete, onHeadingRename, onHeadingAdd, onHeadingDelete, onNoHeadingRename, onTaskMove, manualOrder = false, flat = false, newTaskIds, showAssignee = false, bulkSelected = null, onBulkToggle, onTaskHover, showCompleted = false, onMakeSubtask, onPromoteSubtask, onOpenProject, canManage = () => false }: TaskTableProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   // Accordion: only one task's subtasks open at a time -- opening a new one
   // closes whichever was open, clicking the open one again closes it.
@@ -452,6 +454,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
               />
             ) : (
               <div className={`task-name ${isCompleted ? 'completed' : ''}`}>
+                {newTaskIds?.has(task.id) && <span className="task-new-dot" role="img" aria-label="New" title="New: given to you, not opened yet" />}
                 {/* the words open the task and rename in place; stopped so a second click on them can't collapse its subtasks */}
                 <span
                   title="Click to rename"

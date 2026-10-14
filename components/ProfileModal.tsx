@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { avatarInitials, avatarStyle, AVATAR_COLORS, DEFAULT_AVATAR_COLOR } from '@/lib/avatar';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
+import { playChime, setSoundOn, soundOn } from '@/lib/notifySound';
 import type { Profile } from '@/lib/supabase/queries';
 
 interface ProfileModalProps {
@@ -24,6 +25,7 @@ export function ProfileModal({ profile, onSave, onUploadPhoto, onClose, requireF
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sound, setSound] = useState(soundOn);
 
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -138,6 +140,24 @@ export function ProfileModal({ profile, onSave, onUploadPhoto, onClose, requireF
               />
             ))}
           </div>
+        </div>
+
+        <div className="modal-field">
+          <span className="modal-field-label">Notification sound</span>
+          {/* applies straight away, not on Save: it's kept in this browser, not the profile */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+            <input
+              type="checkbox"
+              checked={sound}
+              onChange={(e) => {
+                setSound(e.target.checked);
+                setSoundOn(e.target.checked);
+                if (e.target.checked) playChime(); // let them hear it
+              }}
+            />
+            Play a sound when a notification comes in
+          </label>
+          <span className="modal-field-hint">Works while TRack is open in a tab, even one you&rsquo;re not looking at. Saved on this computer.</span>
         </div>
 
         <div className="modal-actions">
