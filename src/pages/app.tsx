@@ -13,6 +13,10 @@ import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { CreateTicketModal, type NewTicketInput } from '@/components/CreateTicketModal';
 import { Tickets } from '@/components/Tickets';
+import { Contacts } from '@/components/Contacts';
+import { ContactModal } from '@/components/ContactModal';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { contactTitle } from '@/lib/contacts';
 import { MembersModal } from '@/components/MembersModal';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TukTukCelebration } from '@/components/TukTukCelebration';
@@ -86,6 +90,14 @@ import {
   addTagToTask,
   removeTagFromTask,
   renameTag,
+  getContacts,
+  createContact,
+  updateContact,
+  deleteContact,
+  getDepartments,
+  type Contact,
+  type ContactFields,
+  type Department,
   getFollowers,
   addFollower,
   removeFollower,
@@ -101,7 +113,7 @@ import {
   type TaskActivity,
 } from '@/lib/supabase/queries';
 
-type Section = 'my-tasks' | 'inbox' | 'tickets' | 'projects';
+type Section = 'my-tasks' | 'inbox' | 'tickets' | 'contacts' | 'projects';
 // A search opened as a list from the top search bar, to work through like My tasks.
 // `projectId`: only that project (null = every project the user is in). `from`: where the cross goes back to.
 type SearchView = { by: TaskSearch; label: string; projectId: string | null; from: Section };
@@ -1255,6 +1267,60 @@ export default function AppPage() {
     return null;
   };
 
+  // Contacts (041): loaded once signed in, so the top search can find them too, and again on opening the page.
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [openContactId, setOpenContactId] = useState<string | null>(null);
+  // the Add / Edit form: 'new', the contact being edited, or closed
+  const [contactForm, setContactForm] = useState<'new' | Contact | null>(null);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+  useEffect(() => {
+    if (!currentUserId) return;
+    setContactsLoading(true);
+    void Promise.all([getContacts(supabase), getDepartments(supabase)]).then(([c, d]) => {
+      // before migration 041 these error; the page then just shows no contacts
+      setContacts((c.data ?? []) as Contact[]);
+      setDepartments((d.data ?? []) as Department[]);
+      setContactsLoading(false);
+    });
+  }, [currentUserId, supabase, activeSection === 'contacts']); // eslint-disable-line react-hooks/exhaustive-deps
+  const knownServices = useMemo(
+    () => [...new Set(contacts.flatMap((c) => c.services))].sort((a, b) => a.localeCompare(b)),
+    [contacts]
+  );
+
+  const saveContact = async (fields: ContactFields): Promise<string | null> => {
+    const editing = contactForm !== 'new' ? contactForm : null;
+    const { data, error } = editing
+      ? await updateContact(supabase, editing.id, fields)
+      : await createContact(supabase, { ...fields, id: crypto.randomUUID() });
+    if (error || !data) return error?.message ?? "Couldn't save the contact.";
+    const saved = data as Contact;
+    setContacts((cs) => (editing ? cs.map((c) => (c.id === saved.id ? saved : c)) : [...cs, saved]));
+    setOpenContactId(saved.id);
+    setContactForm(null);
+    return null;
+  };
+
+  const confirmDeleteContact = async () => {
+    const contact = deletingContact;
+    setDeletingContact(null);
+    if (!contact) return;
+    const { data, error } = await deleteContact(supabase, contact.id);
+    if (error || !data?.length) {
+      window.alert(`Couldn't delete ${contactTitle(contact)}: ${error?.message ?? 'only whoever added it, or an admin, can.'}`);
+      return;
+    }
+    setContacts((cs) => cs.filter((c) => c.id !== contact.id));
+  };
+
+  const openContact = (id: string) => {
+    setActiveSection('contacts');
+    setSelectedTaskId(null);
+    setOpenContactId(id);
+  };
+
   const handleAcceptsTickets = (on: boolean) => {
     const projectId = activeProjectId;
     setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, accepts_tickets: on } : p)));
@@ -1495,6 +1561,9 @@ export default function AppPage() {
             onOpenList={openSearchList}
             onOpenTask={openInProject}
             onOpenProject={(projectId) => openInProject(projectId)}
+            contacts={contacts}
+            departments={departments}
+            onOpenContact={openContact}
           />
         }
         avatarInitials={currentProfile?.initials || avatarInitials(currentProfile?.name, currentProfile?.email)}
@@ -1572,6 +1641,24 @@ export default function AppPage() {
         </div>
       )}
       {showCreateTicket && <CreateTicketModal teams={ticketTeams} onCreate={submitTicket} onClose={() => setShowCreateTicket(false)} />}
+      {contactForm && (
+        <ContactModal
+          contact={contactForm === 'new' ? undefined : contactForm}
+          departments={departments}
+          knownServices={knownServices}
+          onSave={saveContact}
+          onClose={() => setContactForm(null)}
+        />
+      )}
+      {deletingContact && (
+        <ConfirmModal
+          title="Delete contact?"
+          message={`${contactTitle(deletingContact)} will be removed for everyone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void confirmDeleteContact()}
+          onCancel={() => setDeletingContact(null)}
+        />
+      )}
 
       {celebration && <TukTukCelebration key={celebration} onDone={endCelebration} />}
 
@@ -1817,6 +1904,22 @@ export default function AppPage() {
                 onCommentEdit={handleCommentEdit}
                 onCommentDelete={handleCommentDelete}
                 onCommentLike={handleCommentLike}
+              />
+            </div>
+          )}
+
+          {activeSection === 'contacts' && (
+            <div className="app-content">
+              <Contacts
+                contacts={contacts}
+                departments={departments}
+                loading={contactsLoading}
+                openId={openContactId}
+                onToggle={(id) => setOpenContactId((current) => (current === id ? null : id))}
+                onAdd={() => setContactForm('new')}
+                onEdit={setContactForm}
+                onDelete={setDeletingContact}
+                canDelete={(c) => c.created_by === currentUserId || !!currentProfile?.is_super_admin}
               />
             </div>
           )}

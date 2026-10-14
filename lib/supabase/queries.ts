@@ -879,6 +879,61 @@ export async function createTag(
   return supabase.from('tags').insert({ ...(id && { id }), name, color, created_by }).select().single()
 }
 
+// Contacts (041): one shared list of staff, suppliers and the like.
+export const CONTACT_KINDS = ['Staff', 'Supplier', 'Subcontractor', 'Client', 'Venue', 'Other'] as const
+export type Contact = {
+  id: string
+  kind: (typeof CONTACT_KINDS)[number]
+  name: string
+  company: string
+  role: string
+  phone: string
+  email: string
+  services: string[]
+  department_ids: string[]
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type ContactFields = Pick<Contact, 'kind' | 'name' | 'company' | 'role' | 'phone' | 'email' | 'services' | 'department_ids' | 'notes'>
+export type Department = { id: string; name: string; position: number }
+
+// ponytail: the whole list is loaded and searched in the browser; fine for a few thousand contacts
+export async function getContacts(supabase: SupabaseClient) {
+  return supabase.from('contacts').select('*').order('name', { ascending: true })
+}
+
+export async function createContact(supabase: SupabaseClient, fields: ContactFields & { id: string }) {
+  return supabase.from('contacts').insert(fields).select().single()
+}
+
+export async function updateContact(supabase: SupabaseClient, id: string, fields: ContactFields) {
+  return supabase.from('contacts').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+}
+
+// returns the deleted row: none back means the database refused (not the adder, not an admin)
+export async function deleteContact(supabase: SupabaseClient, id: string) {
+  return supabase.from('contacts').delete().eq('id', id).select('id')
+}
+
+export async function getDepartments(supabase: SupabaseClient) {
+  return supabase.from('departments').select('id, name, position').order('position', { ascending: true })
+}
+
+// site admins only (the database refuses anyone else)
+export async function createDepartment(supabase: SupabaseClient, name: string, position: number) {
+  return supabase.from('departments').insert({ name, position }).select('id, name, position').single()
+}
+
+export async function renameDepartment(supabase: SupabaseClient, id: string, name: string) {
+  return supabase.from('departments').update({ name }).eq('id', id)
+}
+
+export async function deleteDepartment(supabase: SupabaseClient, id: string) {
+  return supabase.from('departments').delete().eq('id', id)
+}
+
 // tags are shared by every project, so this renames it everywhere
 export async function renameTag(supabase: SupabaseClient, id: string, name: string) {
   return supabase.from('tags').update({ name }).eq('id', id)

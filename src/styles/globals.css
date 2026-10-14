@@ -2377,6 +2377,54 @@ button.project-members:hover { background: var(--surface-alt); }
   .ticket-body { padding: 4px 16px 20px; }
 }
 
+/* ---- Contacts (components/Contacts.tsx, ContactModal.tsx) ---- */
+.contacts-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+.contacts-search {
+  flex: 1 1 260px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-alt); color: var(--text-muted);
+}
+.contacts-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font: inherit; font-size: 14px; color: var(--text); }
+.contacts-filter { width: auto; height: 36px; font-size: 13px; }
+.contacts-count { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+/* follows its own width (the sidebar or a phone squeezes it), like the inbox */
+.contacts-scroll { flex: 1; overflow-y: auto; container-type: inline-size; }
+.contact-grid {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 2fr) minmax(0, 1.4fr) 110px minmax(0, 1.4fr) 150px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+}
+.contacts-head { position: sticky; top: 0; z-index: 1; height: 38px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+.contacts-sort {
+  display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 4px 0;
+  border: none; background: none; font: inherit; color: inherit; cursor: pointer;
+}
+.contacts-sort:hover, .contacts-sort.is-on { color: var(--text); font-weight: 600; }
+.contact-row { min-height: 52px; padding-top: 8px; padding-bottom: 8px; cursor: pointer; font-size: 14px; color: var(--text); }
+.contact-row:hover { background: var(--surface-alt); }
+.contact-disclosure { display: flex; border: none; background: none; padding: 0; color: var(--text-muted); cursor: pointer; }
+.contact-name-cell { display: flex; flex-direction: column; min-width: 0; }
+.contact-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contact-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-muted); }
+.contact-cell a, .contact-reach a { color: var(--accent); text-decoration: none; }
+.contact-reach { display: flex; align-items: center; gap: 12px; }
+.contact-reach a { display: inline-flex; align-items: center; gap: 4px; }
+.contact-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.contact-chip-input { flex: 1; min-width: 140px; height: 28px; border: none; outline: none; background: none; font: inherit; font-size: 13px; color: var(--text); }
+.contact-notes { margin: 0; font-size: 13px; white-space: pre-wrap; }
+.contact-form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ticket-body .contact-chips { margin-top: -4px; }
+@container (max-width: 760px) {
+  /* narrow: name (with company and role under it) and phone; type and departments are in the opened row */
+  .contact-grid { grid-template-columns: 24px minmax(0, 1fr) auto; padding: 0 16px; }
+  .contact-grid .col-company, .contact-grid .col-kind, .contact-grid .col-department { display: none; }
+}
+@media (max-width: 720px) {
+  .contacts-tools { padding: 10px 16px; }
+  .contact-form-pair { grid-template-columns: 1fr; }
+}
+
 /* ---- Printing a project: only the checklist (components/ProjectPrintSheet.tsx) goes on paper ---- */
 .print-sheet { display: none; }
 @media print {

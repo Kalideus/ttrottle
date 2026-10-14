@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Search, CheckCircle2, Circle, Lock, User } from 'lucide-react';
-import type { Project, TaskSearch } from '@/lib/supabase/queries';
+import { Search, CheckCircle2, Circle, Lock, User, BookUser } from 'lucide-react';
+import type { Contact, Department, Project, TaskSearch } from '@/lib/supabase/queries';
+import { contactMatches, contactTitle } from '@/lib/contacts';
 
 export interface TaskHit {
   id: string;
@@ -26,19 +27,24 @@ interface GlobalSearchProps {
   onOpenList: (by: TaskSearch, label: string, projectId: string | null) => void;
   onOpenTask: (projectId: string, taskId: string) => void;
   onOpenProject: (projectId: string) => void;
+  /** Already loaded by the page, so they're matched here as you type. */
+  contacts: Contact[];
+  departments: Department[];
+  onOpenContact: (contactId: string) => void;
 }
 
 type Hit =
   | { kind: 'person'; person: Person }
   | { kind: 'tag'; tag: TagHit }
   | { kind: 'project'; project: Project }
+  | { kind: 'contact'; contact: Contact }
   | { kind: 'task'; task: TaskHit };
 
-const SECTION = { person: 'People', tag: 'Tags', project: 'Projects', task: 'Tasks' };
+const SECTION = { person: 'People', tag: 'Tags', project: 'Projects', contact: 'Contacts', task: 'Tasks' };
 
 // Top-bar search across every task, person, tag and project the user can see (RLS limits
 // the tasks to their projects). Picking a person or tag opens all of their tasks as a list. Ctrl/⌘+K focuses it.
-export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenProject }: GlobalSearchProps) {
+export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenProject, contacts, departments, onOpenContact }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [found, setFound] = useState<{ tasks: TaskHit[]; people: Person[]; tags: TagHit[] }>({ tasks: [], people: [], tags: [] });
@@ -87,10 +93,13 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
 
   const q = query.trim().toLowerCase();
   const projectHits = q ? projects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5) : [];
+  const deptName = (id: string) => departments.find((d) => d.id === id)?.name;
+  const contactHits = q.length >= 2 ? contacts.filter((c) => contactMatches(c, q, deptName)).slice(0, 5) : [];
   const hits: Hit[] = [
     ...found.people.map((person) => ({ kind: 'person' as const, person })),
     ...found.tags.map((tag) => ({ kind: 'tag' as const, tag })),
     ...projectHits.map((project) => ({ kind: 'project' as const, project })),
+    ...contactHits.map((contact) => ({ kind: 'contact' as const, contact })),
     ...found.tasks.map((task) => ({ kind: 'task' as const, task })),
   ];
   const projectById = new Map(projects.map((p) => [p.id, p]));
@@ -108,6 +117,7 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
     if (hit.kind === 'person') onOpenList({ assignee_id: hit.person.id }, `Assigned to ${hit.person.name}`, where || null);
     else if (hit.kind === 'tag') onOpenList({ tag_id: hit.tag.id }, `Tagged ${hit.tag.name}`, where || null);
     else if (hit.kind === 'project') onOpenProject(hit.project.id);
+    else if (hit.kind === 'contact') onOpenContact(hit.contact.id);
     else if (hit.task.project_id) onOpenTask(hit.task.project_id, hit.task.id);
     setQuery('');
     close();
@@ -132,8 +142,8 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
           aria-expanded={showPanel}
           aria-controls="gsearch-results"
           aria-activedescendant={showPanel && hits[active] ? `gsearch-hit-${active}` : undefined}
-          aria-label="Search tasks, people, tags and projects"
-          placeholder="Search tasks, people, tags and projects"
+          aria-label="Search tasks, people, tags, projects and contacts"
+          placeholder="Search tasks, people, tags, projects and contacts"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -221,6 +231,21 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
                       <span className="gsearch-dot" style={{ background: hit.project.color }} />
                       <span className="gsearch-name">{hit.project.name}</span>
                       {hit.project.is_private && <Lock size={12} style={{ opacity: 0.6 }} />}
+                    </div>
+                  </div>
+                );
+              }
+              if (hit.kind === 'contact') {
+                const c = hit.contact;
+                return (
+                  <div key={`c-${c.id}`}>
+                    {heading}
+                    <div {...common}>
+                      <BookUser size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span className="gsearch-name">{contactTitle(c)}</span>
+                      <span className="gsearch-project">
+                        {[c.name.trim() ? c.company : '', c.role || c.services.slice(0, 2).join(', '), c.phone].filter(Boolean).join(' · ')}
+                      </span>
                     </div>
                   </div>
                 );
