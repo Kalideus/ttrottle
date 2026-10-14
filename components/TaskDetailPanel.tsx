@@ -145,7 +145,8 @@ export function TaskDetailPanel({
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (panelRef.current?.contains(t)) return;
+      // already gone: a menu that closed on this same press (a top-bar search result picking a task) isn't "outside"
+      if (!t.isConnected || panelRef.current?.contains(t)) return;
       // .modal-overlay: the merge dialog is this panel's, though it's drawn outside it
       if (t.closest('.task-row') || t.closest('.inbox-row') || t.closest('.app-top-bar') || t.closest('.app-sidebar') || t.closest('.modal-overlay')) return;
       onClose();
