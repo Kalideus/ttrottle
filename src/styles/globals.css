@@ -863,14 +863,16 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(64px, 80px) minmax(80px, 100px) minmax(96px, 140px);
   align-items: center;
-  background: var(--accent-soft);
+  /* no fill, just the bold title over a line: blue is kept for the task you have open */
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
   cursor: pointer;
   transition: background-color 150ms;
   user-select: none;
 }
 
 .section-header:hover {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  background: var(--surface-alt);
 }
 
 .section-header-content {

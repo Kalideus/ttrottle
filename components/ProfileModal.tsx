@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { avatarInitials, avatarStyle, AVATAR_COLORS, DEFAULT_AVATAR_COLOR } from '@/lib/avatar';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
-import { playChime, setSoundOn, soundOn } from '@/lib/notifySound';
+import { playChime, setSoundOn, setSoundVolume, soundOn, soundVolume } from '@/lib/notifySound';
 import type { Profile } from '@/lib/supabase/queries';
 
 interface ProfileModalProps {
@@ -26,6 +26,7 @@ export function ProfileModal({ profile, onSave, onUploadPhoto, onClose, requireF
   const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
   const [sound, setSound] = useState(soundOn);
+  const [volume, setVolume] = useState(soundVolume);
 
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -152,10 +153,32 @@ export function ProfileModal({ profile, onSave, onUploadPhoto, onClose, requireF
               onChange={(e) => {
                 setSound(e.target.checked);
                 setSoundOn(e.target.checked);
-                if (e.target.checked) playChime(); // let them hear it
+                if (e.target.checked) playChime(true); // let them hear it
               }}
             />
             Play a sound when a notification comes in
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', opacity: sound ? 1 : 0.5 }}>
+            <span style={{ flexShrink: 0 }}>Volume</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={volume}
+              disabled={!sound}
+              aria-label="Notification volume"
+              aria-valuetext={`${volume}%`}
+              style={{ flex: 1 }}
+              onChange={(e) => {
+                setVolume(Number(e.target.value));
+                setSoundVolume(Number(e.target.value));
+              }}
+              // a sample at the new level once it's let go (mouse, touch or arrow keys), not on every step of a drag
+              onPointerUp={() => playChime(true)}
+              onKeyUp={() => playChime(true)}
+            />
+            <span style={{ width: '36px', textAlign: 'right', color: 'var(--text-muted)' }}>{volume}%</span>
           </label>
           <span className="modal-field-hint">Works while TRack is open in a tab, even one you&rsquo;re not looking at. Saved on this computer.</span>
         </div>

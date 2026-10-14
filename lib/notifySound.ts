@@ -21,13 +21,37 @@ export function setSoundOn(on: boolean) {
   }
 }
 
+// 0-100, also per browser. The chime can't be louder than the computer's own volume: this sets how
+// loud it is under that, so it can sit below music playing at the same time. 50 is the original level.
+const VOLUME_KEY = 'track:notification-volume'
+
+export function soundVolume(): number {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY))
+    return localStorage.getItem(VOLUME_KEY) !== null && v >= 0 && v <= 100 ? v : 50
+  } catch {
+    return 50
+  }
+}
+
+export function setSoundVolume(volume: number) {
+  try {
+    localStorage.setItem(VOLUME_KEY, String(volume))
+  } catch {
+    // not remembered, as with the on/off choice
+  }
+}
+
 let ctx: AudioContext | null = null
 let lastPlayed = 0
 
-export function playChime() {
+// `preview`: the Profile setting trying a level out, which skips the once-per-burst limit
+export function playChime(preview = false) {
   // a burst (an import giving someone 40 tasks) chimes once, not 40 times
-  if (Date.now() - lastPlayed < 3000) return
+  if (!preview && Date.now() - lastPlayed < 3000) return
   lastPlayed = Date.now()
+  const peak = (soundVolume() / 100) * 0.4
+  if (peak <= 0) return
   try {
     ctx ??= new AudioContext()
     void ctx.resume()
@@ -39,7 +63,7 @@ export function playChime() {
       osc.type = 'sine'
       osc.frequency.value = freq
       gain.gain.setValueAtTime(0.0001, t)
-      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.02)
+      gain.gain.exponentialRampToValueAtTime(peak, t + 0.02)
       gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35)
       osc.connect(gain).connect(ctx!.destination)
       osc.start(t)
