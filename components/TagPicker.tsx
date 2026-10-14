@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import type { Tag } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
@@ -29,24 +29,35 @@ export function TagPicker({
   onNewTag,
 }: TagPickerProps) {
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showNewTagForm, setShowNewTagForm] = useState(false);
+  // what's typed in the dropdown's box: filters the tags, and names a new one if none matches
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#4573D2');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const unselectedTags = availableTags.filter((tag) => !selectedTags.some((st) => st.id === tag.id));
+  const typed = newTagName.trim();
+  const unselectedTags = availableTags.filter(
+    (tag) => !selectedTags.some((st) => st.id === tag.id) && tag.name.toLowerCase().includes(typed.toLowerCase())
+  );
+  // already a tag by that name (on this task or not): pick it rather than make a twin
+  const canCreate = !!onNewTag && !!typed && !availableTags.some((t) => t.name.toLowerCase() === typed.toLowerCase());
 
-  const handleNewTag = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTagName.trim() || !onNewTag || isSubmitting) return;
+  const close = () => {
+    setShowDropdown(false);
+    setNewTagName('');
+  };
 
+  const pick = (tag: Tag) => {
+    onTagAdd(tag);
+    close();
+  };
+
+  const handleNewTag = async () => {
+    if (!canCreate || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await onNewTag(newTagName, newTagColor);
-      setNewTagName('');
+      await onNewTag!(typed, newTagColor);
       setNewTagColor('#4573D2');
-      setShowNewTagForm(false);
-      setShowDropdown(false);
+      close();
     } finally {
       setIsSubmitting(false);
     }
@@ -90,7 +101,7 @@ export function TagPicker({
       </div>
 
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
+        onClick={() => (showDropdown ? close() : setShowDropdown(true))}
         style={{
           width: '100%',
           padding: '8px 12px',
@@ -128,15 +139,40 @@ export function TagPicker({
             overflowY: 'auto',
           }}
         >
+          <input
+            type="text"
+            placeholder={onNewTag ? 'Type a tag, or a new one…' : 'Type a tag…'}
+            aria-label="Tag name"
+            value={newTagName}
+            onChange={(e) => setNewTagName(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (unselectedTags[0]) pick(unselectedTags[0]);
+                else void handleNewTag();
+              } else if (e.key === 'Escape') {
+                e.stopPropagation(); // close the list, not the task panel around it
+                close();
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              border: 'none',
+              borderBottom: '1px solid var(--border)',
+              fontSize: '13px',
+              color: 'var(--text)',
+              background: 'transparent',
+              outline: 'none',
+            }}
+          />
           {unselectedTags.length > 0 ? (
             <>
               {unselectedTags.map((tag) => (
                 <button
                   key={tag.id}
-                  onClick={() => {
-                    onTagAdd(tag);
-                    setShowDropdown(false);
-                  }}
+                  onClick={() => pick(tag)}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -166,87 +202,55 @@ export function TagPicker({
             </>
           ) : null}
 
-          <button
-            onClick={() => setShowNewTagForm(!showNewTagForm)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontSize: '13px',
-              color: 'var(--accent)',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Plus size={14} />
-            New tag
-          </button>
-
-          {showNewTagForm && (
-            <form
-              onSubmit={handleNewTag}
-              style={{
-                padding: '12px',
-                borderTop: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Tag name"
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                autoFocus
-                style={{
-                  padding: '6px 8px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  color: 'var(--text)',
-                }}
-              />
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {['#4573D2', '#FF8F8F', '#FFA766', '#FFD15E', '#4CAF50'].map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setNewTagColor(color)}
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      backgroundColor: color,
-                      border: newTagColor === color ? '2px solid white' : '1px solid rgba(0,0,0,0.2)',
-                      cursor: 'pointer',
-                    }}
-                  />
-                ))}
-              </div>
+          {canCreate && (
+            <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
-                type="submit"
-                disabled={!newTagName.trim() || isSubmitting}
+                type="button"
+                onClick={() => void handleNewTag()}
+                disabled={isSubmitting}
                 style={{
-                  padding: '6px 12px',
-                  background: newTagName.trim() ? 'var(--accent)' : 'var(--chrome-hover)',
-                  color: 'white',
+                  flex: 1,
+                  minWidth: 0,
+                  padding: 0,
                   border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '12px',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontSize: '13px',
+                  color: 'var(--accent)',
                   fontWeight: 500,
-                  cursor: newTagName.trim() ? 'pointer' : 'not-allowed',
-                  opacity: newTagName.trim() ? 1 : 0.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
               >
-                {isSubmitting ? 'Creating...' : 'Create'}
+                <Plus size={14} />
+                {isSubmitting ? 'Creating…' : `Create “${typed}”`}
               </button>
-            </form>
+              {['#4573D2', '#FF8F8F', '#FFA766', '#FFD15E', '#4CAF50'].map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Colour ${color}`}
+                  aria-pressed={newTagColor === color}
+                  onClick={() => setNewTagColor(color)}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    flexShrink: 0,
+                    borderRadius: '50%',
+                    backgroundColor: color,
+                    border: newTagColor === color ? '2px solid var(--text)' : '1px solid rgba(0,0,0,0.2)',
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+          {!canCreate && unselectedTags.length === 0 && (
+            <div style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--text-muted)' }}>
+              {!typed ? 'No more tags' : selectedTags.some((t) => t.name.toLowerCase() === typed.toLowerCase()) ? 'Already on this task' : 'No matching tag'}
+            </div>
           )}
         </div>
       )}
