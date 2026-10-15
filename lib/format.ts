@@ -47,3 +47,18 @@ export function enterEdit(value: string, s: number, e: number): Edit | null {
   const text = '\n' + (/\d/.test(m[1]) ? `${parseInt(m[1], 10) + 1}. ` : `${m[1]} `);
   return { start: s, end: s, text, selStart: s + text.length, selEnd: s + text.length };
 }
+
+// Typed faces turn into emoji when followed by a space: "<3 " becomes "❤️ ". Only as a whole word,
+// so "note:)" or a URL's ":p" is left alone.
+export const EMOJI_SHORTCUTS: Record<string, string> = {
+  '<3': '❤️', ':)': '🙂', ':-)': '🙂', ':D': '😄', ';)': '😉', ':(': '🙁', ':P': '😛', ':p': '😛', ':o': '😮', ':O': '😮',
+};
+
+export function emojiEdit(value: string, s: number, e: number): Edit | null {
+  if (s !== e) return null;
+  const word = value.slice(0, s).match(/(?:^|\s)(\S+)$/)?.[1];
+  const emoji = word && EMOJI_SHORTCUTS[word];
+  if (!emoji) return null;
+  const text = emoji + ' ';
+  return { start: s - word.length, end: s, text, selStart: s - word.length + text.length, selEnd: s - word.length + text.length };
+}

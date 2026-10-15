@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
-import { Bold, Italic, Strikethrough, Code, List, ListOrdered, ImagePlus, Paperclip } from 'lucide-react';
-import { wrapEdit, listEdit, enterEdit, type Edit } from '@/lib/format';
+import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
+import { Bold, Italic, Strikethrough, Code, List, ListOrdered, ImagePlus, Paperclip, Smile } from 'lucide-react';
+import { wrapEdit, listEdit, enterEdit, emojiEdit, type Edit } from '@/lib/format';
 import { uploadTaskPhoto, uploadTaskFile } from '@/lib/taskPhotos';
 import { FILE_ACCEPT, fileExt } from '@/lib/taskFiles';
 
@@ -26,6 +26,8 @@ const TOOLS: { icon: typeof Bold; label: string; run: Run }[] = [
   { icon: List, label: 'Bulleted list', run: (v, s, e) => listEdit(v, s, e, 'ul') },
   { icon: ListOrdered, label: 'Numbered list', run: (v, s, e) => listEdit(v, s, e, 'ol') },
 ];
+
+const EMOJI = ['👍', '👎', '❤️', '😄', '🙂', '😂', '😉', '😮', '😢', '🙏', '👏', '🎉', '🔥', '✅', '❌', '👀'];
 
 // Uploads the photos and documents one by one and drops each in at the cursor, on its own line.
 async function insertPhotos(el: HTMLTextAreaElement, taskId: string, files: File[]) {
@@ -68,6 +70,7 @@ export function photoEvents(taskId: string) {
 // photoTaskId: the task whose folder photos go into; leave it out for a toolbar without the photo button.
 export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLTextAreaElement | null>; photoTaskId?: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   // one hidden picker for both buttons: each sets what it offers before opening it
   const pick = (accept: string) => {
     if (!fileRef.current) return;
@@ -75,7 +78,7 @@ export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLT
     fileRef.current.click();
   };
   return (
-    <div className="fmt-toolbar">
+    <div className="fmt-toolbar" style={{ position: 'relative' }}>
       {photoTaskId && (
         <input
           ref={fileRef}
@@ -105,6 +108,47 @@ export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLT
           <Icon size={14} />
         </button>
       ))}
+      <button
+        type="button"
+        title="Emoji (or type <3, :) or :D then a space)"
+        aria-label="Emoji"
+        aria-expanded={emojiOpen}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setEmojiOpen((o) => !o)}
+      >
+        <Smile size={14} />
+      </button>
+      {emojiOpen && (
+        <>
+          {/* a press anywhere else closes it */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onMouseDown={() => setEmojiOpen(false)} />
+          <div
+            role="menu"
+            style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 41, display: 'grid', gridTemplateColumns: 'repeat(8, 32px)',
+              padding: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}
+          >
+            {EMOJI.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                role="menuitem"
+                aria-label={emoji}
+                style={{ width: 32, height: 32, fontSize: 18 }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const el = target.current;
+                  if (el) apply(el, { start: el.selectionStart, end: el.selectionEnd, text: emoji, selStart: el.selectionStart + emoji.length, selEnd: el.selectionStart + emoji.length });
+                  setEmojiOpen(false);
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {photoTaskId && (
         <button
           type="button"
@@ -131,7 +175,7 @@ export function FormatToolbar({ target, photoTaskId }: { target: RefObject<HTMLT
   );
 }
 
-// Ctrl/⌘+B, Ctrl/⌘+I, and list continuation on Enter. Returns true if it handled the key.
+// Ctrl/⌘+B, Ctrl/⌘+I, list continuation on Enter, and "<3 " to ❤️. Returns true if it handled the key.
 export function formatKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): boolean {
   const el = e.currentTarget;
   const { value, selectionStart: s, selectionEnd: end } = el;
@@ -140,6 +184,7 @@ export function formatKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): boolean {
     mod && e.key === 'b' ? wrapEdit(value, s, end, '**')
     : mod && e.key === 'i' ? wrapEdit(value, s, end, '*')
     : e.key === 'Enter' && !mod && !e.shiftKey ? enterEdit(value, s, end)
+    : e.key === ' ' && !mod ? emojiEdit(value, s, end)
     : null;
   if (!edit) return false;
   e.preventDefault();
