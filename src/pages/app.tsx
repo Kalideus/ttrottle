@@ -1424,6 +1424,9 @@ export default function AppPage() {
       setSelectedTaskId(notif.taskId);
       setFocusCommentId(notif.commentId ?? null);
     } else if (notif?.projectId && notif?.taskId) {
+      const id = notif.taskId;
+      // same project: no reload follows, and its list can predate this task (a new ticket, a task moved in) or be a failed load
+      if (notif.projectId === activeProjectId && !tasks.some((t) => t.id === id || t.subtasks?.some((s) => s.id === id))) void refreshTasks();
       setActiveProjectId(notif.projectId);
       setSelectedTaskId(notif.taskId);
       setRevealTaskId(notif.taskId);
