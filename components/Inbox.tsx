@@ -55,6 +55,13 @@ function actorList(names: string[]) {
 const RANK: NotificationItem['type'][] = ['mention', 'ticket', 'assigned', 'comment', 'liked', 'completed', 'due_soon', 'updated'];
 const headOf = (group: NotificationItem[]) => [...group].sort((a, b) => RANK.indexOf(a.type) - RANK.indexOf(b.type))[0];
 
+// A row's ids, headline first (from the unread part while there is one): a click jumps to its comment.
+export function rowIds(group: NotificationItem[]) {
+  const fresh = group.filter((n) => !n.readAt);
+  const notif = headOf(fresh.length ? fresh : group);
+  return [notif.id, ...group.filter((n) => n !== notif).map((n) => n.id)];
+}
+
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diffMs / 60000);
@@ -147,8 +154,8 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
           const fresh = group.filter((n) => !n.readAt);
           const unread = fresh.length > 0;
           const news = unread ? fresh : group;
-          const notif = headOf(news);
-          const ids = [notif.id, ...group.filter((n) => n !== notif).map((n) => n.id)]; // headline first: a click jumps to its comment
+          const ids = rowIds(group);
+          const notif = group.find((n) => n.id === ids[0])!;
           const actors = [...new Set(news.map((n) => n.actorName))];
           const project = projects.find((p) => p.id === notif.projectId);
           const isOpen = !!notif.taskId && notif.taskId === openTaskId;

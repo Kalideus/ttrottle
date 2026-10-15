@@ -27,7 +27,8 @@ import { ProjectPrintSheet } from '@/components/ProjectPrintSheet';
 import { Toolbar, type FilterValue, type SortField } from '@/components/Toolbar';
 import { TaskTable } from '@/components/TaskTable';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
-import { Inbox } from '@/components/Inbox';
+import { Inbox, rowIds } from '@/components/Inbox';
+import { groupNotifications } from '@/lib/groupNotifications';
 import { useInbox } from '@/lib/useInbox';
 import type { CommentItem } from '@/components/Comments';
 import { createClient } from '@/lib/supabase/client';
@@ -1475,8 +1476,14 @@ export default function AppPage() {
     const unreadGone = notifications.filter((n) => gone.has(n.id) && !n.readAt).length;
     setNotifications((prev) => prev.filter((n) => !gone.has(n.id)));
     setNotificationsBadge((c) => Math.max(0, c - unreadGone));
-    // done with it: the task it opened closes too, instead of staying beside a shorter (or empty) list
-    if (activeSection === 'inbox' && notifications.some((n) => gone.has(n.id) && n.taskId === selectedTaskId)) setSelectedTaskId(null);
+    // done with the open one: straight on to the next row (the one below, or above from the bottom), closing when none are left
+    if (activeSection === 'inbox' && notifications.some((n) => gone.has(n.id) && n.taskId === selectedTaskId)) {
+      const groups = groupNotifications(notifications);
+      const at = groups.findIndex((g) => g.some((n) => gone.has(n.id)));
+      const next = [...groups.slice(at + 1), ...groups.slice(0, at).reverse()].find((g) => !g.some((n) => gone.has(n.id)));
+      if (next) void handleNotificationClick(rowIds(next));
+      else setSelectedTaskId(null);
+    }
     persist(async () => must(await clearNotifications(supabase, ids)), 'notifications');
   };
 
