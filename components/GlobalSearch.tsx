@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Search, CheckCircle2, Circle, Lock, User, BookUser } from 'lucide-react';
-import type { Contact, Department, Project, TaskSearch } from '@/lib/supabase/queries';
+import type { Contact, Project, TaskSearch } from '@/lib/supabase/queries';
 import { contactMatches, contactTitle } from '@/lib/contacts';
 
 export interface TaskHit {
@@ -29,7 +29,6 @@ interface GlobalSearchProps {
   onOpenProject: (projectId: string) => void;
   /** Already loaded by the page, so they're matched here as you type. */
   contacts: Contact[];
-  departments: Department[];
   onOpenContact: (contactId: string) => void;
 }
 
@@ -44,7 +43,7 @@ const SECTION = { person: 'People', tag: 'Tags', project: 'Projects', contact: '
 
 // Top-bar search across every task, person, tag and project the user can see (RLS limits
 // the tasks to their projects). Picking a person or tag opens all of their tasks as a list. Ctrl/⌘+K focuses it.
-export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenProject, contacts, departments, onOpenContact }: GlobalSearchProps) {
+export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenProject, contacts, onOpenContact }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [found, setFound] = useState<{ tasks: TaskHit[]; people: Person[]; tags: TagHit[] }>({ tasks: [], people: [], tags: [] });
@@ -93,8 +92,7 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
 
   const q = query.trim().toLowerCase();
   const projectHits = q ? projects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5) : [];
-  const deptName = (id: string) => departments.find((d) => d.id === id)?.name;
-  const contactHits = q.length >= 2 ? contacts.filter((c) => contactMatches(c, q, deptName)).slice(0, 5) : [];
+  const contactHits = q.length >= 2 ? contacts.filter((c) => contactMatches(c, q)).slice(0, 5) : [];
   const hits: Hit[] = [
     ...found.people.map((person) => ({ kind: 'person' as const, person })),
     ...found.tags.map((tag) => ({ kind: 'tag' as const, tag })),
@@ -244,7 +242,7 @@ export function GlobalSearch({ projects, search, onOpenList, onOpenTask, onOpenP
                       <BookUser size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                       <span className="gsearch-name">{contactTitle(c)}</span>
                       <span className="gsearch-project">
-                        {[c.name.trim() ? c.company : '', c.role || c.services.slice(0, 2).join(', '), c.phone].filter(Boolean).join(' · ')}
+                        {[c.name.trim() ? c.company : '', c.role || c.tags.slice(0, 2).join(', '), c.phone].filter(Boolean).join(' · ')}
                       </span>
                     </div>
                   </div>

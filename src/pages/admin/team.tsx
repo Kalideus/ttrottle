@@ -2,18 +2,12 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Protected from '../../components/Protected';
 import { createClient } from '@/lib/supabase/client';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { InviteModal } from '@/components/InviteModal';
 import {
   getCurrentProfile,
   getAllProfilesAdmin,
   getAllProjectsAdmin,
   getAllProjectMembersAdmin,
-  getDepartments,
-  createDepartment,
-  renameDepartment,
-  deleteDepartment,
-  type Department,
   type Profile,
   type Project,
   type ProjectMember,
@@ -369,8 +363,6 @@ export default function TeamAdminPage() {
           </div>
         </section>
 
-        <DepartmentsSection supabase={supabase} />
-
         {archivedProjects.length > 0 && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Archived projects</h2>
@@ -419,84 +411,5 @@ export default function TeamAdminPage() {
         />
       )}
     </Protected>
-  );
-}
-
-// The departments a contact can belong to (041). Only site admins may change them; the database checks too.
-function DepartmentsSection({ supabase }: { supabase: SupabaseClient }) {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [draft, setDraft] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const load = async () => {
-    const { data, error: e } = await getDepartments(supabase);
-    if (e) setError(`${e.message} (has migration 041_contacts.sql been run?)`);
-    setDepartments((data ?? []) as Department[]);
-  };
-  useEffect(() => {
-    void load();
-  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const run = async (write: PromiseLike<{ error: { message: string } | null }>) => {
-    setError(null);
-    const { error: e } = await write;
-    if (e) setError(e.message);
-    await load();
-  };
-
-  const add = () => {
-    const name = draft.trim();
-    if (!name) return;
-    setDraft('');
-    void run(createDepartment(supabase, name, Math.max(0, ...departments.map((d) => d.position)) + 1));
-  };
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Contact departments</h2>
-      <p className="mt-1 text-sm text-slate-500">The departments a contact can be tagged with. Renaming one renames it on every contact.</p>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      <table className="mt-4 w-full text-sm">
-        <tbody>
-          {departments.map((d) => (
-            <tr key={d.id} className="border-b border-slate-100">
-              <td className="py-2 pr-4">
-                <input
-                  defaultValue={d.name}
-                  aria-label={`Rename ${d.name}`}
-                  className="w-full rounded border border-slate-300 px-2 py-1"
-                  onBlur={(e) => {
-                    const name = e.target.value.trim();
-                    if (name && name !== d.name) void run(renameDepartment(supabase, d.id, name));
-                    else e.target.value = d.name;
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                />
-              </td>
-              <td className="py-2 text-right">
-                <button
-                  onClick={() => window.confirm(`Delete ${d.name}? Contacts tagged with it just lose that tag.`) && void run(deleteDepartment(supabase, d.id))}
-                  className="text-red-600 hover:underline"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-4 flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="New department"
-          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-        />
-        <button onClick={add} disabled={!draft.trim()} className="rounded-lg border border-sky-300 px-3 py-1 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-50">
-          Add
-        </button>
-      </div>
-    </section>
   );
 }

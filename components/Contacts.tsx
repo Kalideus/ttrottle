@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Mail, Pencil, Phone, Plus, Search, Trash2 } from 'lucide-react';
-import { CONTACT_KINDS, type Contact, type Department } from '@/lib/supabase/queries';
+import { CONTACT_KINDS, type Contact } from '@/lib/supabase/queries';
 import { contactMatches, contactTitle, sortContacts, type ContactSort } from '@/lib/contacts';
 
 interface ContactsProps {
   contacts: Contact[];
-  departments: Department[];
+  /** Every tag in use, for the filter. */
+  knownTags: string[];
   loading: boolean;
   /** The contact whose details are showing, if any. */
   openId: string | null;
@@ -23,34 +24,31 @@ const COLUMNS: { key: ContactSort; label: string }[] = [
   { key: 'name', label: 'Name' },
   { key: 'company', label: 'Company' },
   { key: 'kind', label: 'Type' },
-  { key: 'department', label: 'Department' },
+  { key: 'tags', label: 'Tags' },
+  { key: 'updated', label: 'Updated' },
 ];
+
+const updatedOn = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 // The shared contacts list: everyone's staff, suppliers, subcontractors, venues. Search, filter, sort by a
 // column heading; a row opens to show how to reach them.
-export function Contacts({ contacts, departments, loading, openId, onToggle, onAdd, onEdit, onDelete, canDelete }: ContactsProps) {
+export function Contacts({ contacts, knownTags, loading, openId, onToggle, onAdd, onEdit, onDelete, canDelete }: ContactsProps) {
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('');
-  const [dept, setDept] = useState('');
+  const [tag, setTag] = useState('');
   const [sort, setSort] = useState<{ field: ContactSort; direction: 'asc' | 'desc' }>({ field: 'name', direction: 'asc' });
   const [copied, setCopied] = useState<string | null>(null);
-
-  const deptName = useMemo(() => {
-    const byId = new Map(departments.map((d) => [d.id, d.name]));
-    return (id: string) => byId.get(id);
-  }, [departments]);
 
   const shown = useMemo(
     () =>
       sortContacts(
         contacts.filter(
-          (c) => (!kind || c.kind === kind) && (!dept || c.department_ids.includes(dept)) && (contactMatches(c, query, deptName) || c.id === openId)
+          (c) => (!kind || c.kind === kind) && (!tag || c.tags.includes(tag)) && (contactMatches(c, query) || c.id === openId)
         ),
         sort.field,
-        sort.direction,
-        deptName
+        sort.direction
       ),
-    [contacts, kind, dept, query, sort, deptName, openId]
+    [contacts, kind, tag, query, sort, openId]
   );
 
   // a second click on the same heading flips the order
@@ -64,7 +62,7 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
     });
   };
 
-  const filtering = !!(query.trim() || kind || dept);
+  const filtering = !!(query.trim() || kind || tag);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -86,7 +84,7 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, company, service, phone…"
+            placeholder="Search name, company, tag, phone…"
             aria-label="Search contacts"
           />
         </label>
@@ -96,10 +94,10 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
             <option key={k} value={k}>{k}</option>
           ))}
         </select>
-        <select className="modal-input contacts-filter" value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department">
-          <option value="">All departments</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
+        <select className="modal-input contacts-filter" value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Tag">
+          <option value="">All tags</option>
+          {knownTags.map((t) => (
+            <option key={t} value={t}>{t}</option>
           ))}
         </select>
         <span className="contacts-count">{shown.length} of {contacts.length}</span>
@@ -138,7 +136,6 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
         ) : (
           shown.map((c) => {
             const open = c.id === openId;
-            const depts = c.department_ids.map(deptName).filter(Boolean) as string[];
             return (
               <div key={c.id} className={`ticket ${open ? 'is-open' : ''}`}>
                 <div className="contact-grid contact-row" onClick={() => onToggle(c.id)}>
@@ -150,12 +147,13 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
                     <span className="ticket-name">{contactTitle(c)}</span>
                     {/* the role, or for a company-only entry what it supplies; on a phone the company too */}
                     <span className="contact-sub">
-                      {[c.name.trim() && c.company.trim() ? c.company : '', c.role || c.services.join(', ')].filter(Boolean).join(' · ')}
+                      {[c.name.trim() && c.company.trim() ? c.company : '', c.role || c.tags.join(', ')].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <span className="col-company contact-cell">{c.name.trim() ? c.company : ''}</span>
                   <span className="col-kind contact-cell">{c.kind}</span>
-                  <span className="col-department contact-cell">{depts.join(', ')}</span>
+                  <span className="col-tags contact-cell">{c.tags.join(', ')}</span>
+                  <span className="col-updated contact-cell">{updatedOn(c.updated_at)}</span>
                   <span className="col-phone contact-cell">
                     {c.phone && (
                       <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()}>{c.phone}</a>
@@ -191,12 +189,12 @@ export function Contacts({ contacts, departments, loading, openId, onToggle, onA
                       {c.company && c.name.trim() && <div><dt>Company</dt><dd>{c.company}</dd></div>}
                       {c.role && <div><dt>Role</dt><dd>{c.role}</dd></div>}
                       <div><dt>Type</dt><dd>{c.kind}</dd></div>
-                      {depts.length > 0 && <div><dt>{c.kind === 'Staff' ? 'Department' : 'Departments'}</dt><dd>{depts.join(', ')}</dd></div>}
+                      <div><dt>Updated</dt><dd>{updatedOn(c.updated_at)}</dd></div>
                     </dl>
-                    {c.services.length > 0 && (
+                    {c.tags.length > 0 && (
                       <div className="contact-chips">
-                        {c.services.map((s) => (
-                          <button key={s} type="button" className="ct-chip" title={`Everyone who does ${s}`} onClick={() => setQuery(s)}>{s}</button>
+                        {c.tags.map((s) => (
+                          <button key={s} type="button" className="ct-chip" title={`Everyone tagged ${s}`} onClick={() => setTag(s)}>{s}</button>
                         ))}
                       </div>
                     )}

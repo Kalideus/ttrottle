@@ -2390,7 +2390,7 @@ button.project-members:hover { background: var(--surface-alt); }
 .contacts-scroll { flex: 1; overflow-y: auto; container-type: inline-size; }
 .contact-grid {
   display: grid;
-  grid-template-columns: 24px minmax(0, 2fr) minmax(0, 1.4fr) 110px minmax(0, 1.4fr) 150px;
+  grid-template-columns: 24px minmax(0, 2fr) minmax(0, 1.4fr) 110px minmax(0, 1.4fr) 100px 150px;
   align-items: center;
   gap: 12px;
   padding: 0 24px;
@@ -2411,14 +2411,19 @@ button.project-members:hover { background: var(--surface-alt); }
 .contact-reach { display: flex; align-items: center; gap: 12px; }
 .contact-reach a { display: inline-flex; align-items: center; gap: 4px; }
 .contact-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* the Tags field: chips and the typing box inside one field-looking frame, like the other inputs */
+.contact-chip-box {
+  min-height: 40px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-alt); cursor: text;
+}
+.contact-chip-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .contact-chip-input { flex: 1; min-width: 140px; height: 28px; border: none; outline: none; background: none; font: inherit; font-size: 13px; color: var(--text); }
 .contact-notes { margin: 0; font-size: 13px; white-space: pre-wrap; }
 .contact-form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ticket-body .contact-chips { margin-top: -4px; }
 @container (max-width: 760px) {
-  /* narrow: name (with company and role under it) and phone; type and departments are in the opened row */
+  /* narrow: name (with company and role under it) and phone; type, tags and updated are in the opened row */
   .contact-grid { grid-template-columns: 24px minmax(0, 1fr) auto; padding: 0 16px; }
-  .contact-grid .col-company, .contact-grid .col-kind, .contact-grid .col-department { display: none; }
+  .contact-grid .col-company, .contact-grid .col-kind, .contact-grid .col-tags, .contact-grid .col-updated { display: none; }
 }
 @media (max-width: 720px) {
   .contacts-tools { padding: 10px 16px; }

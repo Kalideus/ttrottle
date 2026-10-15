@@ -95,10 +95,8 @@ import {
   createContact,
   updateContact,
   deleteContact,
-  getDepartments,
   type Contact,
   type ContactFields,
-  type Department,
   getFollowers,
   addFollower,
   removeFollower,
@@ -1270,7 +1268,6 @@ export default function AppPage() {
 
   // Contacts (041): loaded once signed in, so the top search can find them too, and again on opening the page.
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [openContactId, setOpenContactId] = useState<string | null>(null);
   // the Add / Edit form: 'new', the contact being edited, or closed
@@ -1279,15 +1276,14 @@ export default function AppPage() {
   useEffect(() => {
     if (!currentUserId) return;
     setContactsLoading(true);
-    void Promise.all([getContacts(supabase), getDepartments(supabase)]).then(([c, d]) => {
-      // before migration 041 these error; the page then just shows no contacts
+    void getContacts(supabase).then((c) => {
+      // before migration 041 this errors; the page then just shows no contacts
       setContacts((c.data ?? []) as Contact[]);
-      setDepartments((d.data ?? []) as Department[]);
       setContactsLoading(false);
     });
   }, [currentUserId, supabase, activeSection === 'contacts']); // eslint-disable-line react-hooks/exhaustive-deps
-  const knownServices = useMemo(
-    () => [...new Set(contacts.flatMap((c) => c.services))].sort((a, b) => a.localeCompare(b)),
+  const knownTags = useMemo(
+    () => [...new Set(contacts.flatMap((c) => c.tags))].sort((a, b) => a.localeCompare(b)),
     [contacts]
   );
 
@@ -1572,7 +1568,6 @@ export default function AppPage() {
             onOpenTask={openInProject}
             onOpenProject={(projectId) => openInProject(projectId)}
             contacts={contacts}
-            departments={departments}
             onOpenContact={openContact}
           />
         }
@@ -1654,8 +1649,7 @@ export default function AppPage() {
       {contactForm && (
         <ContactModal
           contact={contactForm === 'new' ? undefined : contactForm}
-          departments={departments}
-          knownServices={knownServices}
+          knownTags={knownTags}
           onSave={saveContact}
           onClose={() => setContactForm(null)}
         />
@@ -1922,7 +1916,7 @@ export default function AppPage() {
             <div className="app-content">
               <Contacts
                 contacts={contacts}
-                departments={departments}
+                knownTags={knownTags}
                 loading={contactsLoading}
                 openId={openContactId}
                 onToggle={(id) => setOpenContactId((current) => (current === id ? null : id))}

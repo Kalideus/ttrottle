@@ -3,21 +3,20 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
-import { CONTACT_KINDS, type Contact, type ContactFields, type Department } from '@/lib/supabase/queries';
+import { CONTACT_KINDS, type Contact, type ContactFields } from '@/lib/supabase/queries';
 
 interface ContactModalProps {
   /** Left out to add a new contact. */
   contact?: Contact;
-  departments: Department[];
-  /** Every service already used, offered while typing a new one. */
-  knownServices: string[];
+  /** Every tag already used, offered while typing a new one. */
+  knownTags: string[];
   // resolves to an error message, or null once saved
   onSave: (fields: ContactFields) => Promise<string | null>;
   onClose: () => void;
 }
 
 // Add or edit one contact: a person, or a company with nobody named.
-export function ContactModal({ contact, departments, knownServices, onSave, onClose }: ContactModalProps) {
+export function ContactModal({ contact, knownTags, onSave, onClose }: ContactModalProps) {
   useEscapeToClose(onClose);
   const [f, setF] = useState<ContactFields>(() => ({
     kind: contact?.kind ?? 'Supplier',
@@ -26,29 +25,28 @@ export function ContactModal({ contact, departments, knownServices, onSave, onCl
     role: contact?.role ?? '',
     phone: contact?.phone ?? '',
     email: contact?.email ?? '',
-    services: contact?.services ?? [],
-    department_ids: contact?.department_ids ?? [],
+    tags: contact?.tags ?? [],
     notes: contact?.notes ?? '',
   }));
   const set = <K extends keyof ContactFields>(key: K, value: ContactFields[K]) => setF((prev) => ({ ...prev, [key]: value }));
-  const [serviceDraft, setServiceDraft] = useState('');
+  const [tagDraft, setTagDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const staff = f.kind === 'Staff';
   const canSave = !!(f.name.trim() || (!staff && f.company.trim()));
 
-  // Enter or a comma turns what's typed into a service chip; the same service twice is ignored
-  const addService = (raw: string) => {
+  // Enter or a comma turns what's typed into a tag chip; the same tag twice is ignored
+  const addTag = (raw: string) => {
     const s = raw.trim().replace(/,$/, '').trim();
-    if (s && !f.services.some((x) => x.toLowerCase() === s.toLowerCase())) set('services', [...f.services, s]);
-    setServiceDraft('');
+    if (s && !f.tags.some((x) => x.toLowerCase() === s.toLowerCase())) set('tags', [...f.tags, s]);
+    setTagDraft('');
   };
 
   const submit = async () => {
     if (!canSave || busy) return;
     setBusy(true);
     setError(null);
-    const services = serviceDraft.trim() ? [...f.services, serviceDraft.trim()] : f.services;
+    const tags = tagDraft.trim() ? [...f.tags, tagDraft.trim()] : f.tags;
     const trimmed = (s: string) => s.trim();
     const failed = await onSave({
       ...f,
@@ -58,7 +56,7 @@ export function ContactModal({ contact, departments, knownServices, onSave, onCl
       phone: trimmed(f.phone),
       email: trimmed(f.email),
       notes: f.notes.trim(),
-      services,
+      tags,
     });
     setBusy(false);
     if (failed) setError(failed);
@@ -117,68 +115,46 @@ export function ContactModal({ contact, departments, knownServices, onSave, onCl
           </label>
         </div>
 
-        {!staff && (
-          <div className="modal-field">
-            <span className="modal-field-label" id="contact-services">Services</span>
-            <div className="contact-chips">
-              {f.services.map((s) => (
-                <span key={s} className="ct-chip is-on">
-                  {s}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${s}`}
-                    onClick={() => set('services', f.services.filter((x) => x !== s))}
-                    style={{ border: 'none', background: 'none', padding: 0, color: 'inherit', cursor: 'pointer', display: 'flex' }}
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-              <input
-                className="contact-chip-input"
-                aria-labelledby="contact-services"
-                list="contact-known-services"
-                value={serviceDraft}
-                placeholder={f.services.length ? 'Add another…' : 'e.g. Printing, then Enter'}
-                onChange={(e) => (e.target.value.endsWith(',') ? addService(e.target.value) : setServiceDraft(e.target.value))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addService(serviceDraft);
-                  } else if (e.key === 'Backspace' && !serviceDraft && f.services.length) {
-                    set('services', f.services.slice(0, -1));
-                  }
-                }}
-                onBlur={() => serviceDraft.trim() && addService(serviceDraft)}
-              />
-              <datalist id="contact-known-services">
-                {knownServices.filter((s) => !f.services.includes(s)).map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </div>
-            <span className="modal-field-hint">What they supply or do, so a search for it finds them.</span>
-          </div>
-        )}
-
         <div className="modal-field">
-          <span className="modal-field-label">{staff ? 'Department' : 'Departments that use them'}</span>
-          <div className="contact-chips">
-            {departments.map((d) => {
-              const on = f.department_ids.includes(d.id);
-              return (
+          <span className="modal-field-label" id="contact-tags">Tags</span>
+          <div className="contact-chips contact-chip-box">
+            {f.tags.map((s) => (
+              <span key={s} className="ct-chip is-on">
+                {s}
                 <button
-                  key={d.id}
                   type="button"
-                  aria-pressed={on}
-                  className={`ct-chip ${on ? 'is-on' : ''}`}
-                  onClick={() => set('department_ids', on ? f.department_ids.filter((id) => id !== d.id) : [...f.department_ids, d.id])}
+                  aria-label={`Remove ${s}`}
+                  onClick={() => set('tags', f.tags.filter((x) => x !== s))}
+                  style={{ border: 'none', background: 'none', padding: 0, color: 'inherit', cursor: 'pointer', display: 'flex' }}
                 >
-                  {d.name}
+                  <X size={12} />
                 </button>
-              );
-            })}
+              </span>
+            ))}
+            <input
+              className="contact-chip-input"
+              aria-labelledby="contact-tags"
+              list="contact-known-tags"
+              value={tagDraft}
+              placeholder={f.tags.length ? 'Add another…' : 'e.g. Printing, then Enter'}
+              onChange={(e) => (e.target.value.endsWith(',') ? addTag(e.target.value) : setTagDraft(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag(tagDraft);
+                } else if (e.key === 'Backspace' && !tagDraft && f.tags.length) {
+                  set('tags', f.tags.slice(0, -1));
+                }
+              }}
+              onBlur={() => tagDraft.trim() && addTag(tagDraft)}
+            />
+            <datalist id="contact-known-tags">
+              {knownTags.filter((s) => !f.tags.includes(s)).map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
           </div>
+          <span className="modal-field-hint">What they supply or do, or the team they&apos;re in, so a search for it finds them.</span>
         </div>
 
         <label className="modal-field">
