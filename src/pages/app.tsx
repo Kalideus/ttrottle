@@ -83,6 +83,7 @@ import {
   markNotificationsRead,
   markTaskNotificationsRead,
   setTaskLike,
+  getTaskLikes,
   clearNotifications,
   clearAllNotifications,
   markAllNotificationsRead,
@@ -183,6 +184,7 @@ export default function AppPage() {
   }, [focusCommentId, comments]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [followers, setFollowers] = useState<Follower[]>([]);
+  const [taskLikes, setTaskLikes] = useState<string[]>([]); // user ids who gave the open task a heart
   const [activity, setActivity] = useState<TaskActivity[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [showProfile, setShowProfile] = useState(false);
@@ -387,15 +389,15 @@ export default function AppPage() {
 
   // Task panel extras, cached per task like projects: reopening a task is instant, and resting the
   // pointer on a row loads them before the click.
-  type TaskExtras = { comments: CommentItem[]; followers: Follower[]; activity: TaskActivity[] };
+  type TaskExtras = { comments: CommentItem[]; followers: Follower[]; activity: TaskActivity[]; likes: string[] };
   const taskCache = useRef(new Map<string, TaskExtras>());
   const taskLoads = useRef(new Map<string, Promise<TaskExtras>>());
   const loadTaskExtras = (id: string, fresh = false): Promise<TaskExtras> => {
     const inflight = taskLoads.current.get(id);
     if (inflight && !fresh) return inflight;
-    const load = Promise.all([getComments(supabase, id), getFollowers(supabase, id), getTaskActivity(supabase, id)])
-      .then(([c, f, a]) => {
-        const d = { comments: mapComments(c.data ?? [], latest.current.currentUserId), followers: f.data ?? [], activity: a.data ?? [] };
+    const load = Promise.all([getComments(supabase, id), getFollowers(supabase, id), getTaskActivity(supabase, id), getTaskLikes(supabase, id)])
+      .then(([c, f, a, l]) => {
+        const d = { comments: mapComments(c.data ?? [], latest.current.currentUserId), followers: f.data ?? [], activity: a.data ?? [], likes: l.data };
         taskCache.current.set(id, d);
         return d;
       })
@@ -419,10 +421,11 @@ export default function AppPage() {
       setComments(d.comments);
       setFollowers(d.followers);
       setActivity(d.activity);
+      setTaskLikes(d.likes);
       setCommentsLoading(false);
     };
     if (!selectedTaskId) {
-      apply({ comments: [], followers: [], activity: [] });
+      apply({ comments: [], followers: [], activity: [], likes: [] });
       return;
     }
     let stale = false;
@@ -430,7 +433,7 @@ export default function AppPage() {
     if (cached) apply(cached);
     else {
       // don't show the previous task's comments while this one loads
-      apply({ comments: [], followers: [], activity: [] });
+      apply({ comments: [], followers: [], activity: [], likes: [] });
       setCommentsLoading(true);
     }
     loadTaskExtras(selectedTaskId, !!cached).then((d) => {
@@ -601,6 +604,14 @@ export default function AppPage() {
       const cached = taskCache.current.get(id);
       if (cached) cached.activity = data ?? [];
       if (id === latest.current.selectedTaskId) setActivity(data ?? []);
+    },
+    likes: async () => {
+      const id = latest.current.selectedTaskId;
+      if (!id) return;
+      const { data } = await getTaskLikes(supabase, id);
+      const cached = taskCache.current.get(id);
+      if (cached) cached.likes = data;
+      if (id === latest.current.selectedTaskId) setTaskLikes(data);
     },
     comments: async () => {
       const { selectedTaskId: id, currentUserId: uid } = latest.current;
@@ -1486,12 +1497,13 @@ export default function AppPage() {
     persist(async () => must(await clearNotifications(supabase, ids)), 'notifications');
   };
 
-  // a heart on a finished task, from its inbox row; every row about that task shows it
+  // a heart on a task, from the task panel or a finished task's inbox row; every row about that task shows it
   const handleTaskLike = (taskId: string, liked: boolean) => {
     if (!currentUserId) return;
     const uid = currentUserId;
     setNotifications((prev) => prev.map((n) => (n.taskId === taskId ? { ...n, liked } : n)));
-    persist(async () => must(await setTaskLike(supabase, taskId, uid, liked)), 'notifications');
+    if (taskId === selectedTaskId) setTaskLikes((prev) => [...prev.filter((id) => id !== uid), ...(liked ? [uid] : [])]);
+    persist(async () => must(await setTaskLike(supabase, taskId, uid, liked)), 'notifications', 'likes');
   };
 
   const handleClearAllNotifications = () => {
@@ -1517,6 +1529,8 @@ export default function AppPage() {
         comments={comments}
         commentsLoading={commentsLoading}
         followers={followers}
+        likedBy={taskLikes}
+        onLike={(liked) => handleTaskLike(selectedTask.id, liked)}
         activity={activity}
         currentUserId={currentUserId}
         onFollowerAdd={handleFollowerAdd}

@@ -965,12 +965,18 @@ export async function getNotifications(supabase: SupabaseClient, userId: string,
   return { data: withPeople, error: null }
 }
 
-// A heart on a finished task. The database tells whoever completed it (040_task_likes.sql).
+// A heart on a task. The database tells whoever completed it, or else its assignee (040_task_likes.sql).
 export async function setTaskLike(supabase: SupabaseClient, taskId: string, userId: string, liked: boolean) {
   const q = supabase.from('task_likes')
   return liked
     ? q.upsert({ task_id: taskId, user_id: userId }, { ignoreDuplicates: true })
     : q.delete().eq('task_id', taskId).eq('user_id', userId)
+}
+
+// who has given a task a heart, for the task panel
+export async function getTaskLikes(supabase: SupabaseClient, taskId: string) {
+  const { data, error } = await supabase.from('task_likes').select('user_id').eq('task_id', taskId).order('created_at')
+  return { data: (data ?? []).map((l) => l.user_id as string), error }
 }
 
 // several at once: the inbox groups a task's consecutive updates into one row

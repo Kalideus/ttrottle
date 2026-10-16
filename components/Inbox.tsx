@@ -18,7 +18,7 @@ export interface NotificationItem {
   dueDate?: string | null;
   priority?: 'low' | 'medium' | 'high' | null;
   completed?: boolean;
-  liked?: boolean; // I've given this finished task a heart
+  liked?: boolean; // I've given this task a heart
   assignee?: { name: string; initials: string; avatar_color: string | null; avatar_url: string | null } | null;
   actorName: string;
   detail?: string | null;
@@ -226,7 +226,7 @@ export function Inbox({ notifications, loading, loadingMore, hasMore, unreadCoun
                   {notif.type === 'ticket' && `${notif.actorName} raised a ticket: "${notif.taskName}"`}
                   {notif.type === 'due_soon' && `"${notif.taskName}" is due soon`}
                   {notif.type === 'completed' && `"${notif.taskName}" was completed`}
-                  {notif.type === 'liked' && `${actorList(actors)} gave a ❤️ for completing "${notif.taskName}"`}
+                  {notif.type === 'liked' && `${actorList(actors)} gave a ❤️ ${notif.completed ? 'for completing' : 'to'} "${notif.taskName}"`}
                   {notif.type === 'updated' && `${actorList(actors)} updated "${notif.taskName}"`}
                   {/* the time sits on the headline's line: a row of its own made every notification taller */}
                   <span style={{ marginLeft: 8, fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>

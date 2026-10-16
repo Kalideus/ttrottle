@@ -1,6 +1,6 @@
 'use client';
 
-import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock, BellOff, Merge } from 'lucide-react';
+import { Tag as TagIcon, X, MoreVertical, Calendar, User, Flag, Check, Users, Plus, Trash2, CornerUpLeft, Link2, ExternalLink, Repeat, Lock, Unlock, BellOff, Merge, Heart } from 'lucide-react';
 import { MergeTaskModal } from '@/components/MergeTaskModal';
 import type { TaskHit } from '@/components/GlobalSearch';
 import { repeatOptions, repeatLabel } from '@/lib/repeat';
@@ -27,6 +27,8 @@ interface TaskDetailPanelProps {
   followers: Follower[];
   activity: TaskActivity[];
   currentUserId: string | null;
+  likedBy: string[]; // who has given this task a heart
+  onLike: (liked: boolean) => void;
   onFollowerAdd: (userId: string) => void;
   onFollowerRemove: (userId: string) => void;
   onSubtaskAdd: (parentTaskId: string, name: string) => Promise<void>;
@@ -82,6 +84,8 @@ export function TaskDetailPanel({
   followers,
   activity,
   currentUserId,
+  likedBy,
+  onLike,
   onFollowerAdd,
   onFollowerRemove,
   onSubtaskAdd,
@@ -227,6 +231,23 @@ export function TaskDetailPanel({
               Clear
             </button>
           )}
+          {(() => {
+            const liked = !!currentUserId && likedBy.includes(currentUserId);
+            const names = likedBy.map((id) => (id === currentUserId ? 'You' : mentionableUsers.find((u) => u.id === id)?.name ?? 'Someone')).join(', ');
+            return (
+              <button
+                className="detail-panel-menu-btn"
+                title={names ? `❤️ ${names}` : 'Give a heart'}
+                aria-label="Heart"
+                aria-pressed={liked}
+                onClick={() => onLike(!liked)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: liked ? 'var(--accent)' : undefined }}
+              >
+                <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
+                {likedBy.length > 0 && <span style={{ fontSize: 12 }}>{likedBy.length}</span>}
+              </button>
+            );
+          })()}
           {onOpenInProject && (
             <button className="detail-panel-menu-btn" title="Open in project" aria-label="Open in project" onClick={onOpenInProject}>
               <ExternalLink size={18} />
