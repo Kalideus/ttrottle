@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { getPerformanceData, getMembersByProject, type Extension, type Project, type ProjectMember } from '@/lib/supabase/queries';
-import { computeKpi, rate, weeklyTrend, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
+import { computeKpi, rate, ticketWait, weeklyTrend, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
   supabase: SupabaseClient;
@@ -459,7 +459,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
   const metrics = METRICS.filter((m) => !m.techOnly || type === 'turnaround');
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0];
 
-  const { rows, team, ctx, mineOf, teamTasks } = useMemo(() => {
+  const { rows, team, ctx, mineOf, teamTasks, wait } = useMemo(() => {
     const ids = new Set(projects.map((p) => p.id));
     const ctx = { now: new Date(), days, extended, turnaround: new Set(projects.filter((p) => kpiType(p) === 'turnaround').map((p) => p.id)) };
     const scoped = tasks.filter((t) => ids.has(t.project_id));
@@ -472,6 +472,8 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
       ctx,
       mineOf,
       teamTasks,
+      // Tech: tickets waiting to be handed out (every ticket in the project, not just the chosen people's)
+      wait: ticketWait(scoped, ctx),
     };
   }, [projects, people, tasks, extended, days]);
 
@@ -553,6 +555,18 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
   return (
     <section className="perf-section perf-team-section">
       {title && <h3 className="perf-section-title">{title}</h3>}
+
+      {type === 'turnaround' && (
+        <div className="perf-block" style={{ marginTop: 0, marginBottom: 20 }}>
+          <h4 className="perf-block-title">Tickets waiting to be handed out</h4>
+          <div className="perf-tiles">
+            <Tile label="Median wait" value={daysText(wait.medianDays)} hint="Working days from a ticket being raised to a manager giving it to someone, for tickets handed out in this period" />
+            <Tile label="Handed out" value={wait.handedOut} hint="Tickets given to someone in this period" />
+            <Tile label="Unassigned now" value={wait.unassigned} hint="Open tickets nobody has been given yet" warn={wait.unassigned > 0} />
+            <Tile label="Oldest waiting" value={daysText(wait.oldestDays)} hint="Working days the longest-waiting unassigned ticket has sat there" />
+          </div>
+        </div>
+      )}
 
       <div className="perf-compare-head">
         <label className="perf-muted" htmlFor={`perf-metric-${type}`}>Compare by</label>
