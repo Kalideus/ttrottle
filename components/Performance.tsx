@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
-import { getPerformanceData, getMembersByProject, type Project, type ProjectMember } from '@/lib/supabase/queries';
+import { getPerformanceData, getMembersByProject, type Extension, type Project, type ProjectMember } from '@/lib/supabase/queries';
 import { computeKpi, rate, weeklyTrend, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
@@ -150,10 +150,18 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
   );
 }
 
-// task id -> the dates its approved extensions moved it to
-type Extensions = Map<string, string[]>;
+// task id -> its approved extensions, oldest first
+type Extensions = Map<string, Extension[]>;
 type DrillRequest = { title: string; ids: string[]; s: KpiStats };
 type Drill = (r: DrillRequest) => void;
+
+// "⏱ +3d, 28 Oct → 31 Oct, approved by Sarah"; answered before migration 044: just where it moved to
+function extensionText(e: Extension, names: Map<string, string>) {
+  const by = e.by ? `, approved by ${names.get(e.by) ?? 'a manager'}` : '';
+  if (!e.from) return `⏱ extended to ${shortDate(e.to)}${by}`;
+  const days = Math.round((Date.parse(e.to) - Date.parse(e.from)) / 86_400_000);
+  return `⏱ ${days >= 0 ? '+' : ''}${days}d, ${shortDate(e.from)} → ${shortDate(e.to)}${by}`;
+}
 
 const shortDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00` : iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
@@ -205,7 +213,7 @@ function DrillList({ request, tasks, extended, projects, members, onOpen, onClos
                       t.assignee_id && names.get(t.assignee_id),
                       t.due_date && `due ${shortDate(t.due_date)}`,
                       t.completed_at && `done ${shortDate(t.completed_at)}`,
-                      ext && `⏱ extended to ${ext.map(shortDate).join(', then ')}`,
+                      ...(ext ?? []).map((e) => extensionText(e, names)),
                       t.kpi && t.kpi_by && t.kpi_by !== t.assignee_id
                         ? `🎯 by ${names.get(t.kpi_by) ?? 'a manager'}${t.kpi_at ? `, ${shortDate(t.kpi_at)}` : ''}`
                         : t.created_by === t.assignee_id ? 'self-made' : null,

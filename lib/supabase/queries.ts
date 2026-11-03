@@ -1189,6 +1189,9 @@ export async function getMyProjectRoles(supabase: SupabaseClient, userId: string
 
 // Performance dashboard (lib/kpi.ts): every task in these projects that is still open or was finished
 // since `since`, plus the extensions approved on them. Pages past the 1000-row response cap.
+// an approved extension: the date it moved to, the one it replaced and who approved (both null before migration 044)
+export type Extension = { to: string; from: string | null; by: string | null }
+
 export async function getPerformanceData(supabase: SupabaseClient, projectIds: string[], since: string) {
   const tasks: KpiTask[] = []
   for (let from = 0; ; from += 1000) {
@@ -1200,19 +1203,21 @@ export async function getPerformanceData(supabase: SupabaseClient, projectIds: s
       .or(`completed.eq.false,completed_at.gte.${since}`)
       .order('id')
       .range(from, from + 999)
-    if (error) return { tasks, extended: new Map<string, string[]>(), error }
+    if (error) return { tasks, extended: new Map<string, Extension[]>(), error }
     tasks.push(...(data as KpiTask[]))
     if (data.length < 1000) break
   }
   // ponytail: one page; past 1000 approved extensions the oldest stop showing their ⏱
   const { data: approved } = await supabase
     .from('comments')
-    .select('task_id, requested_due_date')
+    .select('task_id, requested_due_date, previous_due_date, answered_by')
     .eq('request_status', 'approved')
     .gte('created_at', since)
+    .order('created_at')
     .limit(1000)
-  // task id -> the dates its approved extensions moved it to
-  const extended = new Map<string, string[]>()
-  for (const c of approved ?? []) extended.set(c.task_id, [...(extended.get(c.task_id) ?? []), c.requested_due_date])
+  // task id -> its approved extensions, oldest first
+  const extended = new Map<string, Extension[]>()
+  for (const c of approved ?? [])
+    extended.set(c.task_id, [...(extended.get(c.task_id) ?? []), { to: c.requested_due_date, from: c.previous_due_date, by: c.answered_by }])
   return { tasks, extended, error: null }
 }
