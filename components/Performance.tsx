@@ -33,8 +33,6 @@ function kindsWithWork(projects: Project[], has: (t: KpiTask) => boolean, tasks:
   return withWork.length ? withWork : kinds.slice(0, 1);
 }
 
-// 90-day window, plus room for the 12-week trend
-const HISTORY_DAYS = 180;
 
 // Performance dashboard: everyone sees their own numbers against their team's; managers also get a Team tab
 // comparing the people in the projects they manage (a super admin: every project).
@@ -60,8 +58,7 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
   useEffect(() => {
     if (!loadIds) return;
     let live = true;
-    const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000).toISOString();
-    void getPerformanceData(supabase, loadIds.split(','), since).then((r) => {
+    void getPerformanceData(supabase, loadIds.split(',')).then((r) => {
       if (!live) return;
       if (r.error) setError(r.error.message);
       else setData({ tasks: r.tasks, extended: r.extended });
@@ -502,7 +499,19 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
   const trends = useMemo(() => {
     const byPerson = new Map(people.map((p) => [p.id, weeklyTrend(mineOf(p.id), ctx, metric.value, WEEKS)]));
     const perHead = (s: Both) => (metric.key === 'overdue' ? s.core.overdue / Math.max(1, people.length) : metric.value(s));
-    return { byPerson, team: weeklyTrend(teamTasks, ctx, perHead, WEEKS) };
+    // year on year: the team's rolling figure each week from 1 January, one line per year (the last 5),
+    // empty past today and before the first task
+    const first = Math.min(...teamTasks.map((t) => Date.parse(t.created_at)));
+    const thisYear = ctx.now.getFullYear();
+    const years = Number.isFinite(first) ? Array.from({ length: thisYear - Math.max(new Date(first).getFullYear(), thisYear - 4) + 1 }, (_, i) => thisYear - i).reverse() : [];
+    const yearly = years.map((year) => ({
+      year,
+      values: YEAR_WEEKS.map((k) => {
+        const at = new Date(year, 0, 1 + 7 * k);
+        return at > ctx.now || at.getTime() < first ? null : perHead(computeKpi(teamTasks, { ...ctx, now: at }));
+      }),
+    }));
+    return { byPerson, team: weeklyTrend(teamTasks, ctx, perHead, WEEKS), yearly };
   }, [people, mineOf, teamTasks, ctx, metric]);
 
   // the overview's Core / All work switch: All work until there's any 🎯 work to show
@@ -687,6 +696,9 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
       <h4 className="perf-block-title" style={{ marginTop: 24 }}>Over {WEEKS} weeks: {compareLabel(metric)}</h4>
       {onOverlay.length ? (
         <TrendChart
+          title="Weekly trend for the selected people"
+          labels={WEEK_LABELS}
+          axis={[{ i: 0, label: WEEK_LABELS[0] }, { i: WEEKS - 1, label: WEEK_LABELS[WEEKS - 1] }]}
           format={metric.format}
           team={trends.team}
           lines={onOverlay.map((o) => ({
@@ -698,6 +710,22 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
         />
       ) : (
         <p className="perf-muted" style={{ margin: 0 }}>Click someone’s trend in the table to compare them over time (up to {SERIES.length}).</p>
+      )}
+
+      <h4 className="perf-block-title" style={{ marginTop: 24 }}>
+        Year on year: {compareLabel(metric)}, team, rolling {days} days
+      </h4>
+      {trends.yearly.length ? (
+        <TrendChart
+          title={`Team ${compareLabel(metric)} by week of the year, one line per year`}
+          labels={YEAR_LABELS}
+          axis={MONTH_AXIS}
+          format={metric.format}
+          // a year keeps its colour as later years are added
+          lines={trends.yearly.map((y) => ({ id: String(y.year), name: String(y.year), color: SERIES[y.year % SERIES.length], values: y.values }))}
+        />
+      ) : (
+        <p className="perf-muted" style={{ margin: 0 }}>Nothing to show yet.</p>
       )}
 
       <div className="perf-table-wrap">
@@ -770,6 +798,14 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
 const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
 const WEEKS = 12;
 const weekLabel = (i: number) => (i === WEEKS - 1 ? 'This week' : `${WEEKS - 1 - i} wk ago`);
+const WEEK_LABELS = Array.from({ length: WEEKS }, (_, i) => weekLabel(i));
+// the year-on-year chart: a point every 7 days from 1 January, labelled by date; months along the bottom
+const YEAR_WEEKS = Array.from({ length: 53 }, (_, k) => k);
+const YEAR_LABELS = YEAR_WEEKS.map((k) => new Date(2026, 0, 1 + 7 * k).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }));
+const MONTH_AXIS = Array.from({ length: 12 }, (_, m) => ({
+  i: Math.round((new Date(2026, m, 15).getTime() - new Date(2026, 0, 1).getTime()) / (7 * 86_400_000)),
+  label: new Date(2026, m, 1).toLocaleDateString(undefined, { month: 'short' }),
+}));
 
 // segments of a line, broken where a week has nothing to measure
 function linePath(values: (number | null)[], x: (i: number) => number, y: (v: number) => number) {
@@ -801,36 +837,40 @@ function Sparkline({ values, format, label }: { values: (number | null)[]; forma
   );
 }
 
-function TrendChart({ lines, team, format }: { lines: { id: string; name: string; color: string; values: (number | null)[] }[]; team: (number | null)[]; format: Format }) {
+// Lines over time with a hover readout. `labels` names each point; `axis` the few shown along the bottom.
+function TrendChart({ lines, team, format, labels, axis, title }: { lines: { id: string; name: string; color: string; values: (number | null)[] }[]; team?: (number | null)[]; format: Format; labels: string[]; axis: { i: number; label: string }[]; title: string }) {
+  const last = labels.length - 1;
+  const latest = (vs: (number | null)[]) => [...vs].reverse().find((v) => v !== null) ?? null;
   const [hover, setHover] = useState<number | null>(null);
   const W = 640;
   const H = 200;
   const pad = { l: 44, r: 12, t: 10, b: 24 };
-  const all = [...team, ...lines.flatMap((l) => l.values)].filter((v): v is number => v !== null);
+  const all = [...(team ?? []), ...lines.flatMap((l) => l.values)].filter((v): v is number => v !== null);
   const top = format === 'pct' ? 1 : Math.max(1e-9, ...all) * 1.1;
-  const x = (i: number) => pad.l + (i / (WEEKS - 1)) * (W - pad.l - pad.r);
+  const x = (i: number) => pad.l + (i / last) * (W - pad.l - pad.r);
   const y = (v: number) => pad.t + (1 - v / top) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1].map((f) => f * top);
 
-  // pointer, so a tap on a phone shows the week too
+  // pointer, so a tap on a phone shows the point too
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - box.left) / box.width) * W;
-    setHover(Math.max(0, Math.min(WEEKS - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (WEEKS - 1)))));
+    setHover(Math.max(0, Math.min(last, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * last))));
   };
 
   return (
     <div className="perf-trend">
-      <svg viewBox={`0 0 ${W} ${H}`} className="perf-trend-svg" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => e.pointerType === 'mouse' && setHover(null)} role="img" aria-label="Weekly trend for the selected people">
+      <svg viewBox={`0 0 ${W} ${H}`} className="perf-trend-svg" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => e.pointerType === 'mouse' && setHover(null)} role="img" aria-label={title}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeWidth="1" />
             <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" className="perf-axis">{show(t, format)}</text>
           </g>
         ))}
-        <text x={x(0)} y={H - 6} className="perf-axis">{weekLabel(0)}</text>
-        <text x={x(WEEKS - 1)} y={H - 6} textAnchor="end" className="perf-axis">{weekLabel(WEEKS - 1)}</text>
-        <path d={linePath(team, x, y)} fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="5 4" />
+        {axis.map((a) => (
+          <text key={a.i} x={x(a.i)} y={H - 6} textAnchor={a.i === 0 ? 'start' : a.i === last ? 'end' : 'middle'} className="perf-axis">{a.label}</text>
+        ))}
+        {team && <path d={linePath(team, x, y)} fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="5 4" />}
         {lines.map((l) => (
           <path key={l.id} d={linePath(l.values, x, y)} fill="none" stroke={l.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         ))}
@@ -845,26 +885,30 @@ function TrendChart({ lines, team, format }: { lines: { id: string; name: string
       </svg>
       {hover !== null && (
         <div className="perf-trend-tip" style={{ left: `${Math.min(82, Math.max(18, (x(hover) / W) * 100))}%` }}>
-          <strong>{weekLabel(hover)}</strong>
+          <strong>{labels[hover]}</strong>
           {lines.map((l) => (
             <span key={l.id}>
               <i style={{ background: l.color }} /> {l.name} {show(l.values[hover], format)}
             </span>
           ))}
-          <span>
-            <i className="is-team" /> Team {show(team[hover], format)}
-          </span>
+          {team && (
+            <span>
+              <i className="is-team" /> Team {show(team[hover], format)}
+            </span>
+          )}
         </div>
       )}
       <div className="perf-legend">
         {lines.map((l) => (
           <span key={l.id}>
-            <i style={{ background: l.color }} /> {l.name} <b>{show(l.values[WEEKS - 1], format)}</b>
+            <i style={{ background: l.color }} /> {l.name} <b>{show(latest(l.values), format)}</b>
           </span>
         ))}
-        <span>
-          <i className="is-team" /> Team <b>{show(team[WEEKS - 1], format)}</b>
-        </span>
+        {team && (
+          <span>
+            <i className="is-team" /> Team <b>{show(latest(team), format)}</b>
+          </span>
+        )}
       </div>
     </div>
   );

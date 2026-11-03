@@ -1187,12 +1187,13 @@ export async function getMyProjectRoles(supabase: SupabaseClient, userId: string
   return new Map((data ?? []).map((r) => [r.project_id as string, r.role as ProjectMember['role']]))
 }
 
-// Performance dashboard (lib/kpi.ts): every task in these projects that is still open or was finished
-// since `since`, plus the extensions approved on them. Pages past the 1000-row response cap.
 // an approved extension: the date it moved to, the one it replaced and who approved (both null before migration 044)
 export type Extension = { to: string; from: string | null; by: string | null }
 
-export async function getPerformanceData(supabase: SupabaseClient, projectIds: string[], since: string) {
+// Performance dashboard (lib/kpi.ts): every task in these projects, for the year-on-year chart,
+// plus the extensions approved on them. Pages past the 1000-row response cap.
+// ponytail: the whole history every time the page opens; load by date range if that gets slow
+export async function getPerformanceData(supabase: SupabaseClient, projectIds: string[]) {
   const tasks: KpiTask[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
@@ -1200,24 +1201,22 @@ export async function getPerformanceData(supabase: SupabaseClient, projectIds: s
       .select('id, name, project_id, assignee_id, created_by, created_at, completed, completed_at, due_date, priority, kpi, kpi_by, kpi_at, first_assigned_at, ticket_by')
       .in('project_id', projectIds)
       .is('deleted_at', null)
-      .or(`completed.eq.false,completed_at.gte.${since}`)
       .order('id')
       .range(from, from + 999)
     if (error) return { tasks, extended: new Map<string, Extension[]>(), error }
     tasks.push(...(data as KpiTask[]))
     if (data.length < 1000) break
   }
-  // ponytail: one page; past 1000 approved extensions the oldest stop showing their ⏱
+  // ponytail: the newest 1000; past that the oldest stop showing their ⏱
   const { data: approved } = await supabase
     .from('comments')
     .select('task_id, requested_due_date, previous_due_date, answered_by')
     .eq('request_status', 'approved')
-    .gte('created_at', since)
-    .order('created_at')
+    .order('created_at', { ascending: false })
     .limit(1000)
   // task id -> its approved extensions, oldest first
   const extended = new Map<string, Extension[]>()
-  for (const c of approved ?? [])
+  for (const c of [...(approved ?? [])].reverse())
     extended.set(c.task_id, [...(extended.get(c.task_id) ?? []), { to: c.requested_due_date, from: c.previous_due_date, by: c.answered_by }])
   return { tasks, extended, error: null }
 }
