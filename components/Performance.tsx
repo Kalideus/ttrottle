@@ -23,6 +23,16 @@ type KpiType = 'deadline' | 'turnaround';
 const kpiType = (p: Project): KpiType => p.kpi_type ?? 'deadline';
 const pct = (r: number | null) => (r === null ? '—' : `${Math.round(r * 100)}%`);
 const daysText = (d: number | null) => (d === null ? '—' : `${d.toFixed(1)} days`);
+// Deadline work and Tech work are measured differently, so each gets its own section: the kinds with work
+// in them (by `has`), or just the first kind while nobody has any yet
+function kindsWithWork(projects: Project[], has: (t: KpiTask) => boolean, tasks: KpiTask[]) {
+  const kinds = (['deadline', 'turnaround'] as const)
+    .map((type) => ({ type, projects: projects.filter((p) => kpiType(p) === type) }))
+    .filter((k) => k.projects.length);
+  const withWork = kinds.filter((k) => tasks.some((t) => has(t) && k.projects.some((p) => p.id === t.project_id)));
+  return withWork.length ? withWork : kinds.slice(0, 1);
+}
+
 // 90-day window, plus room for the 12-week trend
 const HISTORY_DAYS = 180;
 
@@ -246,13 +256,7 @@ function MemberView({ userId, projects, tasks, extended, days, onDrill }: { user
   }, [tasks, projects]);
   const isMine = (t: KpiTask) => t.assignee_id === userId;
 
-  // deadline work and Tech work are measured differently, so each gets its own section; only the kinds this
-  // person has work in, unless they have none yet
-  const kinds = (['deadline', 'turnaround'] as const)
-    .map((type) => ({ type, projects: projects.filter((p) => kpiType(p) === type) }))
-    .filter((k) => k.projects.length);
-  const withWork = kinds.filter((k) => inScope.some((t) => isMine(t) && k.projects.some((p) => p.id === t.project_id)));
-  const shown = withWork.length ? withWork : kinds.slice(0, 1);
+  const shown = kindsWithWork(projects, isMine, inScope);
 
   if (!shown.length) return <p className="perf-empty">No projects to show.</p>;
 
@@ -376,18 +380,6 @@ function Tile({ label, value, hint, sub, warn = false, onClick }: { label: strin
 type Person = { id: string; name: string };
 type Both = { core: KpiStats; all: KpiStats };
 type Format = 'pct' | 'count' | 'days';
-type Metric = { key: string; label: string; format: Format; value: (s: Both) => number | null; techOnly?: boolean; lowIsGood?: boolean };
-
-// what the bar chart can rank by; the table shows all of them
-const METRICS: Metric[] = [
-  { key: 'achievement', label: '🎯 KPI achievement', format: 'pct', value: (s) => rate(s.core.achievement.hit, s.core.achievement.of) },
-  { key: 'onTime', label: '🎯 On time', format: 'pct', value: (s) => rate(s.core.onTime.hit, s.core.onTime.of) },
-  { key: 'completion', label: '🎯 Completion', format: 'pct', value: (s) => s.core.completionRate },
-  { key: 'overdue', label: '🎯 Overdue now', format: 'count', value: (s) => s.core.overdue, lowIsGood: true },
-  { key: 'median', label: '🎯 Median time', format: 'days', value: (s) => s.core.medianDays, techOnly: true, lowIsGood: true },
-  { key: 'allOnTime', label: 'All work: on time', format: 'pct', value: (s) => rate(s.all.onTime.hit, s.all.onTime.of) },
-  { key: 'allCompletion', label: 'All work: completion', format: 'pct', value: (s) => s.all.completionRate },
-];
 const show = (v: number | null, f: Format) => (f === 'pct' ? pct(v) : f === 'days' ? daysText(v) : v === null ? '—' : String(v));
 const techLabel = (label: string, type: KpiType) => (type === 'turnaround' ? label.replace('On time', 'Within target').replace('on time', 'within target') : label);
 
@@ -410,11 +402,7 @@ function TeamView({ projects, members, tasks, extended, days, onDrill }: { proje
       return n;
     });
 
-  const kinds = (['deadline', 'turnaround'] as const)
-    .map((type) => ({ type, projects: projects.filter((p) => kpiType(p) === type) }))
-    .filter((k) => k.projects.length);
-  const withWork = kinds.filter((k) => tasks.some((t) => t.assignee_id && k.projects.some((p) => p.id === t.project_id)));
-  const shown = withWork.length ? withWork : kinds.slice(0, 1);
+  const shown = kindsWithWork(projects, (t) => !!t.assignee_id, tasks);
 
   if (!people.length) return <p className="perf-empty">{members.size ? 'Nobody in these projects yet.' : 'Loading…'}</p>;
 
@@ -451,12 +439,29 @@ function TeamView({ projects, members, tasks, extended, days, onDrill }: { proje
   );
 }
 
-type Col = { key: string; label: string; value: (s: Both) => number | null; format: Format; all?: boolean };
+// a table column; `compare` ones can also rank the bar chart (`lowIsGood`: fewest first)
+type Col = { key: string; label: string; value: (s: Both) => number | null; format: Format; all?: boolean; compare?: boolean; lowIsGood?: boolean };
+const compareLabel = (c: Col) => `${c.all ? 'All work: ' : '🎯 '}${c.label}`;
 
 function TeamSection({ type, title, projects, people, tasks, extended, days, onDrill }: { type: KpiType; title: string | null; projects: Project[]; people: Person[]; tasks: KpiTask[]; extended: Extensions; days: number; onDrill: Drill }) {
   const [metricKey, setMetricKey] = useState('achievement');
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: 'achievement', desc: true });
-  const metrics = METRICS.filter((m) => !m.techOnly || type === 'turnaround');
+  // built once per section, so the trends below don't recompute on every render
+  const cols = useMemo<Col[]>(() => [
+    { key: 'assigned', label: 'Assigned', value: (s) => s.core.assigned, format: 'count' },
+    { key: 'completed', label: 'Done', value: (s) => s.core.completed, format: 'count' },
+    { key: 'pending', label: 'Pending', value: (s) => s.core.pending, format: 'count' },
+    { key: 'overdue', label: 'Overdue', value: (s) => s.core.overdue, format: 'count', compare: true, lowIsGood: true },
+    { key: 'completion', label: 'Completion', value: (s) => s.core.completionRate, format: 'pct', compare: true },
+    { key: 'onTime', label: techLabel('On time', type), value: (s) => rate(s.core.onTime.hit, s.core.onTime.of), format: 'pct', compare: true },
+    { key: 'extended', label: '⏱ Ext.', value: (s) => s.core.onTime.extended, format: 'count' },
+    { key: 'achievement', label: 'Achievement', value: (s) => rate(s.core.achievement.hit, s.core.achievement.of), format: 'pct', compare: true },
+    ...(type === 'turnaround' ? [{ key: 'median', label: 'Median', value: (s: Both) => s.core.medianDays, format: 'days' as const, compare: true, lowIsGood: true }] : []),
+    { key: 'allCompleted', label: 'Done', value: (s) => s.all.completed, format: 'count', all: true },
+    { key: 'allOnTime', label: techLabel('On time', type), value: (s) => rate(s.all.onTime.hit, s.all.onTime.of), format: 'pct', all: true, compare: true },
+    { key: 'selfCreated', label: 'Self-made', value: (s) => s.all.selfCreated, format: 'count', all: true },
+  ], [type]);
+  const metrics = cols.filter((c) => c.compare);
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0];
 
   const { rows, team, ctx, mineOf, teamTasks, wait } = useMemo(() => {
@@ -505,20 +510,6 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
   // the team's figure; for overdue, the average per person
   const teamValue = metric.key === 'overdue' ? team.core.overdue / rows.length : metric.value(team);
 
-  const cols: Col[] = [
-    { key: 'assigned', label: 'Assigned', value: (s) => s.core.assigned, format: 'count' },
-    { key: 'completed', label: 'Done', value: (s) => s.core.completed, format: 'count' },
-    { key: 'pending', label: 'Pending', value: (s) => s.core.pending, format: 'count' },
-    { key: 'overdue', label: 'Overdue', value: (s) => s.core.overdue, format: 'count' },
-    { key: 'completion', label: 'Completion', value: (s) => s.core.completionRate, format: 'pct' },
-    { key: 'onTime', label: techLabel('On time', type), value: (s) => rate(s.core.onTime.hit, s.core.onTime.of), format: 'pct' },
-    { key: 'extended', label: '⏱ Ext.', value: (s) => s.core.onTime.extended, format: 'count' },
-    { key: 'achievement', label: 'Achievement', value: (s) => rate(s.core.achievement.hit, s.core.achievement.of), format: 'pct' },
-    ...(type === 'turnaround' ? [{ key: 'median', label: 'Median', value: (s: Both) => s.core.medianDays, format: 'days' as const }] : []),
-    { key: 'allCompleted', label: 'Done', value: (s) => s.all.completed, format: 'count', all: true },
-    { key: 'allOnTime', label: techLabel('On time', type), value: (s) => rate(s.all.onTime.hit, s.all.onTime.of), format: 'pct', all: true },
-    { key: 'selfCreated', label: 'Self-made', value: (s) => s.all.selfCreated, format: 'count', all: true },
-  ];
   const coreCount = cols.filter((c) => !c.all).length;
   const sortCol = cols.find((c) => c.key === sort.key);
   const tableRows = [...rows].sort((a, b) => {
@@ -572,7 +563,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
         <label className="perf-muted" htmlFor={`perf-metric-${type}`}>Compare by</label>
         <select id={`perf-metric-${type}`} className="modal-input contacts-filter" value={metric.key} onChange={(e) => setMetricKey(e.target.value)}>
           {metrics.map((m) => (
-            <option key={m.key} value={m.key}>{techLabel(m.label, type)}</option>
+            <option key={m.key} value={m.key}>{compareLabel(m)}</option>
           ))}
         </select>
         {teamValue !== null && (
@@ -596,7 +587,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
         })}
       </div>
 
-      <h4 className="perf-block-title" style={{ marginTop: 24 }}>Over {WEEKS} weeks: {techLabel(metric.label, type)}</h4>
+      <h4 className="perf-block-title" style={{ marginTop: 24 }}>Over {WEEKS} weeks: {compareLabel(metric)}</h4>
       {onOverlay.length ? (
         <TrendChart
           format={metric.format}

@@ -85,7 +85,8 @@ const median = (xs: number[]) => {
 export const rate = (hit: number, of: number) => (of ? hit / of : null);
 
 function stats(tasks: KpiTask[], ctx: KpiContext, core: boolean): KpiStats {
-  const s: KpiStats = { assigned: 0, completed: 0, pending: 0, overdue: 0, completionRate: null, onTime: { hit: 0, of: 0, extended: 0 }, achievement: { hit: 0, of: 0 }, medianDays: null, selfCreated: 0, tickets: 0, ids: Object.fromEntries(BUCKETS.map((b) => [b, []])) as unknown as KpiStats['ids'] };
+  // each task goes into the lists it counts towards; the numbers are their lengths
+  const ids = Object.fromEntries(BUCKETS.map((b) => [b, []])) as unknown as KpiStats['ids'];
   const now = ctx.now;
   const from = new Date(now.getTime() - ctx.days * DAY);
   const inWindow = (d: Date) => d > from && d <= now;
@@ -106,50 +107,33 @@ function stats(tasks: KpiTask[], ctx: KpiContext, core: boolean): KpiStats {
     const done = doneAt ? doneAt <= now : t.completed;
 
     if (inWindow(start)) {
-      s.assigned++;
-      s.ids.assigned.push(t.id);
-      if (done) {
-        s.completed++;
-        s.ids.completed.push(t.id);
-      }
-      if (t.created_by === t.assignee_id) {
-        s.selfCreated++;
-        s.ids.selfCreated.push(t.id);
-      }
-      if (t.ticket_by) {
-        s.tickets++;
-        s.ids.tickets.push(t.id);
-      }
+      ids.assigned.push(t.id);
+      if (done) ids.completed.push(t.id);
+      if (t.created_by === t.assignee_id) ids.selfCreated.push(t.id);
+      if (t.ticket_by) ids.tickets.push(t.id);
     }
-    if (!done) {
-      const late = !!deadline && deadline <= now;
-      s[late ? 'overdue' : 'pending']++;
-      s.ids[late ? 'overdue' : 'pending'].push(t.id);
-    }
+    if (!done) ids[deadline && deadline <= now ? 'overdue' : 'pending'].push(t.id);
     if (done && doneAt && inWindow(doneAt)) {
-      if (deadline) {
-        s.onTime.of++;
-        if (doneAt <= deadline) {
-          s.onTime.hit++;
-          s.ids.onTime.push(t.id);
-          if (ctx.extended.has(t.id)) {
-            s.onTime.extended++;
-            s.ids.extended.push(t.id);
-          }
-        } else s.ids.late.push(t.id);
-      }
+      if (deadline) ids[doneAt <= deadline ? 'onTime' : 'late'].push(t.id);
+      if (deadline && doneAt <= deadline && ctx.extended.has(t.id)) ids.extended.push(t.id);
       if (turnaround) turnarounds.push(workingDaysBetween(start, doneAt));
     }
-    if (deadline && inWindow(deadline)) {
-      s.achievement.of++;
-      const hit = done && (!doneAt || doneAt <= deadline);
-      if (hit) s.achievement.hit++;
-      s.ids[hit ? 'achieved' : 'missed'].push(t.id);
-    }
+    if (deadline && inWindow(deadline)) ids[done && (!doneAt || doneAt <= deadline) ? 'achieved' : 'missed'].push(t.id);
   }
-  s.completionRate = rate(s.completed, s.assigned);
-  s.medianDays = median(turnarounds);
-  return s;
+  const n = (b: KpiBucket) => ids[b].length;
+  return {
+    assigned: n('assigned'),
+    completed: n('completed'),
+    pending: n('pending'),
+    overdue: n('overdue'),
+    completionRate: rate(n('completed'), n('assigned')),
+    onTime: { hit: n('onTime'), of: n('onTime') + n('late'), extended: n('extended') },
+    achievement: { hit: n('achieved'), of: n('achieved') + n('missed') },
+    medianDays: median(turnarounds),
+    selfCreated: n('selfCreated'),
+    tickets: n('tickets'),
+    ids,
+  };
 }
 
 export function computeKpi(tasks: KpiTask[], ctx: KpiContext): { core: KpiStats; all: KpiStats } {
