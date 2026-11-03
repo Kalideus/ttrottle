@@ -1,6 +1,6 @@
 // Run: node lib/kpi.check.ts
 import assert from 'node:assert/strict';
-import { computeKpi, ticketWait, workingDaysBetween, addWorkingDays, type KpiTask } from './kpi.ts';
+import { computeKpi, ticketWait, weeklyTrend, workingDaysBetween, addWorkingDays, type KpiTask } from './kpi.ts';
 
 // local time, like the app; November 2026: Fri 30 Oct, Sat 31, Sun 1 Nov, Mon 2, Tue 3, Wed 4
 const at = (month: number, day: number, hour = 12) => new Date(2026, month - 1, day, hour);
@@ -71,5 +71,11 @@ const wait = ticketWait([
   task({ project_id: 'cx', ticket_by: 'x', created_at: iso(10, 1), assignee_id: null }), // not Tech
 ], ctx);
 assert.deepEqual(wait, { medianDays: 1, handedOut: 1, unassigned: 1, oldestDays: 1 });
+
+// trend: one figure per week, oldest first; the last is today's
+const overdueByWeek = weeklyTrend(cx, ctx, (s) => s.core.overdue, 3);
+assert.equal(overdueByWeek.length, 3);
+assert.equal(overdueByWeek[2], core.overdue);
+assert.equal(overdueByWeek[1], before.overdue);
 
 console.log('kpi ok');

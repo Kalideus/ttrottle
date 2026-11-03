@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPerformanceData, getMembersByProject, type Project, type ProjectMember } from '@/lib/supabase/queries';
-import { computeKpi, rate, type KpiStats, type KpiTask } from '@/lib/kpi';
+import { computeKpi, rate, weeklyTrend, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
   supabase: SupabaseClient;
@@ -155,6 +155,8 @@ function MemberView({ userId, projects, tasks, extended, days }: { userId: strin
         const ids = new Set(ps.map((p) => p.id));
         const team = inScope.filter((t) => ids.has(t.project_id));
         const me = computeKpi(team.filter(isMine), ctx);
+        const achieved = (s: Both) => rate(s.core.achievement.hit, s.core.achievement.of);
+        const myTrend = weeklyTrend(team.filter(isMine), ctx, achieved, WEEKS);
         const all = computeKpi(team, ctx);
         const rows = ps
           .map((p) => {
@@ -172,7 +174,8 @@ function MemberView({ userId, projects, tasks, extended, days }: { userId: strin
               <span className="perf-muted">
                 {me.core.achievement.of ? `${me.core.achievement.hit} of ${me.core.achievement.of}` : 'nothing due yet'}
               </span>
-              <span className="perf-headline-team">Team {pct(rate(all.core.achievement.hit, all.core.achievement.of))}</span>
+              <Sparkline values={myTrend} format="pct" label="Your KPI achievement, week by week" />
+              <span className="perf-headline-team">Team {pct(achieved(all))}</span>
             </div>
 
             <StatBlock title="🎯 Core KPI" s={me.core} type={type} />
@@ -331,16 +334,38 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
   const metrics = METRICS.filter((m) => !m.techOnly || type === 'turnaround');
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0];
 
-  const { rows, team } = useMemo(() => {
+  const { rows, team, ctx, mineOf, teamTasks } = useMemo(() => {
     const ids = new Set(projects.map((p) => p.id));
     const ctx = { now: new Date(), days, extended, turnaround: new Set(projects.filter((p) => kpiType(p) === 'turnaround').map((p) => p.id)) };
     const scoped = tasks.filter((t) => ids.has(t.project_id));
     const who = new Set(people.map((p) => p.id));
+    const mineOf = (id: string) => scoped.filter((t) => t.assignee_id === id);
+    const teamTasks = scoped.filter((t) => t.assignee_id && who.has(t.assignee_id));
     return {
-      rows: people.map((person) => ({ person, s: computeKpi(scoped.filter((t) => t.assignee_id === person.id), ctx) })),
-      team: computeKpi(scoped.filter((t) => t.assignee_id && who.has(t.assignee_id)), ctx),
+      rows: people.map((person) => ({ person, s: computeKpi(mineOf(person.id), ctx) })),
+      team: computeKpi(teamTasks, ctx),
+      ctx,
+      mineOf,
+      teamTasks,
     };
   }, [projects, people, tasks, extended, days]);
+
+  // the chosen metric week by week, per person and for the team (overdue: the average per person)
+  const trends = useMemo(() => {
+    const byPerson = new Map(people.map((p) => [p.id, weeklyTrend(mineOf(p.id), ctx, metric.value, WEEKS)]));
+    const perHead = (s: Both) => (metric.key === 'overdue' ? s.core.overdue / Math.max(1, people.length) : metric.value(s));
+    return { byPerson, team: weeklyTrend(teamTasks, ctx, perHead, WEEKS) };
+  }, [people, mineOf, teamTasks, ctx, metric]);
+
+  // people on the overlay chart, each keeping their colour until taken off (max 5)
+  const [overlay, setOverlay] = useState<{ id: string; slot: number }[]>([]);
+  const onOverlay = overlay.filter((o) => people.some((p) => p.id === o.id));
+  const toggleOverlay = (id: string) =>
+    setOverlay((o) => {
+      if (o.some((x) => x.id === id)) return o.filter((x) => x.id !== id);
+      const slot = SERIES.findIndex((_, i) => !o.some((x) => x.slot === i));
+      return slot < 0 ? o : [...o, { id, slot }];
+    });
 
   // bars: best first (fewest for overdue and time), people with nothing to measure at the bottom
   const ranked = [...rows].sort((a, b) => {
@@ -412,11 +437,27 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
         })}
       </div>
 
+      <h4 className="perf-block-title" style={{ marginTop: 24 }}>Over {WEEKS} weeks: {techLabel(metric.label, type)}</h4>
+      {onOverlay.length ? (
+        <TrendChart
+          format={metric.format}
+          team={trends.team}
+          lines={onOverlay.map((o) => ({
+            id: o.id,
+            name: people.find((p) => p.id === o.id)?.name ?? '',
+            color: SERIES[o.slot],
+            values: trends.byPerson.get(o.id) ?? [],
+          }))}
+        />
+      ) : (
+        <p className="perf-muted" style={{ margin: 0 }}>Click someone’s trend in the table to compare them over time (up to {SERIES.length}).</p>
+      )}
+
       <div className="perf-table-wrap">
         <table className="perf-table">
           <thead>
             <tr className="perf-table-groups">
-              <th />
+              <th colSpan={2} />
               <th colSpan={coreCount}>🎯 Core KPI</th>
               <th colSpan={cols.length - coreCount} className="perf-group-start">All work</th>
             </tr>
@@ -424,6 +465,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
               <th>
                 <button className="perf-sort" onClick={() => sortBy('name')}>Person{arrow('name')}</button>
               </th>
+              <th>Trend</th>
               {cols.map((c) => (
                 <th key={c.key} className={edge(c)} aria-sort={sort.key === c.key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
                   <button className="perf-sort" onClick={() => sortBy(c.key)}>{c.label}{arrow(c.key)}</button>
@@ -435,6 +477,24 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
             {tableRows.map(({ person, s }) => (
               <tr key={person.id}>
                 <td>{person.name}</td>
+                <td>
+                  {(() => {
+                    const o = onOverlay.find((x) => x.id === person.id);
+                    const full = !o && onOverlay.length >= SERIES.length;
+                    return (
+                      <button
+                        className={`perf-spark-btn${o ? ' is-on' : ''}`}
+                        style={o ? { borderColor: SERIES[o.slot] } : undefined}
+                        aria-pressed={!!o}
+                        disabled={full}
+                        title={full ? `Up to ${SERIES.length} people at once` : o ? 'Take off the chart' : 'Add to the chart above'}
+                        onClick={() => toggleOverlay(person.id)}
+                      >
+                        <Sparkline values={trends.byPerson.get(person.id) ?? []} format={metric.format} label={`${person.name}, ${metric.label}`} />
+                      </button>
+                    );
+                  })()}
+                </td>
                 {cols.map((c) => (
                   <td key={c.key} className={edge(c)}>{show(c.value(s), c.format)}</td>
                 ))}
@@ -444,6 +504,9 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
           <tfoot>
             <tr>
               <td>Team</td>
+              <td>
+                <Sparkline values={trends.team} format={metric.format} label={`Team, ${metric.label}`} />
+              </td>
               {cols.map((c) => (
                 <td key={c.key} className={edge(c)}>{show(c.value(team), c.format)}</td>
               ))}
@@ -452,5 +515,109 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
         </table>
       </div>
     </section>
+  );
+}
+
+// line colours for the trend overlay, in a fixed order; checked for colour-blind separation on the white surface.
+// Three are pale on white, so each line is always named in the legend and the hover readout.
+const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+const WEEKS = 12;
+const weekLabel = (i: number) => (i === WEEKS - 1 ? 'This week' : `${WEEKS - 1 - i} wk ago`);
+
+// segments of a line, broken where a week has nothing to measure
+function linePath(values: (number | null)[], x: (i: number) => number, y: (v: number) => number) {
+  let d = '';
+  let pen = false;
+  values.forEach((v, i) => {
+    if (v === null) return void (pen = false);
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+    pen = true;
+  });
+  return d;
+}
+
+function Sparkline({ values, format, label }: { values: (number | null)[]; format: Format; label: string }) {
+  const known = values.filter((v): v is number => v !== null);
+  const W = 84;
+  const H = 22;
+  if (known.length < 2) return <span className="perf-muted" title={`${label}: not enough weeks yet`}>—</span>;
+  const top = format === 'pct' ? 1 : Math.max(1e-9, ...known);
+  const x = (i: number) => 2 + (i / (values.length - 1)) * (W - 4);
+  const y = (v: number) => H - 2 - (v / top) * (H - 4);
+  const last = values.length - 1;
+  return (
+    <svg className="perf-spark" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}: ${show(known[0], format)} to ${show(known[known.length - 1], format)} over ${WEEKS} weeks`}>
+      <title>{values.map((v, i) => `${weekLabel(i)}: ${show(v, format)}`).join('\n')}</title>
+      <path d={linePath(values, x, y)} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {values[last] !== null && <circle cx={x(last)} cy={y(values[last] as number)} r="2.5" fill="var(--accent)" />}
+    </svg>
+  );
+}
+
+function TrendChart({ lines, team, format }: { lines: { id: string; name: string; color: string; values: (number | null)[] }[]; team: (number | null)[]; format: Format }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const W = 640;
+  const H = 200;
+  const pad = { l: 44, r: 12, t: 10, b: 24 };
+  const all = [...team, ...lines.flatMap((l) => l.values)].filter((v): v is number => v !== null);
+  const top = format === 'pct' ? 1 : Math.max(1e-9, ...all) * 1.1;
+  const x = (i: number) => pad.l + (i / (WEEKS - 1)) * (W - pad.l - pad.r);
+  const y = (v: number) => pad.t + (1 - v / top) * (H - pad.t - pad.b);
+  const ticks = [0, 0.5, 1].map((f) => f * top);
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * W;
+    setHover(Math.max(0, Math.min(WEEKS - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (WEEKS - 1)))));
+  };
+
+  return (
+    <div className="perf-trend">
+      <svg viewBox={`0 0 ${W} ${H}`} className="perf-trend-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Weekly trend for the selected people">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeWidth="1" />
+            <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" className="perf-axis">{show(t, format)}</text>
+          </g>
+        ))}
+        <text x={x(0)} y={H - 6} className="perf-axis">{weekLabel(0)}</text>
+        <text x={x(WEEKS - 1)} y={H - 6} textAnchor="end" className="perf-axis">{weekLabel(WEEKS - 1)}</text>
+        <path d={linePath(team, x, y)} fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="5 4" />
+        {lines.map((l) => (
+          <path key={l.id} d={linePath(l.values, x, y)} fill="none" stroke={l.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        ))}
+        {hover !== null && (
+          <g>
+            <line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={H - pad.b} stroke="var(--text-muted)" strokeWidth="1" />
+            {lines.map((l) =>
+              l.values[hover] === null ? null : <circle key={l.id} cx={x(hover)} cy={y(l.values[hover] as number)} r="4" fill={l.color} stroke="var(--surface)" strokeWidth="2" />
+            )}
+          </g>
+        )}
+      </svg>
+      {hover !== null && (
+        <div className="perf-trend-tip" style={{ left: `${Math.min(82, Math.max(18, (x(hover) / W) * 100))}%` }}>
+          <strong>{weekLabel(hover)}</strong>
+          {lines.map((l) => (
+            <span key={l.id}>
+              <i style={{ background: l.color }} /> {l.name} {show(l.values[hover], format)}
+            </span>
+          ))}
+          <span>
+            <i className="is-team" /> Team {show(team[hover], format)}
+          </span>
+        </div>
+      )}
+      <div className="perf-legend">
+        {lines.map((l) => (
+          <span key={l.id}>
+            <i style={{ background: l.color }} /> {l.name} <b>{show(l.values[WEEKS - 1], format)}</b>
+          </span>
+        ))}
+        <span>
+          <i className="is-team" /> Team <b>{show(team[WEEKS - 1], format)}</b>
+        </span>
+      </div>
+    </div>
   );
 }

@@ -154,3 +154,9 @@ export function ticketWait(tasks: KpiTask[], ctx: KpiContext) {
   }
   return { medianDays: median(waits), handedOut: waits.length, unassigned, oldestDays };
 }
+
+// One figure per week for the last `weeks` weeks, oldest first: the rolling window as it stood at the end of
+// each week, so the line moves the way the headline number did.
+export function weeklyTrend(tasks: KpiTask[], ctx: KpiContext, value: (s: { core: KpiStats; all: KpiStats }) => number | null, weeks = 12): (number | null)[] {
+  return Array.from({ length: weeks }, (_, i) => value(computeKpi(tasks, { ...ctx, now: new Date(ctx.now.getTime() - (weeks - 1 - i) * 7 * DAY) })));
+}
