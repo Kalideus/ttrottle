@@ -48,6 +48,11 @@ export default function TeamAdminPage() {
       setProfiles(profileRows ?? []);
       setProjects(projectRows ?? []);
       setMembers(memberRows ?? []);
+    } else if (p?.can_reset_passwords) {
+      // reset links only: the people in their projects (the members they can see), never a super admin
+      const [{ data: profileRows }, { data: memberRows }] = await Promise.all([getAllProfilesAdmin(supabase), getAllProjectMembersAdmin(supabase)]);
+      const mates = new Set((memberRows ?? []).map((m) => m.profile_id));
+      setProfiles((profileRows ?? []).filter((r: Profile) => mates.has(r.id) && !r.is_super_admin));
     }
     setLoading(false);
   };
@@ -97,6 +102,55 @@ export default function TeamAdminPage() {
   const archivedProjects = projects.filter((p) => p.archived);
 
   if (loading) return <Protected><div className="mx-auto max-w-5xl px-6 py-8 text-sm text-slate-600">Loading…</div></Protected>;
+
+  // given "can send reset links" (046) but not a super admin: just that, for the people in their projects
+  if (!me?.is_super_admin && me?.can_reset_passwords) {
+    return (
+      <Protected>
+        <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
+          <Link href="/app" className="inline-flex text-sm font-medium text-slate-600 hover:text-slate-900">
+            ← Back to app
+          </Link>
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-xl font-semibold text-slate-900">Reset links</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              For someone in your projects who can&rsquo;t sign in. Copy their link and send it only to them: opening it signs them in
+              once, to choose a new password. Each link works once.
+            </p>
+            {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+            <div className="mt-4 max-h-[75vh] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_#e2e8f0]">
+                  <tr className="text-left text-slate-500">
+                    <th className="py-2 pr-4">Name</th>
+                    <th className="py-2 pr-4">Email</th>
+                    <th className="py-2 pr-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((p) => (
+                    <tr key={p.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-4">{p.name}</td>
+                      <td className="py-2 pr-4 text-slate-500">{p.email}</td>
+                      <td className="py-2 pr-4">
+                        <button
+                          onClick={() => void copyResetLink(p)}
+                          className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        >
+                          {copiedFor === p.id ? 'Copied' : 'Copy reset link'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!profiles.length && <p className="py-4 text-sm text-slate-500">Nobody in your projects yet.</p>}
+            </div>
+          </section>
+        </div>
+      </Protected>
+    );
+  }
 
   if (!me?.is_super_admin) {
     return (
@@ -148,14 +202,16 @@ export default function TeamAdminPage() {
             who already has an account into several projects at once, with no invite email or link. Click a name
             to edit it; initials update to match.
           </p>
-          <div className="mt-4 overflow-x-auto">
+          {/* scrolls inside itself so the headings can stay pinned while you move down the list */}
+          <div className="mt-4 max-h-[75vh] overflow-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_#e2e8f0]">
                 <tr className="border-b border-slate-200 text-left text-slate-500">
                   <th className="py-2 pr-4">Name</th>
                   <th className="py-2 pr-4">Email</th>
                   <th className="py-2 pr-4">Can create projects</th>
                   <th className="py-2 pr-4" title="Sees the Performance dashboard and 🎯 KPI marks on tasks. Super admins always do.">Sees performance</th>
+                  <th className="py-2 pr-4" title="Can copy a password-reset link for people in their projects (not super admins), from this page. Super admins always can.">Sends reset links</th>
                   <th className="py-2 pr-4">Super admin</th>
                   <th className="py-2 pr-4">Projects</th>
                 </tr>
@@ -221,6 +277,16 @@ export default function TeamAdminPage() {
                     <td className="py-2 pr-4">
                       <input
                         type="checkbox"
+                        aria-label={`${p.name || p.email} can send reset links`}
+                        // a super admin can anyway
+                        checked={!!p.can_reset_passwords || !!p.is_super_admin}
+                        disabled={!!p.is_super_admin}
+                        onChange={(e) => callAdmin('set-flags', { userId: p.id, can_reset_passwords: e.target.checked })}
+                      />
+                    </td>
+                    <td className="py-2 pr-4">
+                      <input
+                        type="checkbox"
                         checked={!!p.is_super_admin}
                         onChange={(e) => callAdmin('set-flags', { userId: p.id, is_super_admin: e.target.checked })}
                       />
@@ -246,7 +312,7 @@ export default function TeamAdminPage() {
                   </tr>
                   {open && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={6} className="px-3 pb-4 pt-1">
+                      <td colSpan={7} className="px-3 pb-4 pt-1">
                         <div className="flex flex-wrap gap-x-5 gap-y-2">
                           {notIn.map((pr) => (
                             <label key={pr.id} className="inline-flex items-center gap-2">

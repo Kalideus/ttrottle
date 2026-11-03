@@ -14,6 +14,8 @@ interface TopBarProps {
   userName?: string;
   userEmail?: string;
   isSuperAdmin?: boolean;
+  // can copy password-reset links for people in their projects (migration 046)
+  canResetPasswords?: boolean;
   onCreateTask: () => void;
   onOpenProfile: () => void;
   onChangePassword: () => void;
@@ -31,6 +33,7 @@ export function TopBar({
   userName,
   userEmail,
   isSuperAdmin = false,
+  canResetPasswords = false,
   onCreateTask,
   onOpenProfile,
   onChangePassword,
@@ -111,6 +114,7 @@ export function TopBar({
                 {menuItem('Profile', onOpenProfile)}
                 {menuItem('Change password', onChangePassword)}
                 {isSuperAdmin && menuItem('Team & permissions', () => (window.location.href = '/admin/team'))}
+                {!isSuperAdmin && canResetPasswords && menuItem('Reset links', () => (window.location.href = '/admin/team'))}
                 {isSuperAdmin && menuItem('Deleted tasks', () => (window.location.href = '/admin/deleted-tasks'))}
                 <div className="topbar-menu-sep" />
                 {menuItem('Log out', onLogout)}

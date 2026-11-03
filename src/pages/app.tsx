@@ -1600,6 +1600,7 @@ export default function AppPage() {
         avatarColor={currentProfile?.avatar_color ?? 'var(--accent)'}
         avatarUrl={currentProfile?.avatar_url}
         isSuperAdmin={!!currentProfile?.is_super_admin}
+        canResetPasswords={!!currentProfile?.can_reset_passwords}
         onOpenProfile={() => setShowProfile(true)}
         onChangePassword={handleChangePassword}
         onLogout={handleLogout}

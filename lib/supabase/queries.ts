@@ -98,6 +98,8 @@ export type Profile = {
   is_super_admin?: boolean
   // sees the Performance dashboard and 🎯 marks (migration 045); super admins always do
   can_see_performance?: boolean
+  // can copy password-reset links for people in their projects (migration 046)
+  can_reset_passwords?: boolean
 }
 
 export type Notification = {
