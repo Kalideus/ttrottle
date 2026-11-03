@@ -2572,3 +2572,17 @@ button.project-members:hover { background: var(--surface-alt); }
   .perf-compare-head .contacts-filter { flex: 1; }
   .perf-trend-tip { top: auto; bottom: 100%; }
 }
+.perf-overview { margin-bottom: 28px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-alt); }
+.perf-overview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.perf-split { display: flex; gap: 2px; height: 16px; min-width: 6px; }
+.perf-overview > .perf-split { height: 24px; }
+.perf-split-part { min-width: 4px; height: 100%; padding: 0; border: none; cursor: pointer; }
+.perf-split-part:first-child { border-radius: 4px 0 0 4px; }
+.perf-split-part:last-child { border-radius: 0 4px 4px 0; }
+.perf-split-part:only-child { border-radius: 4px; }
+.perf-split-part:hover, .perf-split-part:focus-visible { filter: brightness(0.9); outline: 2px solid var(--text); outline-offset: 1px; }
+.perf-split-legend { margin-top: 8px; }
+.perf-split-legend .perf-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.perf-split-legend .perf-link:disabled { opacity: 0.45; cursor: default; }
+.perf-split-legend i { width: 10px; height: 10px; border-radius: 2px; }
+.perf-bar-row > .perf-split { align-self: center; }

@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { getPerformanceData, getMembersByProject, type Extension, type Project, type ProjectMember } from '@/lib/supabase/queries';
-import { computeKpi, rate, ticketWait, weeklyTrend, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
+import { computeKpi, rate, ticketWait, weeklyTrend, workSplit, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
   supabase: SupabaseClient;
@@ -489,6 +489,13 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
     return { byPerson, team: weeklyTrend(teamTasks, ctx, perHead, WEEKS) };
   }, [people, mineOf, teamTasks, ctx, metric]);
 
+  // the overview's Core / All work switch: All work until there's any 🎯 work to show
+  const [tierPick, setTier] = useState<'core' | 'all' | null>(null);
+  const coreEmpty = !team.core.assigned && !team.core.pending && !team.core.overdue && !team.core.onTime.of;
+  const tier = tierPick ?? (coreEmpty ? 'all' : 'core');
+  const ts = team[tier];
+  const teamDrill = (label: string, ids: string[]) => () => onDrill({ title: `Team · ${tier === 'core' ? '🎯' : 'All work'} ${label}`, ids, s: ts });
+
   // people on the overlay chart, each keeping their colour until taken off (max 5)
   const [overlay, setOverlay] = useState<{ id: string; slot: number }[]>([]);
   const onOverlay = overlay.filter((o) => people.some((p) => p.id === o.id));
@@ -547,6 +554,76 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
     <section className="perf-section perf-team-section">
       {title && <h3 className="perf-section-title">{title}</h3>}
 
+      <div className="perf-overview">
+        <div className="perf-overview-head">
+          <h4 className="perf-block-title" style={{ margin: 0 }}>Team overview</h4>
+          <div className="perf-segment" role="group" aria-label="Which work">
+            {(['core', 'all'] as const).map((t) => (
+              <button key={t} aria-pressed={tier === t} className={tier === t ? 'active' : ''} onClick={() => setTier(t)}>
+                {t === 'core' ? '🎯 Core KPI' : 'All work'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {!ts.assigned && !ts.pending && !ts.overdue && !ts.onTime.of ? (
+          <p className="perf-muted" style={{ margin: 0 }}>
+            {tier === 'core' ? 'No 🎯 tasks yet. Numbers appear here as managers hand out work.' : 'No work given out in this period.'}
+          </p>
+        ) : (
+          <>
+            <div className="perf-tiles">
+              {tier === 'core' && (
+                <Tile
+                  label="KPI achievement"
+                  value={pct(rate(ts.achievement.hit, ts.achievement.of))}
+                  sub={ts.achievement.of ? `${ts.achievement.hit} of ${ts.achievement.of}` : 'nothing due yet'}
+                  hint="Of the 🎯 tasks whose deadline fell in this period, how many were done by it"
+                  onClick={teamDrill('due in this period', [...ts.ids.missed, ...ts.ids.achieved])}
+                />
+              )}
+              <Tile
+                label={techLabel('On time', type)}
+                value={pct(rate(ts.onTime.hit, ts.onTime.of))}
+                sub={ts.onTime.extended ? `⏱ ${ts.onTime.extended} extended` : undefined}
+                hint="Of the tasks finished in this period, how many by their deadline"
+                onClick={teamDrill(techLabel('on time', type), [...ts.ids.late, ...ts.ids.onTime])}
+              />
+              <Tile label="Completion" value={pct(ts.completionRate)} hint="Of the tasks given out in this period, how many are done" onClick={teamDrill('given out', ts.ids.assigned)} />
+              <Tile label="Overdue now" value={ts.overdue} warn={ts.overdue > 0} hint="Open and past the deadline" onClick={teamDrill('overdue', ts.ids.overdue)} />
+              <Tile label="Pending" value={ts.pending} hint="Open, not yet past the deadline" onClick={teamDrill('pending', ts.ids.pending)} />
+              <Tile label="Given out" value={ts.assigned} hint="Tasks given to these people in this period" onClick={teamDrill('given out', ts.ids.assigned)} />
+            </div>
+
+            <p className="perf-muted" style={{ margin: '16px 0 6px' }}>Where the {ts.assigned} tasks given out in the last {days} days stand</p>
+            <SplitBar split={workSplit(ts)} scale={ts.assigned} type={type} onPick={(part, ids) => teamDrill(part, ids)()} />
+            <SplitLegend split={workSplit(ts)} type={type} onPick={(part, ids) => teamDrill(part, ids)()} />
+
+            <h4 className="perf-block-title" style={{ marginTop: 24 }}>Each person</h4>
+            <div className="perf-bars" role="list">
+              {[...rows]
+                .sort((a, b) => b.s[tier].assigned - a.s[tier].assigned || a.person.name.localeCompare(b.person.name))
+                .map(({ person, s }) => (
+                  <div key={person.id} className="perf-bar-row" role="listitem">
+                    <span className="perf-bar-name">{person.name}</span>
+                    {s[tier].assigned ? (
+                      <SplitBar
+                        split={workSplit(s[tier])}
+                        scale={Math.max(...rows.map((r) => r.s[tier].assigned))}
+                        type={type}
+                        who={person.name}
+                        onPick={(part, ids) => onDrill({ title: `${person.name} · ${part}`, ids, s: s[tier] })}
+                      />
+                    ) : (
+                      <span className="perf-muted">nothing given out</span>
+                    )}
+                    <span className="perf-bar-value">{s[tier].assigned || ''}</span>
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {type === 'turnaround' && (
         <div className="perf-block" style={{ marginTop: 0, marginBottom: 20 }}>
           <h4 className="perf-block-title">Tickets waiting to be handed out</h4>
@@ -571,6 +648,9 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
         )}
       </div>
 
+      {ranked.every(({ s }) => metric.value(s) === null) ? (
+        <p className="perf-muted" style={{ margin: 0 }}>Nobody has a figure for this yet.</p>
+      ) : (
       <div className="perf-bars" role="list">
         {ranked.map(({ person, s }) => {
           const v = metric.value(s);
@@ -586,6 +666,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
           );
         })}
       </div>
+      )}
 
       <h4 className="perf-block-title" style={{ marginTop: 24 }}>Over {WEEKS} weeks: {compareLabel(metric)}</h4>
       {onOverlay.length ? (
@@ -769,6 +850,47 @@ function TrendChart({ lines, team, format }: { lines: { id: string; name: string
           <i className="is-team" /> Team <b>{show(team[WEEKS - 1], format)}</b>
         </span>
       </div>
+    </div>
+  );
+}
+
+type Split = ReturnType<typeof workSplit>;
+// the parts of the work split, in bar order; status colours, each always shown with its icon and name
+const SPLIT: { key: keyof Split; label: (t: KpiType) => string; icon: string; color: string }[] = [
+  { key: 'onTime', label: (t) => (t === 'turnaround' ? 'Done within target' : 'Done on time'), icon: '✓', color: '#0ca30c' },
+  { key: 'done', label: () => 'Done, no deadline', icon: '•', color: '#8c8c86' },
+  { key: 'late', label: (t) => (t === 'turnaround' ? 'Done over target' : 'Done late'), icon: '⚠', color: '#fab219' },
+  { key: 'overdue', label: () => 'Overdue', icon: '!', color: '#d03b3b' },
+  { key: 'open', label: () => 'Still open', icon: '○', color: '#c9d3e3' },
+];
+
+// one bar, its length the number of tasks against `scale`, split into the parts above; a part opens its tasks
+function SplitBar({ split, scale, type, who, onPick }: { split: Split; scale: number; type: KpiType; who?: string; onPick: (part: string, ids: string[]) => void }) {
+  const total = SPLIT.reduce((n, p) => n + split[p.key].length, 0);
+  return (
+    <span className="perf-split" style={{ width: `${scale ? (total / scale) * 100 : 0}%` }}>
+      {SPLIT.filter((p) => split[p.key].length).map((p) => (
+        <button
+          key={p.key}
+          className="perf-split-part"
+          style={{ flexGrow: split[p.key].length, background: p.color }}
+          title={`${who ? `${who}: ` : ''}${p.label(type)} ${split[p.key].length}`}
+          aria-label={`${who ? `${who}, ` : ''}${p.label(type)}: ${split[p.key].length}`}
+          onClick={() => onPick(p.label(type).toLowerCase(), split[p.key])}
+        />
+      ))}
+    </span>
+  );
+}
+
+function SplitLegend({ split, type, onPick }: { split: Split; type: KpiType; onPick: (part: string, ids: string[]) => void }) {
+  return (
+    <div className="perf-legend perf-split-legend">
+      {SPLIT.map((p) => (
+        <button key={p.key} className="perf-link" disabled={!split[p.key].length} onClick={() => onPick(p.label(type).toLowerCase(), split[p.key])}>
+          <i style={{ background: p.color }} /> {p.icon} {p.label(type)} <b>{split[p.key].length}</b>
+        </button>
+      ))}
     </div>
   );
 }

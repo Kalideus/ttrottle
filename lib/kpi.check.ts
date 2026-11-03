@@ -1,6 +1,6 @@
 // Run: node lib/kpi.check.ts
 import assert from 'node:assert/strict';
-import { computeKpi, ticketWait, weeklyTrend, workingDaysBetween, addWorkingDays, type KpiTask } from './kpi.ts';
+import { computeKpi, ticketWait, weeklyTrend, workSplit, workingDaysBetween, addWorkingDays, type KpiTask } from './kpi.ts';
 
 // local time, like the app; November 2026: Fri 30 Oct, Sat 31, Sun 1 Nov, Mon 2, Tue 3, Wed 4
 const at = (month: number, day: number, hour = 12) => new Date(2026, month - 1, day, hour);
@@ -52,6 +52,11 @@ assert.equal(all.assigned, 8);
 assert.equal(all.completed, 5);
 assert.equal(all.selfCreated, 2);
 assert.deepEqual(all.onTime, { hit: 3, of: 4, extended: 1 });
+
+// the work split: every assigned task in exactly one part
+const split = workSplit(core);
+assert.deepEqual(split, { onTime: [cx[0].id, extendedTask.id], done: [cx[5].id], late: [cx[1].id], overdue: [cx[2].id], open: [cx[3].id] });
+assert.equal(Object.values(workSplit(all)).flat().length, all.assigned);
 
 // a week earlier: the 30 Oct task was still open and not yet due, the 1 Nov one not yet late
 const before = computeKpi(cx, { ...ctx, now: at(10, 28, 12) }).core;

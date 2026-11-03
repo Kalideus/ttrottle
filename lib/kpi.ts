@@ -166,3 +166,18 @@ export function ticketWait(tasks: KpiTask[], ctx: KpiContext) {
 export function weeklyTrend(tasks: KpiTask[], ctx: KpiContext, value: (s: { core: KpiStats; all: KpiStats }) => number | null, weeks = 12): (number | null)[] {
   return Array.from({ length: weeks }, (_, i) => value(computeKpi(tasks, { ...ctx, now: new Date(ctx.now.getTime() - (weeks - 1 - i) * 7 * DAY) })));
 }
+
+// Where the tasks given out in the window stand now. Every assigned task lands in exactly one part.
+// A task given out in the window and done is done inside the window too, so its on-time verdict is in ids.
+export function workSplit(s: KpiStats) {
+  const has = (b: KpiBucket) => new Set(s.ids[b]);
+  const [onTime, late, overdue, pending, completed] = (['onTime', 'late', 'overdue', 'pending', 'completed'] as const).map(has);
+  const of = (set: Set<string>) => s.ids.assigned.filter((id) => set.has(id));
+  return {
+    onTime: of(onTime),
+    done: of(completed).filter((id) => !onTime.has(id) && !late.has(id)), // no deadline to judge by
+    late: of(late),
+    overdue: of(overdue),
+    open: of(pending),
+  };
+}
