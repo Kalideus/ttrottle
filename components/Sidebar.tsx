@@ -23,6 +23,8 @@ interface SidebarProps {
   onProjectDuplicate: (projectId: string) => void;
   onProjectRename: (projectId: string, name: string) => void;
   onProjectDelete: (projectId: string) => void;
+  // open Performance on this project (anyone in it)
+  onProjectPerformance: (projectId: string) => void;
   onCreateTask: () => void;
   onCreateTicket: () => void;
   // The same rules the database enforces, so nobody is offered something that will be refused.
@@ -48,6 +50,7 @@ export function Sidebar({
   onProjectDuplicate,
   onProjectRename,
   onProjectDelete,
+  onProjectPerformance,
   onCreateTask,
   onCreateTicket,
   canEditProject,
@@ -183,7 +186,7 @@ export function Sidebar({
                 <span className="sidebar-project-name">{project.name}</span>
               )}
               {project.is_private && <Lock size={12} aria-label="Private" style={{ opacity: 0.6 }} />}
-              {(canEditProject(project.id) || canCreateProjects || (!project.is_private && canDeleteProject(project.id))) && (
+              {(!project.is_private || canEditProject(project.id) || canCreateProjects) && (
               <button
                 type="button"
                 className={`sidebar-project-menu ${menuFor === project.id ? 'is-open' : ''}`}
@@ -203,6 +206,18 @@ export function Sidebar({
                 <>
                   <div className="sidebar-menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
                   <div className="sidebar-menu" ref={flipIfOffscreen} role="menu" onClick={(e) => e.stopPropagation()}>
+                    {!project.is_private && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuFor(null);
+                          onProjectPerformance(project.id);
+                        }}
+                      >
+                        <BarChart3 size={14} /> View performance
+                      </button>
+                    )}
                     {canEditProject(project.id) && (
                       <button
                         type="button"

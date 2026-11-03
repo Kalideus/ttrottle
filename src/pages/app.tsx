@@ -1281,6 +1281,9 @@ export default function AppPage() {
     return null;
   };
 
+  // Performance opened from a project's menu: that project, picked at this moment
+  const [performanceFocus, setPerformanceFocus] = useState<{ projectId: string; at: number } | null>(null);
+
   // Contacts (041): loaded once signed in, so the top search can find them too, and again on opening the page.
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -1709,6 +1712,7 @@ export default function AppPage() {
             // don't carry a task open elsewhere into the inbox's side panel
             // (My tickets uses the selected task as its open ticket, so the same goes for it, both ways)
             if (section === 'inbox' || section === 'tickets' || activeSection === 'tickets') setSelectedTaskId(null);
+            if (section === 'performance') setPerformanceFocus(null);
             setActiveSection(section);
             closeSidebarOnPhone();
           }}
@@ -1719,6 +1723,12 @@ export default function AppPage() {
           canCreateProjects={!!currentProfile?.can_create_projects}
           onProjectDuplicate={(id) => setDuplicateFrom(projects.find((p) => p.id === id) ?? null)}
           onProjectDelete={handleProjectDelete}
+          onProjectPerformance={(projectId) => {
+            setPerformanceFocus({ projectId, at: Date.now() });
+            setSelectedTaskId(null);
+            setActiveSection('performance');
+            closeSidebarOnPhone();
+          }}
           onProjectRename={(projectId, name) => {
             setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, name } : p)));
             // RLS lets only owners/admins rename; a blocked update errors and the resync restores the old name
@@ -1932,7 +1942,17 @@ export default function AppPage() {
 
           {activeSection === 'performance' && (
             <div className="app-content">
-              <Performance supabase={supabase} currentUserId={currentUserId} projects={projects} myRoles={myRoles} isSuperAdmin={!!currentProfile?.is_super_admin} onOpenTask={openInProject} />
+              <Performance
+                // a new key each time a project's "View performance" is picked, so it opens fresh on that project
+                key={performanceFocus?.at}
+                focusProjectId={performanceFocus?.projectId}
+                supabase={supabase}
+                currentUserId={currentUserId}
+                projects={projects}
+                myRoles={myRoles}
+                isSuperAdmin={!!currentProfile?.is_super_admin}
+                onOpenTask={openInProject}
+              />
             </div>
           )}
 

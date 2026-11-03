@@ -15,6 +15,8 @@ interface PerformanceProps {
   myRoles: Map<string, ProjectMember['role']>;
   isSuperAdmin: boolean;
   onOpenTask: (projectId: string, taskId: string) => void;
+  // opened from a project's menu: start on that project
+  focusProjectId?: string;
 }
 
 type KpiType = 'deadline' | 'turnaround';
@@ -26,14 +28,15 @@ const HISTORY_DAYS = 180;
 
 // Performance dashboard: everyone sees their own numbers against their team's; managers also get a Team tab
 // comparing the people in the projects they manage (a super admin: every project).
-export function Performance({ supabase, currentUserId, projects, myRoles, isSuperAdmin, onOpenTask }: PerformanceProps) {
+export function Performance({ supabase, currentUserId, projects, myRoles, isSuperAdmin, onOpenTask, focusProjectId }: PerformanceProps) {
   const managed = projects.filter((p) => isSuperAdmin || ['owner', 'admin'].includes(myRoles.get(p.id) ?? ''));
   const isManager = managed.length > 0;
   // roles can still be loading on first render: until someone picks a tab, a manager lands on Team
-  const [picked, setTab] = useState<'me' | 'team' | null>(null);
+  // from a project's menu: Team if they manage it, otherwise their own numbers in it
+  const [picked, setTab] = useState<'me' | 'team' | null>(focusProjectId ? (managed.some((p) => p.id === focusProjectId) ? 'team' : 'me') : null);
   const tab = picked ?? (isManager ? 'team' : 'me');
   const [days, setDays] = useState<30 | 90>(30);
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useState(focusProjectId ?? '');
 
   const showTeam = isManager && tab === 'team';
   const mine = projects.filter((p) => myRoles.has(p.id));
