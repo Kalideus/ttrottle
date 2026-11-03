@@ -60,6 +60,8 @@ interface TaskDetailPanelProps {
   onCommentLike: (commentId: string) => Promise<void>;
   // owner/admin of the task's project, or super admin: may lock the due date and answer extension requests
   canManage?: boolean;
+  // sees the 🎯 KPI marks (migration 045); the rules on a 🎯 task apply either way
+  showKpi?: boolean;
   onExtensionRequest?: (date: string, reason: string) => void;
   onRequestAnswer?: (commentId: string, approve: boolean) => void;
 }
@@ -111,6 +113,7 @@ export function TaskDetailPanel({
   onCommentDelete,
   onCommentLike,
   canManage = false,
+  showKpi = false,
   onExtensionRequest,
   onRequestAnswer,
 }: TaskDetailPanelProps) {
@@ -317,7 +320,7 @@ export function TaskDetailPanel({
               <button
                 onClick={() => {
                   setMenu(null);
-                  if (kpiReadOnly) return window.alert('This is a KPI task. Only a project manager can delete it.');
+                  if (kpiReadOnly) return window.alert('Only a project manager can delete this task.');
                   // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
                   if (window.confirm(`Delete "${task.name}"? A super admin can restore it for 90 days, then it's removed for good.`)) {
                     onTaskDelete(task.id);
@@ -440,7 +443,7 @@ export function TaskDetailPanel({
                 position: 'relative',
                 cursor: kpiReadOnly ? 'default' : undefined,
               }}
-              title={kpiReadOnly ? 'A KPI task: only a manager can reassign it' : undefined}
+              title={kpiReadOnly ? 'Only a project manager can reassign this task' : undefined}
               onClick={() => !kpiReadOnly && setMenu(menu === 'assignee' ? null : 'assignee')}
             >
               {assignedMember ? (
@@ -489,7 +492,7 @@ export function TaskDetailPanel({
                 Due date
               </span>
               <span style={{ display: 'inline-flex', gap: 6 }}>
-              {canManage ? (
+              {!showKpi ? null : canManage ? (
                 <button
                   type="button"
                   className={`due-date-lock-btn${task.kpi ? ' is-locked' : ''}`}

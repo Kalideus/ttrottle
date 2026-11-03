@@ -139,6 +139,7 @@ export default function TeamAdminPage() {
                   <th className="py-2 pr-4">Name</th>
                   <th className="py-2 pr-4">Email</th>
                   <th className="py-2 pr-4">Can create projects</th>
+                  <th className="py-2 pr-4" title="Sees the Performance dashboard and 🎯 KPI marks on tasks. Super admins always do.">Sees performance</th>
                   <th className="py-2 pr-4">Super admin</th>
                   <th className="py-2 pr-4">Projects</th>
                 </tr>
@@ -185,6 +186,16 @@ export default function TeamAdminPage() {
                     <td className="py-2 pr-4">
                       <input
                         type="checkbox"
+                        aria-label={`${p.name || p.email} sees performance`}
+                        // a super admin sees it anyway
+                        checked={!!p.can_see_performance || !!p.is_super_admin}
+                        disabled={!!p.is_super_admin}
+                        onChange={(e) => callAdmin('set-flags', { userId: p.id, can_see_performance: e.target.checked })}
+                      />
+                    </td>
+                    <td className="py-2 pr-4">
+                      <input
+                        type="checkbox"
                         checked={!!p.is_super_admin}
                         onChange={(e) => callAdmin('set-flags', { userId: p.id, is_super_admin: e.target.checked })}
                       />
@@ -210,7 +221,7 @@ export default function TeamAdminPage() {
                   </tr>
                   {open && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={5} className="px-3 pb-4 pt-1">
+                      <td colSpan={6} className="px-3 pb-4 pt-1">
                         <div className="flex flex-wrap gap-x-5 gap-y-2">
                           {notIn.map((pr) => (
                             <label key={pr.id} className="inline-flex items-center gap-2">

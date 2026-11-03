@@ -1361,6 +1361,9 @@ export default function AppPage() {
   useEffect(() => {
     if (currentUserId) getMyProjectRoles(supabase, currentUserId).then(setMyRoles);
   }, [currentUserId, projects, supabase]);
+  // Performance and the 🎯 marks are switched on per person in /admin/team (migration 045)
+  const canSeePerformance = !!currentProfile?.is_super_admin || !!currentProfile?.can_see_performance;
+
   const canManage = (projectId: string | undefined) => {
     const role = projectId ? myRoles.get(projectId) : undefined;
     return !!currentProfile?.is_super_admin || role === 'owner' || role === 'admin';
@@ -1567,6 +1570,7 @@ export default function AppPage() {
         onCommentDelete={handleCommentDelete}
         onCommentLike={handleCommentLike}
         canManage={canManage(selectedTask.project_id)}
+        showKpi={canSeePerformance}
         onExtensionRequest={handleExtensionRequest}
         onRequestAnswer={handleRequestAnswer}
       />
@@ -1721,6 +1725,7 @@ export default function AppPage() {
           onProjectCreate={handleProjectCreate}
           onProjectImport={openImport}
           canCreateProjects={!!currentProfile?.can_create_projects}
+          showPerformance={canSeePerformance}
           onProjectDuplicate={(id) => setDuplicateFrom(projects.find((p) => p.id === id) ?? null)}
           onProjectDelete={handleProjectDelete}
           onProjectPerformance={(projectId) => {
@@ -1940,7 +1945,7 @@ export default function AppPage() {
             </div>
           )}
 
-          {activeSection === 'performance' && (
+          {activeSection === 'performance' && canSeePerformance && (
             <div className="app-content">
               <Performance
                 // a new key each time a project's "View performance" is picked, so it opens fresh on that project

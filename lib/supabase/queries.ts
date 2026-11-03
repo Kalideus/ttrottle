@@ -96,6 +96,8 @@ export type Profile = {
   avatar_color: string | null
   can_create_projects?: boolean
   is_super_admin?: boolean
+  // sees the Performance dashboard and 🎯 marks (migration 045); super admins always do
+  can_see_performance?: boolean
 }
 
 export type Notification = {

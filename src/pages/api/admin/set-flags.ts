@@ -10,9 +10,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userId = String(req.body?.userId ?? '');
   if (!userId) return res.status(400).json({ error: 'userId is required' });
 
-  const updates: { is_super_admin?: boolean; can_create_projects?: boolean } = {};
+  const updates: { is_super_admin?: boolean; can_create_projects?: boolean; can_see_performance?: boolean } = {};
   if (typeof req.body?.is_super_admin === 'boolean') updates.is_super_admin = req.body.is_super_admin;
   if (typeof req.body?.can_create_projects === 'boolean') updates.can_create_projects = req.body.can_create_projects;
+  if (typeof req.body?.can_see_performance === 'boolean') updates.can_see_performance = req.body.can_see_performance;
   if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
 
   // ponytail: simplest guard against locking everyone out, not a real

@@ -19,6 +19,8 @@ interface SidebarProps {
   onProjectCreate: () => void;
   // profile's can_create_projects; also what the projects insert policy checks (migration 012)
   canCreateProjects?: boolean;
+  // Performance is switched on per person (migration 045): its link and menu item hide otherwise
+  showPerformance?: boolean;
   onProjectImport: () => void;
   onProjectDuplicate: (projectId: string) => void;
   onProjectRename: (projectId: string, name: string) => void;
@@ -46,6 +48,7 @@ export function Sidebar({
   onProjectHover,
   onProjectCreate,
   canCreateProjects = false,
+  showPerformance = false,
   onProjectImport,
   onProjectDuplicate,
   onProjectRename,
@@ -106,13 +109,15 @@ export function Sidebar({
           {notificationsBadge > 0 && <div className="sidebar-nav-badge">{notificationsBadge}</div>}
         </button>
 
-        <button
-          className={`sidebar-nav-item ${activeSection === 'performance' ? 'active' : ''}`}
-          onClick={() => onSectionChange('performance')}
-        >
-          <BarChart3 size={20} className="sidebar-nav-icon" />
-          <span>Performance</span>
-        </button>
+        {showPerformance && (
+          <button
+            className={`sidebar-nav-item ${activeSection === 'performance' ? 'active' : ''}`}
+            onClick={() => onSectionChange('performance')}
+          >
+            <BarChart3 size={20} className="sidebar-nav-icon" />
+            <span>Performance</span>
+          </button>
+        )}
 
         <button
           className={`sidebar-nav-item ${activeSection === 'tickets' ? 'active' : ''}`}
@@ -186,7 +191,7 @@ export function Sidebar({
                 <span className="sidebar-project-name">{project.name}</span>
               )}
               {project.is_private && <Lock size={12} aria-label="Private" style={{ opacity: 0.6 }} />}
-              {(!project.is_private || canEditProject(project.id) || canCreateProjects) && (
+              {((showPerformance && !project.is_private) || canEditProject(project.id) || canCreateProjects || (!project.is_private && canDeleteProject(project.id))) && (
               <button
                 type="button"
                 className={`sidebar-project-menu ${menuFor === project.id ? 'is-open' : ''}`}
@@ -206,7 +211,7 @@ export function Sidebar({
                 <>
                   <div className="sidebar-menu-backdrop" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
                   <div className="sidebar-menu" ref={flipIfOffscreen} role="menu" onClick={(e) => e.stopPropagation()}>
-                    {!project.is_private && (
+                    {showPerformance && !project.is_private && (
                       <button
                         type="button"
                         role="menuitem"
