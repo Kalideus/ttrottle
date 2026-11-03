@@ -2586,3 +2586,4 @@ button.project-members:hover { background: var(--surface-alt); }
 .perf-split-legend .perf-link:disabled { opacity: 0.45; cursor: default; }
 .perf-split-legend i { width: 10px; height: 10px; border-radius: 2px; }
 .perf-bar-row > .perf-split { align-self: center; }
+.perf-block > .perf-split { height: 24px; }

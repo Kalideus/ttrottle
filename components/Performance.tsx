@@ -294,6 +294,22 @@ function MemberView({ userId, projects, tasks, extended, days, onDrill }: { user
               <span className="perf-headline-team">Team {pct(achieved(all))}</span>
             </div>
 
+            {(() => {
+              // your 🎯 work once there is any, all your work until then
+              const tier = me.core.assigned ? 'core' : 'all';
+              const s = me[tier];
+              const pick = (part: string, ids: string[]) => onDrill({ title: `${tier === 'core' ? '🎯' : 'All work'}: ${part}`, ids, s });
+              return s.assigned ? (
+                <div className="perf-block">
+                  <h4 className="perf-block-title">
+                    Where the {s.assigned} {tier === 'core' ? '🎯 tasks' : 'tasks'} you were given in the last {days} days stand
+                  </h4>
+                  <SplitBar split={workSplit(s)} scale={s.assigned} type={type} onPick={pick} />
+                  <SplitLegend split={workSplit(s)} type={type} onPick={pick} />
+                </div>
+              ) : null;
+            })()}
+
             <StatBlock title="🎯 Core KPI" s={me.core} type={type} onDrill={onDrill} />
             <StatBlock title="All work" s={me.all} type={type} extra onDrill={onDrill} />
 
