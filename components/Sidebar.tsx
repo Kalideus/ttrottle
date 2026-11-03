@@ -1,19 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy, Ticket, BookUser } from 'lucide-react';
+import { Plus, CheckSquare, Bell, MoreVertical, Mail, Lock, Pencil, Trash2, Upload, Copy, Ticket, BookUser, BarChart3 } from 'lucide-react';
 import type { Project } from '@/lib/supabase/queries';
 import { flipIfOffscreen } from '@/lib/flipIfOffscreen';
 
 interface SidebarProps {
   // 'search' (a search opened as a list) has no entry here: nothing is highlighted while it shows
-  activeSection: 'my-tasks' | 'inbox' | 'tickets' | 'contacts' | 'projects' | 'search';
+  activeSection: 'my-tasks' | 'inbox' | 'performance' | 'tickets' | 'contacts' | 'projects' | 'search';
   activeProjectId?: string;
   projects: Project[];
   notificationsBadge?: number;
   /** Tasks given to me that I haven't opened yet. */
   newTasksBadge?: number;
-  onSectionChange: (section: 'my-tasks' | 'inbox' | 'tickets' | 'contacts' | 'projects') => void;
+  onSectionChange: (section: 'my-tasks' | 'inbox' | 'performance' | 'tickets' | 'contacts' | 'projects') => void;
   onProjectSelect: (projectId: string) => void;
   onProjectHover?: (projectId: string) => void;
   onProjectCreate: () => void;
@@ -101,6 +101,14 @@ export function Sidebar({
           <Bell size={20} className="sidebar-nav-icon" />
           <span>Notifications</span>
           {notificationsBadge > 0 && <div className="sidebar-nav-badge">{notificationsBadge}</div>}
+        </button>
+
+        <button
+          className={`sidebar-nav-item ${activeSection === 'performance' ? 'active' : ''}`}
+          onClick={() => onSectionChange('performance')}
+        >
+          <BarChart3 size={20} className="sidebar-nav-icon" />
+          <span>Performance</span>
         </button>
 
         <button

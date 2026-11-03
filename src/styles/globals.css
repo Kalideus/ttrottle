@@ -2474,3 +2474,9 @@ button.project-members:hover { background: var(--surface-alt); }
 .search-bar-label button { display: flex; border: none; background: none; padding: 2px 4px; font-size: 14px; color: var(--text-muted); }
 .search-bar-label button:hover { color: var(--text); }
 .search-bar-count { font-size: 13px; color: var(--text-muted); }
+
+/* ---- Performance (components/Performance.tsx) ---- */
+.perf-segment { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
+.perf-segment button { border: none; background: var(--surface); color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 500; padding: 0 12px; height: 34px; cursor: pointer; }
+.perf-segment button + button { border-left: 1px solid var(--border-strong); }
+.perf-segment button.active { background: var(--accent); color: #fff; }

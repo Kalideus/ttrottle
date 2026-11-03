@@ -14,6 +14,7 @@ import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { CreateTicketModal, type NewTicketInput } from '@/components/CreateTicketModal';
 import { Tickets } from '@/components/Tickets';
 import { Contacts } from '@/components/Contacts';
+import { Performance } from '@/components/Performance';
 import { ContactModal } from '@/components/ContactModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { contactTitle } from '@/lib/contacts';
@@ -113,7 +114,7 @@ import {
   type TaskActivity,
 } from '@/lib/supabase/queries';
 
-type Section = 'my-tasks' | 'inbox' | 'tickets' | 'contacts' | 'projects';
+type Section = 'my-tasks' | 'inbox' | 'performance' | 'tickets' | 'contacts' | 'projects';
 // A search opened as a list from the top search bar, to work through like My tasks.
 // `projectId`: only that project (null = every project the user is in). `from`: where the cross goes back to.
 type SearchView = { by: TaskSearch; label: string; projectId: string | null; from: Section };
@@ -1926,6 +1927,12 @@ export default function AppPage() {
                 onCommentDelete={handleCommentDelete}
                 onCommentLike={handleCommentLike}
               />
+            </div>
+          )}
+
+          {activeSection === 'performance' && (
+            <div className="app-content">
+              <Performance projects={projects} myRoles={myRoles} isSuperAdmin={!!currentProfile?.is_super_admin} />
             </div>
           )}
 
