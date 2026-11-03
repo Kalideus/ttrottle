@@ -1932,7 +1932,7 @@ export default function AppPage() {
 
           {activeSection === 'performance' && (
             <div className="app-content">
-              <Performance supabase={supabase} currentUserId={currentUserId} projects={projects} myRoles={myRoles} isSuperAdmin={!!currentProfile?.is_super_admin} />
+              <Performance supabase={supabase} currentUserId={currentUserId} projects={projects} myRoles={myRoles} isSuperAdmin={!!currentProfile?.is_super_admin} onOpenTask={openInProject} />
             </div>
           )}
 

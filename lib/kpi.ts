@@ -10,7 +10,10 @@
 //   * Deleted tasks are the caller's to leave out.
 import type { Task } from '@/lib/supabase/queries';
 
-export type KpiTask = Pick<Task, 'id' | 'project_id' | 'assignee_id' | 'created_by' | 'created_at' | 'completed' | 'completed_at' | 'due_date' | 'priority' | 'kpi' | 'kpi_by' | 'kpi_at' | 'first_assigned_at' | 'ticket_by'>;
+export type KpiTask = Pick<Task, 'id' | 'name' | 'project_id' | 'assignee_id' | 'created_by' | 'created_at' | 'completed' | 'completed_at' | 'due_date' | 'priority' | 'kpi' | 'kpi_by' | 'kpi_at' | 'first_assigned_at' | 'ticket_by'>;
+
+export type KpiBucket = 'assigned' | 'completed' | 'pending' | 'overdue' | 'onTime' | 'late' | 'extended' | 'achieved' | 'missed' | 'selfCreated' | 'tickets';
+const BUCKETS: KpiBucket[] = ['assigned', 'completed', 'pending', 'overdue', 'onTime', 'late', 'extended', 'achieved', 'missed', 'selfCreated', 'tickets'];
 
 export type KpiStats = {
   assigned: number;
@@ -23,13 +26,15 @@ export type KpiStats = {
   medianDays: number | null; // turnaround projects: working days from start to done
   selfCreated: number;
   tickets: number;
+  // which tasks make up each number, for the drill-down list
+  ids: Record<KpiBucket, string[]>;
 };
 
 export type KpiContext = {
   now: Date;
   days: number; // 30 or 90
   turnaround: Set<string>; // project ids with kpi_type 'turnaround'
-  extended: Set<string>; // task ids with an approved extension request
+  extended: { has(id: string): boolean }; // task ids with an approved extension request
 };
 
 // working days to close, by priority; no priority, no target
@@ -80,7 +85,7 @@ const median = (xs: number[]) => {
 export const rate = (hit: number, of: number) => (of ? hit / of : null);
 
 function stats(tasks: KpiTask[], ctx: KpiContext, core: boolean): KpiStats {
-  const s: KpiStats = { assigned: 0, completed: 0, pending: 0, overdue: 0, completionRate: null, onTime: { hit: 0, of: 0, extended: 0 }, achievement: { hit: 0, of: 0 }, medianDays: null, selfCreated: 0, tickets: 0 };
+  const s: KpiStats = { assigned: 0, completed: 0, pending: 0, overdue: 0, completionRate: null, onTime: { hit: 0, of: 0, extended: 0 }, achievement: { hit: 0, of: 0 }, medianDays: null, selfCreated: 0, tickets: 0, ids: Object.fromEntries(BUCKETS.map((b) => [b, []])) as unknown as KpiStats['ids'] };
   const now = ctx.now;
   const from = new Date(now.getTime() - ctx.days * DAY);
   const inWindow = (d: Date) => d > from && d <= now;
@@ -102,27 +107,44 @@ function stats(tasks: KpiTask[], ctx: KpiContext, core: boolean): KpiStats {
 
     if (inWindow(start)) {
       s.assigned++;
-      if (done) s.completed++;
-      if (t.created_by === t.assignee_id) s.selfCreated++;
-      if (t.ticket_by) s.tickets++;
+      s.ids.assigned.push(t.id);
+      if (done) {
+        s.completed++;
+        s.ids.completed.push(t.id);
+      }
+      if (t.created_by === t.assignee_id) {
+        s.selfCreated++;
+        s.ids.selfCreated.push(t.id);
+      }
+      if (t.ticket_by) {
+        s.tickets++;
+        s.ids.tickets.push(t.id);
+      }
     }
     if (!done) {
-      if (deadline && deadline <= now) s.overdue++;
-      else s.pending++;
+      const late = !!deadline && deadline <= now;
+      s[late ? 'overdue' : 'pending']++;
+      s.ids[late ? 'overdue' : 'pending'].push(t.id);
     }
     if (done && doneAt && inWindow(doneAt)) {
       if (deadline) {
         s.onTime.of++;
         if (doneAt <= deadline) {
           s.onTime.hit++;
-          if (ctx.extended.has(t.id)) s.onTime.extended++;
-        }
+          s.ids.onTime.push(t.id);
+          if (ctx.extended.has(t.id)) {
+            s.onTime.extended++;
+            s.ids.extended.push(t.id);
+          }
+        } else s.ids.late.push(t.id);
       }
       if (turnaround) turnarounds.push(workingDaysBetween(start, doneAt));
     }
     if (deadline && inWindow(deadline)) {
       s.achievement.of++;
-      if (done && (!doneAt || doneAt <= deadline)) s.achievement.hit++;
+      const hit = done && (!doneAt || doneAt <= deadline);
+      if (hit) s.achievement.hit++;
+      s.ids[hit ? 'achieved' : 'missed'].push(t.id);
     }
   }
   s.completionRate = rate(s.completed, s.assigned);

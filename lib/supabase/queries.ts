@@ -1188,28 +1188,31 @@ export async function getMyProjectRoles(supabase: SupabaseClient, userId: string
 }
 
 // Performance dashboard (lib/kpi.ts): every task in these projects that is still open or was finished
-// since `since`, plus which tasks had an extension approved. Pages past the 1000-row response cap.
+// since `since`, plus the extensions approved on them. Pages past the 1000-row response cap.
 export async function getPerformanceData(supabase: SupabaseClient, projectIds: string[], since: string) {
   const tasks: KpiTask[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
       .from('tasks')
-      .select('id, project_id, assignee_id, created_by, created_at, completed, completed_at, due_date, priority, kpi, kpi_by, kpi_at, first_assigned_at, ticket_by')
+      .select('id, name, project_id, assignee_id, created_by, created_at, completed, completed_at, due_date, priority, kpi, kpi_by, kpi_at, first_assigned_at, ticket_by')
       .in('project_id', projectIds)
       .is('deleted_at', null)
       .or(`completed.eq.false,completed_at.gte.${since}`)
       .order('id')
       .range(from, from + 999)
-    if (error) return { tasks, extended: new Set<string>(), error }
+    if (error) return { tasks, extended: new Map<string, string[]>(), error }
     tasks.push(...(data as KpiTask[]))
     if (data.length < 1000) break
   }
   // ponytail: one page; past 1000 approved extensions the oldest stop showing their ⏱
   const { data: approved } = await supabase
     .from('comments')
-    .select('task_id')
+    .select('task_id, requested_due_date')
     .eq('request_status', 'approved')
     .gte('created_at', since)
     .limit(1000)
-  return { tasks, extended: new Set((approved ?? []).map((c) => c.task_id as string)), error: null }
+  // task id -> the dates its approved extensions moved it to
+  const extended = new Map<string, string[]>()
+  for (const c of approved ?? []) extended.set(c.task_id, [...(extended.get(c.task_id) ?? []), c.requested_due_date])
+  return { tasks, extended, error: null }
 }

@@ -9,7 +9,7 @@ const now = at(11, 4, 12);
 
 let n = 0;
 const task = (t: Partial<KpiTask>): KpiTask => ({
-  id: `t${n++}`, project_id: 'cx', assignee_id: 'u', created_by: 'm', created_at: iso(10, 20), completed: false,
+  id: `t${n++}`, name: 'task', project_id: 'cx', assignee_id: 'u', created_by: 'm', created_at: iso(10, 20), completed: false,
   completed_at: null, due_date: null, priority: null, kpi: true, kpi_by: 'm', kpi_at: iso(10, 20), first_assigned_at: null, ticket_by: null, ...t,
 });
 const done = (month: number, day: number, hour = 12) => ({ completed: true, completed_at: iso(month, day, hour) });
@@ -41,6 +41,12 @@ assert.equal(core.completionRate, 4 / 6);
 assert.deepEqual(core.onTime, { hit: 2, of: 3, extended: 1 });
 assert.deepEqual(core.achievement, { hit: 2, of: 4 });
 assert.equal(core.selfCreated, 0);
+// each number lists its tasks: the overdue one, the late one, and the misses (late + still open)
+assert.deepEqual(core.ids.overdue, [cx[2].id]);
+assert.deepEqual(core.ids.late, [cx[1].id]);
+assert.deepEqual(core.ids.missed, [cx[1].id, cx[2].id]);
+assert.deepEqual(core.ids.extended, [extendedTask.id]);
+assert.equal(core.ids.assigned.length, core.assigned);
 
 assert.equal(all.assigned, 8);
 assert.equal(all.completed, 5);

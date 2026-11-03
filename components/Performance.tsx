@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { useEscapeToClose } from '@/lib/useEscapeToClose';
 import { getPerformanceData, getMembersByProject, type Project, type ProjectMember } from '@/lib/supabase/queries';
-import { computeKpi, rate, weeklyTrend, type KpiStats, type KpiTask } from '@/lib/kpi';
+import { computeKpi, rate, weeklyTrend, type KpiBucket, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
   supabase: SupabaseClient;
@@ -11,6 +14,7 @@ interface PerformanceProps {
   projects: Project[];
   myRoles: Map<string, ProjectMember['role']>;
   isSuperAdmin: boolean;
+  onOpenTask: (projectId: string, taskId: string) => void;
 }
 
 type KpiType = 'deadline' | 'turnaround';
@@ -22,7 +26,7 @@ const HISTORY_DAYS = 180;
 
 // Performance dashboard: everyone sees their own numbers against their team's; managers also get a Team tab
 // comparing the people in the projects they manage (a super admin: every project).
-export function Performance({ supabase, currentUserId, projects, myRoles, isSuperAdmin }: PerformanceProps) {
+export function Performance({ supabase, currentUserId, projects, myRoles, isSuperAdmin, onOpenTask }: PerformanceProps) {
   const managed = projects.filter((p) => isSuperAdmin || ['owner', 'admin'].includes(myRoles.get(p.id) ?? ''));
   const isManager = managed.length > 0;
   // roles can still be loading on first render: until someone picks a tab, a manager lands on Team
@@ -35,7 +39,9 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
   const mine = projects.filter((p) => myRoles.has(p.id));
   const choices = showTeam ? managed : mine;
 
-  const [data, setData] = useState<{ tasks: KpiTask[]; extended: Set<string> } | null>(null);
+  const [data, setData] = useState<{ tasks: KpiTask[]; extended: Extensions } | null>(null);
+  // the tasks behind a number someone clicked
+  const [drill, setDrill] = useState<DrillRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadIds = [...new Set([...mine, ...managed].map((p) => p.id))].sort().join(',');
   useEffect(() => {
@@ -52,17 +58,17 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
     };
   }, [supabase, loadIds]);
 
-  // the people in the projects this manager runs, for the Team tab
+  // the people in these projects: the Team tab's list, and names in the task list
   const [members, setMembers] = useState<Map<string, ProjectMember[]>>(new Map());
-  const managedIds = managed.map((p) => p.id).sort().join(',');
+
   useEffect(() => {
-    if (!managedIds) return;
+    if (!loadIds) return;
     let live = true;
-    void getMembersByProject(supabase, managedIds.split(',')).then((m) => live && setMembers(m));
+    void getMembersByProject(supabase, loadIds.split(',')).then((m) => live && setMembers(m));
     return () => {
       live = false;
     };
-  }, [supabase, managedIds]);
+  }, [supabase, loadIds]);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -113,6 +119,7 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
             tasks={data.tasks}
             extended={data.extended}
             days={days}
+            onDrill={setDrill}
           />
         ) : (
           <MemberView
@@ -121,14 +128,103 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
             tasks={data.tasks}
             extended={data.extended}
             days={days}
+            onDrill={setDrill}
           />
         )}
       </div>
+      {drill && data && (
+        <DrillList
+          request={drill}
+          tasks={data.tasks}
+          extended={data.extended}
+          projects={projects}
+          members={members}
+          onOpen={(t) => {
+            setDrill(null);
+            onOpenTask(t.project_id, t.id);
+          }}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </div>
   );
 }
 
-function MemberView({ userId, projects, tasks, extended, days }: { userId: string | null; projects: Project[]; tasks: KpiTask[]; extended: Set<string>; days: number }) {
+// task id -> the dates its approved extensions moved it to
+type Extensions = Map<string, string[]>;
+type DrillRequest = { title: string; ids: string[]; s: KpiStats };
+type Drill = (r: DrillRequest) => void;
+
+const shortDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00` : iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+// The tasks behind a number: what each one was measured on, and clicking one opens it in its project.
+function DrillList({ request, tasks, extended, projects, members, onOpen, onClose }: { request: DrillRequest; tasks: KpiTask[]; extended: Extensions; projects: Project[]; members: Map<string, ProjectMember[]>; onOpen: (t: KpiTask) => void; onClose: () => void }) {
+  useEscapeToClose(onClose);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const names = new Map([...members.values()].flat().filter((m) => m.profile_id).map((m) => [m.profile_id as string, m.profile?.name ?? m.email]));
+  const projectName = new Map(projects.map((p) => [p.id, p.name]));
+  const { s } = request;
+  const status = (id: string) =>
+    s.ids.overdue.includes(id) ? ['Overdue', 'is-bad']
+      : s.ids.late.includes(id) ? ['Late', 'is-bad']
+      : s.ids.missed.includes(id) ? ['Missed', 'is-bad']
+      : s.ids.onTime.includes(id) || s.ids.achieved.includes(id) ? ['On time', 'is-good']
+      : s.ids.pending.includes(id) ? ['Open', '']
+      : s.ids.completed.includes(id) ? ['Done', ''] : ['', ''];
+  // soonest due first; no due date last
+  const rows = request.ids
+    .map((id) => byId.get(id))
+    .filter((t): t is KpiTask => !!t)
+    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
+
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card perf-drill" role="dialog" aria-labelledby="perf-drill-title" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2 className="modal-title" id="perf-drill-title">{request.title} ({rows.length})</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        {!rows.length ? (
+          <p className="modal-message">No tasks here.</p>
+        ) : (
+          <ul className="perf-drill-list">
+            {rows.map((t) => {
+              const [label, tone] = status(t.id);
+              const ext = extended.get(t.id);
+              return (
+                <li key={t.id}>
+                  <button className="perf-drill-task" onClick={() => onOpen(t)}>
+                    <span className="perf-drill-name">{t.name}</span>
+                    {label && <span className={`perf-drill-status ${tone}`}>{label}</span>}
+                  </button>
+                  <span className="perf-drill-meta">
+                    {[
+                      projectName.get(t.project_id),
+                      t.assignee_id && names.get(t.assignee_id),
+                      t.due_date && `due ${shortDate(t.due_date)}`,
+                      t.completed_at && `done ${shortDate(t.completed_at)}`,
+                      ext && `⏱ extended to ${ext.map(shortDate).join(', then ')}`,
+                      t.kpi && t.kpi_by && t.kpi_by !== t.assignee_id
+                        ? `🎯 by ${names.get(t.kpi_by) ?? 'a manager'}${t.kpi_at ? `, ${shortDate(t.kpi_at)}` : ''}`
+                        : t.created_by === t.assignee_id ? 'self-made' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function MemberView({ userId, projects, tasks, extended, days, onDrill }: { userId: string | null; projects: Project[]; tasks: KpiTask[]; extended: Extensions; days: number; onDrill: Drill }) {
   const ctx = useMemo(
     () => ({ now: new Date(), days, extended, turnaround: new Set(projects.filter((p) => kpiType(p) === 'turnaround').map((p) => p.id)) }),
     [days, extended, projects]
@@ -170,7 +266,12 @@ function MemberView({ userId, projects, tasks, extended, days }: { userId: strin
 
             <div className="perf-headline" title="Of your 🎯 tasks whose deadline fell in this period, how many were done by it">
               <span className="perf-headline-label">🎯 KPI achievement</span>
-              <span className="perf-headline-value">{pct(rate(me.core.achievement.hit, me.core.achievement.of))}</span>
+              <button
+                className="perf-headline-value perf-link"
+                onClick={() => onDrill({ title: '🎯 Due in this period', ids: [...me.core.ids.missed, ...me.core.ids.achieved], s: me.core })}
+              >
+                {pct(rate(me.core.achievement.hit, me.core.achievement.of))}
+              </button>
               <span className="perf-muted">
                 {me.core.achievement.of ? `${me.core.achievement.hit} of ${me.core.achievement.of}` : 'nothing due yet'}
               </span>
@@ -178,8 +279,8 @@ function MemberView({ userId, projects, tasks, extended, days }: { userId: strin
               <span className="perf-headline-team">Team {pct(achieved(all))}</span>
             </div>
 
-            <StatBlock title="🎯 Core KPI" s={me.core} type={type} />
-            <StatBlock title="All work" s={me.all} type={type} extra />
+            <StatBlock title="🎯 Core KPI" s={me.core} type={type} onDrill={onDrill} />
+            <StatBlock title="All work" s={me.all} type={type} extra onDrill={onDrill} />
 
             {rows.length > 1 && (
               <table className="perf-table">
@@ -214,37 +315,49 @@ function MemberView({ userId, projects, tasks, extended, days }: { userId: strin
   );
 }
 
-function StatBlock({ title, s, type, extra = false }: { title: string; s: KpiStats; type: KpiType; extra?: boolean }) {
+function StatBlock({ title, s, type, extra = false, onDrill }: { title: string; s: KpiStats; type: KpiType; extra?: boolean; onDrill: Drill }) {
   const onTime = rate(s.onTime.hit, s.onTime.of);
+  const onTimeLabel = type === 'turnaround' ? 'Within target' : 'On time';
+  const open = (label: string, ids: string[]) => () => onDrill({ title: `${title}: ${label}`, ids, s });
   return (
     <div className="perf-block">
       <h4 className="perf-block-title">{title}</h4>
       <div className="perf-tiles">
-        <Tile label="Assigned" value={s.assigned} hint="Given to you in this period" />
-        <Tile label="Completed" value={s.completed} hint="Of those, how many are done" />
-        <Tile label="Pending" value={s.pending} hint="Open now, not yet past the deadline" />
-        <Tile label="Overdue" value={s.overdue} hint="Open now and past the deadline" warn={s.overdue > 0} />
-        <Tile label="Completion" value={pct(s.completionRate)} hint="Completed ÷ assigned" />
+        <Tile label="Assigned" value={s.assigned} hint="Given to you in this period" onClick={open('assigned', s.ids.assigned)} />
+        <Tile label="Completed" value={s.completed} hint="Of those, how many are done" onClick={open('completed', s.ids.completed)} />
+        <Tile label="Pending" value={s.pending} hint="Open now, not yet past the deadline" onClick={open('pending', s.ids.pending)} />
+        <Tile label="Overdue" value={s.overdue} hint="Open now and past the deadline" warn={s.overdue > 0} onClick={open('overdue', s.ids.overdue)} />
+        <Tile label="Completion" value={pct(s.completionRate)} hint="Completed ÷ assigned" onClick={open('assigned', s.ids.assigned)} />
         <Tile
-          label={type === 'turnaround' ? 'Within target' : 'On time'}
+          label={onTimeLabel}
           value={pct(onTime)}
           hint={type === 'turnaround' ? 'Closed within the target for its priority (High 1, Medium 3, Low 5 working days)' : 'Finished by the final due date, extensions included'}
           sub={s.onTime.extended ? `⏱ ${s.onTime.extended} extended` : undefined}
+          onClick={open(onTimeLabel.toLowerCase(), [...s.ids.late, ...s.ids.onTime])}
         />
         {type === 'turnaround' && <Tile label="Median time" value={daysText(s.medianDays)} hint="Working days from being handed the ticket to closing it" />}
-        {extra && <Tile label="Self-created" value={s.selfCreated} hint="Tasks you made for yourself" />}
-        {extra && <Tile label="Tickets" value={s.tickets} hint="Tickets you were given" />}
+        {extra && <Tile label="Self-created" value={s.selfCreated} hint="Tasks you made for yourself" onClick={open('self-created', s.ids.selfCreated)} />}
+        {extra && <Tile label="Tickets" value={s.tickets} hint="Tickets you were given" onClick={open('tickets', s.ids.tickets)} />}
       </div>
     </div>
   );
 }
 
-function Tile({ label, value, hint, sub, warn = false }: { label: string; value: string | number; hint: string; sub?: string; warn?: boolean }) {
-  return (
-    <div className="perf-tile" title={hint}>
+function Tile({ label, value, hint, sub, warn = false, onClick }: { label: string; value: string | number; hint: string; sub?: string; warn?: boolean; onClick?: () => void }) {
+  const body = (
+    <>
       <span className="perf-tile-label">{label}</span>
       <span className={`perf-tile-value${warn ? ' is-warn' : ''}`}>{value}</span>
       {sub && <span className="perf-muted">{sub}</span>}
+    </>
+  );
+  return onClick ? (
+    <button className="perf-tile is-link" title={`${hint}. Click to see the tasks`} onClick={onClick}>
+      {body}
+    </button>
+  ) : (
+    <div className="perf-tile" title={hint}>
+      {body}
     </div>
   );
 }
@@ -267,7 +380,7 @@ const METRICS: Metric[] = [
 const show = (v: number | null, f: Format) => (f === 'pct' ? pct(v) : f === 'days' ? daysText(v) : v === null ? '—' : String(v));
 const techLabel = (label: string, type: KpiType) => (type === 'turnaround' ? label.replace('On time', 'Within target').replace('on time', 'within target') : label);
 
-function TeamView({ projects, members, tasks, extended, days }: { projects: Project[]; members: Map<string, ProjectMember[]>; tasks: KpiTask[]; extended: Set<string>; days: number }) {
+function TeamView({ projects, members, tasks, extended, days, onDrill }: { projects: Project[]; members: Map<string, ProjectMember[]>; tasks: KpiTask[]; extended: Extensions; days: number; onDrill: Drill }) {
   const people = useMemo(() => {
     const byId = new Map<string, Person>();
     for (const p of projects)
@@ -319,6 +432,7 @@ function TeamView({ projects, members, tasks, extended, days }: { projects: Proj
             tasks={tasks}
             extended={extended}
             days={days}
+            onDrill={onDrill}
           />
         ))
       )}
@@ -328,7 +442,7 @@ function TeamView({ projects, members, tasks, extended, days }: { projects: Proj
 
 type Col = { key: string; label: string; value: (s: Both) => number | null; format: Format; all?: boolean };
 
-function TeamSection({ type, title, projects, people, tasks, extended, days }: { type: KpiType; title: string | null; projects: Project[]; people: Person[]; tasks: KpiTask[]; extended: Set<string>; days: number }) {
+function TeamSection({ type, title, projects, people, tasks, extended, days, onDrill }: { type: KpiType; title: string | null; projects: Project[]; people: Person[]; tasks: KpiTask[]; extended: Extensions; days: number; onDrill: Drill }) {
   const [metricKey, setMetricKey] = useState('achievement');
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: 'achievement', desc: true });
   const metrics = METRICS.filter((m) => !m.techOnly || type === 'turnaround');
@@ -404,6 +518,26 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
   const sortBy = (key: string) => setSort((s) => ({ key, desc: s.key === key ? !s.desc : key !== 'name' }));
   const arrow = (key: string) => (sort.key === key ? (sort.desc ? ' ↓' : ' ↑') : '');
   const edge = (c: Col) => (c.key === 'allCompleted' ? 'perf-group-start' : undefined);
+  // the tasks behind a cell
+  const cellIds = (c: Col, both: Both): string[] => {
+    const { ids } = c.all ? both.all : both.core;
+    if (c.key === 'onTime' || c.key === 'allOnTime') return [...ids.late, ...ids.onTime];
+    if (c.key === 'achievement') return [...ids.missed, ...ids.achieved];
+    if (c.key === 'completion' || c.key === 'assigned') return ids.assigned;
+    if (c.key === 'median' || c.key === 'allCompleted') return ids.completed;
+    return ids[c.key as KpiBucket] ?? [];
+  };
+  const cell = (c: Col, both: Both, who: string) => (
+    <td key={c.key} className={edge(c)}>
+      <button
+        className="perf-link"
+        title="See the tasks"
+        onClick={() => onDrill({ title: `${who} · ${c.all ? 'All work' : '🎯'} ${c.label}`, ids: cellIds(c, both), s: c.all ? both.all : both.core })}
+      >
+        {show(c.value(both), c.format)}
+      </button>
+    </td>
+  );
 
   return (
     <section className="perf-section perf-team-section">
@@ -496,7 +630,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
                   })()}
                 </td>
                 {cols.map((c) => (
-                  <td key={c.key} className={edge(c)}>{show(c.value(s), c.format)}</td>
+                  cell(c, s, person.name)
                 ))}
               </tr>
             ))}
@@ -508,7 +642,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days }: {
                 <Sparkline values={trends.team} format={metric.format} label={`Team, ${metric.label}`} />
               </td>
               {cols.map((c) => (
-                <td key={c.key} className={edge(c)}>{show(c.value(team), c.format)}</td>
+                cell(c, team, 'Team')
               ))}
             </tr>
           </tfoot>
