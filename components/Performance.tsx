@@ -539,7 +539,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
     return ids[c.key as KpiBucket] ?? [];
   };
   const cell = (c: Col, both: Both, who: string) => (
-    <td key={c.key} className={edge(c)}>
+    <td key={c.key} className={edge(c)} data-label={`${c.all ? 'All work · ' : '🎯 '}${c.label}`}>
       <button
         className="perf-link"
         title="See the tasks"
@@ -599,7 +599,7 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
       )}
 
       <div className="perf-table-wrap">
-        <table className="perf-table">
+        <table className="perf-table perf-team-table">
           <thead>
             <tr className="perf-table-groups">
               <th colSpan={2} />
@@ -621,8 +621,8 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
           <tbody>
             {tableRows.map(({ person, s }) => (
               <tr key={person.id}>
-                <td>{person.name}</td>
-                <td>
+                <td className="perf-card-name">{person.name}</td>
+                <td className="perf-card-wide" data-label="Trend (tap to compare)">
                   {(() => {
                     const o = onOverlay.find((x) => x.id === person.id);
                     const full = !o && onOverlay.length >= SERIES.length;
@@ -648,8 +648,8 @@ function TeamSection({ type, title, projects, people, tasks, extended, days, onD
           </tbody>
           <tfoot>
             <tr>
-              <td>Team</td>
-              <td>
+              <td className="perf-card-name">Team</td>
+              <td className="perf-card-wide" data-label="Trend">
                 <Sparkline values={trends.team} format={metric.format} label={`Team, ${metric.label}`} />
               </td>
               {cols.map((c) => (
@@ -710,7 +710,8 @@ function TrendChart({ lines, team, format }: { lines: { id: string; name: string
   const y = (v: number) => pad.t + (1 - v / top) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1].map((f) => f * top);
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  // pointer, so a tap on a phone shows the week too
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - box.left) / box.width) * W;
     setHover(Math.max(0, Math.min(WEEKS - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (WEEKS - 1)))));
@@ -718,7 +719,7 @@ function TrendChart({ lines, team, format }: { lines: { id: string; name: string
 
   return (
     <div className="perf-trend">
-      <svg viewBox={`0 0 ${W} ${H}`} className="perf-trend-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Weekly trend for the selected people">
+      <svg viewBox={`0 0 ${W} ${H}`} className="perf-trend-svg" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => e.pointerType === 'mouse' && setHover(null)} role="img" aria-label="Weekly trend for the selected people">
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeWidth="1" />
