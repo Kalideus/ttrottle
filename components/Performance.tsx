@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPerformanceData, type Project, type ProjectMember } from '@/lib/supabase/queries';
+import { getPerformanceData, getMembersByProject, type Project, type ProjectMember } from '@/lib/supabase/queries';
 import { computeKpi, rate, type KpiStats, type KpiTask } from '@/lib/kpi';
 
 interface PerformanceProps {
@@ -52,6 +52,18 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
     };
   }, [supabase, loadIds]);
 
+  // the people in the projects this manager runs, for the Team tab
+  const [members, setMembers] = useState<Map<string, ProjectMember[]>>(new Map());
+  const managedIds = managed.map((p) => p.id).sort().join(',');
+  useEffect(() => {
+    if (!managedIds) return;
+    let live = true;
+    void getMembersByProject(supabase, managedIds.split(',')).then((m) => live && setMembers(m));
+    return () => {
+      live = false;
+    };
+  }, [supabase, managedIds]);
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -95,8 +107,13 @@ export function Performance({ supabase, currentUserId, projects, myRoles, isSupe
         ) : !data ? (
           <p className="perf-empty">{loadIds ? 'Loading…' : 'You’re not in any projects yet.'}</p>
         ) : showTeam ? (
-          // ponytail: placeholder until the team view (step 6) lands
-          <p className="perf-empty">Team comparison coming next.</p>
+          <TeamView
+            projects={projectId ? managed.filter((p) => p.id === projectId) : managed}
+            members={members}
+            tasks={data.tasks}
+            extended={data.extended}
+            days={days}
+          />
         ) : (
           <MemberView
             userId={currentUserId}
@@ -226,5 +243,214 @@ function Tile({ label, value, hint, sub, warn = false }: { label: string; value:
       <span className={`perf-tile-value${warn ? ' is-warn' : ''}`}>{value}</span>
       {sub && <span className="perf-muted">{sub}</span>}
     </div>
+  );
+}
+
+type Person = { id: string; name: string };
+type Both = { core: KpiStats; all: KpiStats };
+type Format = 'pct' | 'count' | 'days';
+type Metric = { key: string; label: string; format: Format; value: (s: Both) => number | null; techOnly?: boolean; lowIsGood?: boolean };
+
+// what the bar chart can rank by; the table shows all of them
+const METRICS: Metric[] = [
+  { key: 'achievement', label: '🎯 KPI achievement', format: 'pct', value: (s) => rate(s.core.achievement.hit, s.core.achievement.of) },
+  { key: 'onTime', label: '🎯 On time', format: 'pct', value: (s) => rate(s.core.onTime.hit, s.core.onTime.of) },
+  { key: 'completion', label: '🎯 Completion', format: 'pct', value: (s) => s.core.completionRate },
+  { key: 'overdue', label: '🎯 Overdue now', format: 'count', value: (s) => s.core.overdue, lowIsGood: true },
+  { key: 'median', label: '🎯 Median time', format: 'days', value: (s) => s.core.medianDays, techOnly: true, lowIsGood: true },
+  { key: 'allOnTime', label: 'All work: on time', format: 'pct', value: (s) => rate(s.all.onTime.hit, s.all.onTime.of) },
+  { key: 'allCompletion', label: 'All work: completion', format: 'pct', value: (s) => s.all.completionRate },
+];
+const show = (v: number | null, f: Format) => (f === 'pct' ? pct(v) : f === 'days' ? daysText(v) : v === null ? '—' : String(v));
+const techLabel = (label: string, type: KpiType) => (type === 'turnaround' ? label.replace('On time', 'Within target').replace('on time', 'within target') : label);
+
+function TeamView({ projects, members, tasks, extended, days }: { projects: Project[]; members: Map<string, ProjectMember[]>; tasks: KpiTask[]; extended: Set<string>; days: number }) {
+  const people = useMemo(() => {
+    const byId = new Map<string, Person>();
+    for (const p of projects)
+      for (const m of members.get(p.id) ?? [])
+        if (m.profile_id && !byId.has(m.profile_id)) byId.set(m.profile_id, { id: m.profile_id, name: m.profile?.name ?? m.email });
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [projects, members]);
+  // who's switched off; someone new to the team shows up ticked
+  const [off, setOff] = useState<Set<string>>(new Set());
+  const chosen = people.filter((p) => !off.has(p.id));
+  const toggle = (id: string) =>
+    setOff((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  const kinds = (['deadline', 'turnaround'] as const)
+    .map((type) => ({ type, projects: projects.filter((p) => kpiType(p) === type) }))
+    .filter((k) => k.projects.length);
+  const withWork = kinds.filter((k) => tasks.some((t) => t.assignee_id && k.projects.some((p) => p.id === t.project_id)));
+  const shown = withWork.length ? withWork : kinds.slice(0, 1);
+
+  if (!people.length) return <p className="perf-empty">{members.size ? 'Nobody in these projects yet.' : 'Loading…'}</p>;
+
+  return (
+    <>
+      <div className="perf-chips" role="group" aria-label="Team members">
+        <button className="perf-chip" onClick={() => setOff(off.size ? new Set() : new Set(people.map((p) => p.id)))}>
+          {off.size ? 'Select all' : 'Clear all'}
+        </button>
+        {people.map((p) => (
+          <button key={p.id} className={`perf-chip${off.has(p.id) ? '' : ' is-on'}`} aria-pressed={!off.has(p.id)} onClick={() => toggle(p.id)}>
+            {p.name}
+          </button>
+        ))}
+      </div>
+      {!chosen.length ? (
+        <p className="perf-empty" style={{ marginTop: 16 }}>Pick someone to compare.</p>
+      ) : (
+        shown.map((k) => (
+          <TeamSection
+            key={k.type}
+            type={k.type}
+            title={shown.length > 1 ? (k.type === 'turnaround' ? 'Tech' : 'Deadline work') : null}
+            projects={k.projects}
+            people={chosen}
+            tasks={tasks}
+            extended={extended}
+            days={days}
+          />
+        ))
+      )}
+    </>
+  );
+}
+
+type Col = { key: string; label: string; value: (s: Both) => number | null; format: Format; all?: boolean };
+
+function TeamSection({ type, title, projects, people, tasks, extended, days }: { type: KpiType; title: string | null; projects: Project[]; people: Person[]; tasks: KpiTask[]; extended: Set<string>; days: number }) {
+  const [metricKey, setMetricKey] = useState('achievement');
+  const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: 'achievement', desc: true });
+  const metrics = METRICS.filter((m) => !m.techOnly || type === 'turnaround');
+  const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0];
+
+  const { rows, team } = useMemo(() => {
+    const ids = new Set(projects.map((p) => p.id));
+    const ctx = { now: new Date(), days, extended, turnaround: new Set(projects.filter((p) => kpiType(p) === 'turnaround').map((p) => p.id)) };
+    const scoped = tasks.filter((t) => ids.has(t.project_id));
+    const who = new Set(people.map((p) => p.id));
+    return {
+      rows: people.map((person) => ({ person, s: computeKpi(scoped.filter((t) => t.assignee_id === person.id), ctx) })),
+      team: computeKpi(scoped.filter((t) => t.assignee_id && who.has(t.assignee_id)), ctx),
+    };
+  }, [projects, people, tasks, extended, days]);
+
+  // bars: best first (fewest for overdue and time), people with nothing to measure at the bottom
+  const ranked = [...rows].sort((a, b) => {
+    const x = metric.value(a.s);
+    const y = metric.value(b.s);
+    if (x === null || y === null) return x === null ? (y === null ? 0 : 1) : -1;
+    return metric.lowIsGood ? x - y : y - x;
+  });
+  const max = metric.format === 'pct' ? 1 : Math.max(1e-9, ...rows.map((r) => metric.value(r.s) ?? 0));
+  // the team's figure; for overdue, the average per person
+  const teamValue = metric.key === 'overdue' ? team.core.overdue / rows.length : metric.value(team);
+
+  const cols: Col[] = [
+    { key: 'assigned', label: 'Assigned', value: (s) => s.core.assigned, format: 'count' },
+    { key: 'completed', label: 'Done', value: (s) => s.core.completed, format: 'count' },
+    { key: 'pending', label: 'Pending', value: (s) => s.core.pending, format: 'count' },
+    { key: 'overdue', label: 'Overdue', value: (s) => s.core.overdue, format: 'count' },
+    { key: 'completion', label: 'Completion', value: (s) => s.core.completionRate, format: 'pct' },
+    { key: 'onTime', label: techLabel('On time', type), value: (s) => rate(s.core.onTime.hit, s.core.onTime.of), format: 'pct' },
+    { key: 'extended', label: '⏱ Ext.', value: (s) => s.core.onTime.extended, format: 'count' },
+    { key: 'achievement', label: 'Achievement', value: (s) => rate(s.core.achievement.hit, s.core.achievement.of), format: 'pct' },
+    ...(type === 'turnaround' ? [{ key: 'median', label: 'Median', value: (s: Both) => s.core.medianDays, format: 'days' as const }] : []),
+    { key: 'allCompleted', label: 'Done', value: (s) => s.all.completed, format: 'count', all: true },
+    { key: 'allOnTime', label: techLabel('On time', type), value: (s) => rate(s.all.onTime.hit, s.all.onTime.of), format: 'pct', all: true },
+    { key: 'selfCreated', label: 'Self-made', value: (s) => s.all.selfCreated, format: 'count', all: true },
+  ];
+  const coreCount = cols.filter((c) => !c.all).length;
+  const sortCol = cols.find((c) => c.key === sort.key);
+  const tableRows = [...rows].sort((a, b) => {
+    const byName = a.person.name.localeCompare(b.person.name);
+    if (!sortCol) return sort.desc ? -byName : byName;
+    const x = sortCol.value(a.s) ?? -Infinity;
+    const y = sortCol.value(b.s) ?? -Infinity;
+    return (sort.desc ? y - x : x - y) || byName;
+  });
+  const sortBy = (key: string) => setSort((s) => ({ key, desc: s.key === key ? !s.desc : key !== 'name' }));
+  const arrow = (key: string) => (sort.key === key ? (sort.desc ? ' ↓' : ' ↑') : '');
+  const edge = (c: Col) => (c.key === 'allCompleted' ? 'perf-group-start' : undefined);
+
+  return (
+    <section className="perf-section perf-team-section">
+      {title && <h3 className="perf-section-title">{title}</h3>}
+
+      <div className="perf-compare-head">
+        <label className="perf-muted" htmlFor={`perf-metric-${type}`}>Compare by</label>
+        <select id={`perf-metric-${type}`} className="modal-input contacts-filter" value={metric.key} onChange={(e) => setMetricKey(e.target.value)}>
+          {metrics.map((m) => (
+            <option key={m.key} value={m.key}>{techLabel(m.label, type)}</option>
+          ))}
+        </select>
+        {teamValue !== null && (
+          <span className="perf-muted">┊ Team {metric.key === 'overdue' ? `${teamValue.toFixed(1)} each` : show(teamValue, metric.format)}</span>
+        )}
+      </div>
+
+      <div className="perf-bars" role="list">
+        {ranked.map(({ person, s }) => {
+          const v = metric.value(s);
+          return (
+            <div key={person.id} className="perf-bar-row" role="listitem" title={`${person.name}: ${show(v, metric.format)}`}>
+              <span className="perf-bar-name">{person.name}</span>
+              <span className="perf-bar-track">
+                {v !== null && <span className="perf-bar" style={{ width: `${Math.max(0.5, (v / max) * 100)}%` }} />}
+                {teamValue !== null && <span className="perf-bar-team" style={{ left: `${Math.min(100, (teamValue / max) * 100)}%` }} aria-hidden />}
+              </span>
+              <span className="perf-bar-value">{show(v, metric.format)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="perf-table-wrap">
+        <table className="perf-table">
+          <thead>
+            <tr className="perf-table-groups">
+              <th />
+              <th colSpan={coreCount}>🎯 Core KPI</th>
+              <th colSpan={cols.length - coreCount} className="perf-group-start">All work</th>
+            </tr>
+            <tr>
+              <th>
+                <button className="perf-sort" onClick={() => sortBy('name')}>Person{arrow('name')}</button>
+              </th>
+              {cols.map((c) => (
+                <th key={c.key} className={edge(c)} aria-sort={sort.key === c.key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
+                  <button className="perf-sort" onClick={() => sortBy(c.key)}>{c.label}{arrow(c.key)}</button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map(({ person, s }) => (
+              <tr key={person.id}>
+                <td>{person.name}</td>
+                {cols.map((c) => (
+                  <td key={c.key} className={edge(c)}>{show(c.value(s), c.format)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Team</td>
+              {cols.map((c) => (
+                <td key={c.key} className={edge(c)}>{show(c.value(team), c.format)}</td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
   );
 }

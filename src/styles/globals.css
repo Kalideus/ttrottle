@@ -2505,3 +2505,25 @@ button.project-members:hover { background: var(--surface-alt); }
   .perf-headline-team { margin-left: 0; }
   .perf-table { display: block; overflow-x: auto; }
 }
+.perf-team-section { margin-top: 20px; }
+.perf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.perf-chip { border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: 13px; padding: 4px 12px; cursor: pointer; }
+.perf-chip.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.perf-compare-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.perf-bars { display: flex; flex-direction: column; gap: 6px; }
+.perf-bar-row { display: grid; grid-template-columns: minmax(80px, 160px) 1fr 72px; align-items: center; gap: 10px; font-size: 13px; }
+.perf-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perf-bar-track { position: relative; height: 14px; }
+.perf-bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 0 4px 4px 0; }
+.perf-bar-team { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed var(--text-muted); }
+.perf-bar-value { text-align: right; font-variant-numeric: tabular-nums; }
+.perf-table-wrap { overflow-x: auto; margin-top: 20px; }
+.perf-table-wrap .perf-table { margin-top: 0; }
+.perf-table tfoot td { font-weight: 600; border-top: 2px solid var(--border-strong); border-bottom: none; }
+.perf-table .perf-table-groups th { text-align: center; border-bottom: none; padding-bottom: 0; }
+.perf-table .perf-group-start { border-left: 1px solid var(--border-strong); }
+.perf-sort { border: none; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.perf-sort:hover { color: var(--accent); }
+@media (max-width: 640px) {
+  .perf-bar-row { grid-template-columns: 90px 1fr 56px; }
+}
