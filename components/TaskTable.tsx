@@ -281,7 +281,7 @@ export function TaskTable({ tasks, headings, membersFor = () => [], onTaskSelect
 
   const renderDueDateCell = (task: Task) => {
     const overdue = isOverdue(task.due_date, task.completed);
-    const readOnly = !!task.due_locked && !canManage(task.project_id);
+    const readOnly = (!!task.due_locked || !!task.kpi) && !canManage(task.project_id);
     return (
     <div
       className="task-metadata-cell task-cell-due"

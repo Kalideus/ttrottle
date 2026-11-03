@@ -771,6 +771,9 @@ export default function AppPage() {
       const heading = headings.find((h) => h.id === (updates.heading_id as string | null));
       messages.push(heading ? `moved the task to "${heading.name}"` : 'moved the task to (no heading)');
     }
+    if ('kpi' in updates) {
+      messages.push(updates.kpi ? 'flagged this for KPI' : 'took this off KPI');
+    }
     if ('due_locked' in updates) {
       messages.push(updates.due_locked ? 'locked the due date' : 'unlocked the due date');
     }

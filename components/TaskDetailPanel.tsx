@@ -164,7 +164,14 @@ export function TaskDetailPanel({
   const priorityOptions = ['high', 'medium', 'low', null] as const;
   const assignedMember = projectMembers.find((m) => m.profile_id === task.assignee_id);
   const overdue = isOverdue(task.due_date, task.completed);
-  const dateReadOnly = !!task.due_locked && !canManage;
+  // a KPI task's date, assignee and existence are the manager's (the database enforces it, migration 043)
+  const kpiReadOnly = !!task.kpi && !canManage;
+  const dateReadOnly = (!!task.due_locked || !!task.kpi) && !canManage;
+  const kpiTitle = task.kpi
+    ? `🎯 KPI task, flagged by ${projectMembers.find((m) => m.profile_id === task.kpi_by)?.profile?.name ?? 'a manager'}` +
+      (task.kpi_at ? ` on ${new Date(task.kpi_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : '') +
+      (task.kpi_at && task.completed_at && new Date(task.kpi_at) > new Date(task.completed_at) ? ' (after it was done)' : '')
+    : 'Count this task towards the assignee\'s core KPI';
   const [extension, setExtension] = useState<{ date: string; reason: string } | null>(null);
   const followableMembers = projectMembers.filter((m) => m.profile_id && !followers.some((f) => f.user_id === m.profile_id));
 
@@ -310,6 +317,7 @@ export function TaskDetailPanel({
               <button
                 onClick={() => {
                   setMenu(null);
+                  if (kpiReadOnly) return window.alert('This is a KPI task. Only a project manager can delete it.');
                   // Soft delete -- kept for 90 days (see /admin/deleted-tasks), not gone instantly.
                   if (window.confirm(`Delete "${task.name}"? A super admin can restore it for 90 days, then it's removed for good.`)) {
                     onTaskDelete(task.id);
@@ -430,8 +438,10 @@ export function TaskDetailPanel({
                 alignItems: 'center',
                 gap: '8px',
                 position: 'relative',
+                cursor: kpiReadOnly ? 'default' : undefined,
               }}
-              onClick={() => setMenu(menu === 'assignee' ? null : 'assignee')}
+              title={kpiReadOnly ? 'A KPI task: only a manager can reassign it' : undefined}
+              onClick={() => !kpiReadOnly && setMenu(menu === 'assignee' ? null : 'assignee')}
             >
               {assignedMember ? (
                 <>
@@ -478,6 +488,24 @@ export function TaskDetailPanel({
                 <FieldIcon icon={Calendar} color="#E8833A" />
                 Due date
               </span>
+              <span style={{ display: 'inline-flex', gap: 6 }}>
+              {canManage ? (
+                <button
+                  type="button"
+                  className={`due-date-lock-btn${task.kpi ? ' is-locked' : ''}`}
+                  title={task.kpi ? `${kpiTitle}. Click to take it off KPI` : kpiTitle}
+                  aria-pressed={!!task.kpi}
+                  onClick={() => onTaskUpdate(task.id, { kpi: !task.kpi })}
+                >
+                  🎯 KPI
+                </button>
+              ) : (
+                task.kpi && (
+                  <span className="due-date-lock-status" title={kpiTitle}>
+                    🎯 KPI
+                  </span>
+                )
+              )}
               {canManage ? (
                 <button
                   type="button"
@@ -497,6 +525,7 @@ export function TaskDetailPanel({
                   </span>
                 )
               )}
+              </span>
             </div>
             <div
               className="detail-field-value"
@@ -760,7 +789,7 @@ export function TaskDetailPanel({
                   {(() => {
                     const member = projectMembers.find((m) => m.profile_id === subtask.assignee_id);
                     const subOverdue = isOverdue(subtask.due_date, subtask.completed);
-                    const subDateReadOnly = !!subtask.due_locked && !canManage;
+                    const subDateReadOnly = (!!subtask.due_locked || !!subtask.kpi) && !canManage;
                     return (
                       <>
                         <div

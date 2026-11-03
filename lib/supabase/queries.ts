@@ -17,6 +17,8 @@ export type Project = {
   accepts_tickets?: boolean
   // the section tickets land in (migration 034); null until the first ticket makes one
   ticket_heading_id?: string | null
+  // deadline (on time against the due date) or turnaround (Tech: time to close) (migration 043)
+  kpi_type?: 'deadline' | 'turnaround'
 }
 
 export type Heading = {
@@ -39,6 +41,11 @@ export type Task = {
   priority: 'low' | 'medium' | 'high' | null
   repeat?: Repeat | null
   due_locked?: boolean
+  // core KPI (migration 043): flagged by a manager handing it to someone else, or by hand
+  kpi?: boolean
+  kpi_by?: string | null
+  kpi_at?: string | null
+  first_assigned_at?: string | null
   completed: boolean
   completed_at: string | null
   position: number
@@ -603,7 +610,7 @@ export async function logActivity(
 export async function updateTask(
   supabase: SupabaseClient,
   id: string,
-  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'repeat' | 'due_locked' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
+  updates: Partial<Pick<Task, 'name' | 'description' | 'assignee_id' | 'due_date' | 'priority' | 'repeat' | 'due_locked' | 'kpi' | 'completed' | 'heading_id' | 'position' | 'parent_task_id'>>,
   detail?: string
 ) {
   const nextUpdates: Partial<Task & { completed_at: string | null }> = { ...updates }
