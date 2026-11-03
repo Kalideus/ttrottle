@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { photosAsText, ATTACHMENT_PATTERN } from '@/lib/taskPhotos'
 import type { Repeat } from '@/lib/repeat'
 import type { NewTaskSpec } from '@/lib/csvImport'
+import type { KpiTask } from '@/lib/kpi'
 
 export type Project = {
   id: string
@@ -1184,4 +1185,31 @@ export async function setTicketHeading(supabase: SupabaseClient, projectId: stri
 export async function getMyProjectRoles(supabase: SupabaseClient, userId: string) {
   const { data } = await supabase.from('project_members').select('project_id, role').eq('profile_id', userId)
   return new Map((data ?? []).map((r) => [r.project_id as string, r.role as ProjectMember['role']]))
+}
+
+// Performance dashboard (lib/kpi.ts): every task in these projects that is still open or was finished
+// since `since`, plus which tasks had an extension approved. Pages past the 1000-row response cap.
+export async function getPerformanceData(supabase: SupabaseClient, projectIds: string[], since: string) {
+  const tasks: KpiTask[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('id, project_id, assignee_id, created_by, created_at, completed, completed_at, due_date, priority, kpi, kpi_by, kpi_at, first_assigned_at, ticket_by')
+      .in('project_id', projectIds)
+      .is('deleted_at', null)
+      .or(`completed.eq.false,completed_at.gte.${since}`)
+      .order('id')
+      .range(from, from + 999)
+    if (error) return { tasks, extended: new Set<string>(), error }
+    tasks.push(...(data as KpiTask[]))
+    if (data.length < 1000) break
+  }
+  // ponytail: one page; past 1000 approved extensions the oldest stop showing their ⏱
+  const { data: approved } = await supabase
+    .from('comments')
+    .select('task_id')
+    .eq('request_status', 'approved')
+    .gte('created_at', since)
+    .limit(1000)
+  return { tasks, extended: new Set((approved ?? []).map((c) => c.task_id as string)), error: null }
 }
