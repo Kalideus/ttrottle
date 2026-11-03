@@ -33,6 +33,8 @@ export default function TeamAdminPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [pickedRole, setPickedRole] = useState<(typeof ROLES)[number]>('member');
   const statusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // whose reset link was just copied, for the button's "Copied"
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
 
   const load = async () => {
     const p = await getCurrentProfile(supabase);
@@ -75,6 +77,20 @@ export default function TeamAdminPage() {
     setStatus('saved');
     clearTimeout(statusTimer.current);
     statusTimer.current = setTimeout(() => setStatus('idle'), 2500);
+    return result;
+  };
+
+  // a reset link for someone who can't sign in, copied to send them by hand
+  const copyResetLink = async (p: Profile) => {
+    const { link } = await callAdmin('reset-link', { userId: p.id }).catch(() => ({ link: null }));
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedFor(p.id);
+      setTimeout(() => setCopiedFor((id) => (id === p.id ? null : id)), 2500);
+    } catch {
+      window.prompt(`Copy this link and send it to ${p.email}. It signs them in once, to set a new password.`, link);
+    }
   };
 
   const activeProjects = projects.filter((p) => !p.archived);
@@ -175,7 +191,16 @@ export default function TeamAdminPage() {
                         }}
                       />
                     </td>
-                    <td className="py-2 pr-4 text-slate-500">{p.email}</td>
+                    <td className="py-2 pr-4 text-slate-500">
+                      {p.email}
+                      <button
+                        onClick={() => void copyResetLink(p)}
+                        title="A link that lets them set a new password. Opening it signs them in, so send it only to them."
+                        className="ml-3 rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                      >
+                        {copiedFor === p.id ? 'Copied' : 'Copy reset link'}
+                      </button>
+                    </td>
                     <td className="py-2 pr-4">
                       <input
                         type="checkbox"
