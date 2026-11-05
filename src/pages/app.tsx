@@ -1363,6 +1363,8 @@ export default function AppPage() {
   }, [currentUserId, projects, supabase]);
   // Performance and the 🎯 marks are switched on per person in /admin/team (migration 045)
   const canSeePerformance = !!currentProfile?.is_super_admin || !!currentProfile?.can_see_performance;
+  // tickets are on unless switched off in /admin/team (migration 047); a database without 047 shows them
+  const canSeeTickets = !!currentProfile?.is_super_admin || currentProfile?.can_see_tickets !== false;
 
   const canManage = (projectId: string | undefined) => {
     const role = projectId ? myRoles.get(projectId) : undefined;
@@ -1727,6 +1729,7 @@ export default function AppPage() {
           onProjectImport={openImport}
           canCreateProjects={!!currentProfile?.can_create_projects}
           showPerformance={canSeePerformance}
+          showTickets={canSeeTickets}
           onProjectDuplicate={(id) => setDuplicateFrom(projects.find((p) => p.id === id) ?? null)}
           onProjectDelete={handleProjectDelete}
           onProjectPerformance={(projectId) => {
@@ -1927,7 +1930,7 @@ export default function AppPage() {
             </>
           )}
 
-          {activeSection === 'tickets' && (
+          {activeSection === 'tickets' && canSeeTickets && (
             <div className="app-content">
               <Tickets
                 tickets={tickets}

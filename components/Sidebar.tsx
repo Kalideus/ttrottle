@@ -21,6 +21,7 @@ interface SidebarProps {
   canCreateProjects?: boolean;
   // Performance is switched on per person (migration 045): its link and menu item hide otherwise
   showPerformance?: boolean;
+  showTickets?: boolean;
   onProjectImport: () => void;
   onProjectDuplicate: (projectId: string) => void;
   onProjectRename: (projectId: string, name: string) => void;
@@ -49,6 +50,7 @@ export function Sidebar({
   onProjectCreate,
   canCreateProjects = false,
   showPerformance = false,
+  showTickets = true,
   onProjectImport,
   onProjectDuplicate,
   onProjectRename,
@@ -80,10 +82,12 @@ export function Sidebar({
           <span>Create task</span>
         </button>
         {/* a request for another team's project; see CreateTicketModal */}
-        <button className="sidebar-create-btn is-ticket" onClick={onCreateTicket}>
-          <Ticket size={16} />
-          <span>Create ticket</span>
-        </button>
+        {showTickets && (
+          <button className="sidebar-create-btn is-ticket" onClick={onCreateTicket}>
+            <Ticket size={16} />
+            <span>Create ticket</span>
+          </button>
+        )}
       </div>
 
       <div className="sidebar-nav">
@@ -119,13 +123,15 @@ export function Sidebar({
           </button>
         )}
 
-        <button
-          className={`sidebar-nav-item ${activeSection === 'tickets' ? 'active' : ''}`}
-          onClick={() => onSectionChange('tickets')}
-        >
-          <Ticket size={20} className="sidebar-nav-icon" />
-          <span>My tickets</span>
-        </button>
+        {showTickets && (
+          <button
+            className={`sidebar-nav-item ${activeSection === 'tickets' ? 'active' : ''}`}
+            onClick={() => onSectionChange('tickets')}
+          >
+            <Ticket size={20} className="sidebar-nav-icon" />
+            <span>My tickets</span>
+          </button>
+        )}
 
         <button
           className={`sidebar-nav-item ${activeSection === 'contacts' ? 'active' : ''}`}

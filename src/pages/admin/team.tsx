@@ -211,6 +211,7 @@ export default function TeamAdminPage() {
                   <th className="py-2 pr-4">Email</th>
                   <th className="py-2 pr-4">Can create projects</th>
                   <th className="py-2 pr-4" title="Sees the Performance dashboard and 🎯 KPI marks on tasks. Super admins always do.">Sees performance</th>
+                  <th className="py-2 pr-4" title="Sees Create ticket and My tickets in the sidebar. Super admins always do.">Sees tickets</th>
                   <th className="py-2 pr-4" title="Can copy a password-reset link for people in their projects (not super admins), from this page. Super admins always can.">Sends reset links</th>
                   <th className="py-2 pr-4">Super admin</th>
                   <th className="py-2 pr-4">Projects</th>
@@ -277,6 +278,16 @@ export default function TeamAdminPage() {
                     <td className="py-2 pr-4">
                       <input
                         type="checkbox"
+                        aria-label={`${p.name || p.email} sees tickets`}
+                        // on unless turned off; a super admin sees them anyway
+                        checked={p.can_see_tickets !== false || !!p.is_super_admin}
+                        disabled={!!p.is_super_admin}
+                        onChange={(e) => callAdmin('set-flags', { userId: p.id, can_see_tickets: e.target.checked })}
+                      />
+                    </td>
+                    <td className="py-2 pr-4">
+                      <input
+                        type="checkbox"
                         aria-label={`${p.name || p.email} can send reset links`}
                         // a super admin can anyway
                         checked={!!p.can_reset_passwords || !!p.is_super_admin}
@@ -312,7 +323,7 @@ export default function TeamAdminPage() {
                   </tr>
                   {open && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={7} className="px-3 pb-4 pt-1">
+                      <td colSpan={8} className="px-3 pb-4 pt-1">
                         <div className="flex flex-wrap gap-x-5 gap-y-2">
                           {notIn.map((pr) => (
                             <label key={pr.id} className="inline-flex items-center gap-2">

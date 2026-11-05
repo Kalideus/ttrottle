@@ -869,6 +869,10 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
   cursor: pointer;
   transition: background-color 150ms;
   user-select: none;
+  /* stays at the top of the list until its section scrolls past, so you can tell which section you're in */
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .section-header:hover {

@@ -100,6 +100,8 @@ export type Profile = {
   can_see_performance?: boolean
   // can copy password-reset links for people in their projects (migration 046)
   can_reset_passwords?: boolean
+  // sees Create ticket and My tickets (migration 047); on unless a super admin turns it off
+  can_see_tickets?: boolean
 }
 
 export type Notification = {
