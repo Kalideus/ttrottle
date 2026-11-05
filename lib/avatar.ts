@@ -8,7 +8,7 @@ export function avatarInitials(name?: string | null, email?: string | null): str
   return '?';
 }
 
-// Keep in sync with the random default in db/migrations/019_random_avatar_color.sql.
+// Keep in sync with random_avatar_color() in db/migrations/048_twenty_avatar_colors.sql (and db/schema.sql).
 export const AVATAR_COLORS: string[] = [
   '#4573D2', // blue
   '#F06A6A', // coral
@@ -18,6 +18,18 @@ export const AVATAR_COLORS: string[] = [
   '#F1BD6C', // amber
   '#5DA283', // green
   '#6D6E6F', // slate
+  '#D1453B', // red
+  '#E8833A', // orange
+  '#B8860B', // mustard
+  '#6A9E3F', // leaf
+  '#2E9E8F', // sea green
+  '#1F8FB8', // sky
+  '#2D4FA0', // navy
+  '#6457C6', // indigo
+  '#8E44AD', // violet
+  '#C2448F', // magenta
+  '#9C6B4E', // brown
+  '#3F4A5A', // charcoal
 ];
 
 export const DEFAULT_AVATAR_COLOR = AVATAR_COLORS[0];

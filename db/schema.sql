@@ -16,7 +16,11 @@ end $$;
 -- Palette must match AVATAR_COLORS in lib/avatar.ts.
 create or replace function random_avatar_color()
 returns text language sql volatile as $$
-  select (array['#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C', '#5DA283', '#6D6E6F'])[floor(random() * 8 + 1)::int]
+  select (array[
+    '#4573D2', '#F06A6A', '#A970D1', '#4ECBC4', '#E8A5C8', '#F1BD6C', '#5DA283', '#6D6E6F',
+    '#D1453B', '#E8833A', '#B8860B', '#6A9E3F', '#2E9E8F', '#1F8FB8', '#2D4FA0', '#6457C6',
+    '#8E44AD', '#C2448F', '#9C6B4E', '#3F4A5A'
+  ])[floor(random() * 20 + 1)::int]
 $$;
 
 create table profiles (
