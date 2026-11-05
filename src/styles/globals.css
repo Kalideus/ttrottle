@@ -210,16 +210,16 @@ button { cursor: pointer; }
   color: var(--chrome-text);
 }
 
-/* Transparent logo, sits straight on the background (no tile) */
+/* Transparent logo, sits straight on the background (no tile). Fixed height, width follows the
+   logo: square for TukTukRental, wide for a brand's own (public/brands) */
 .topbar-logo-mark, .login-brand-mark {
-  width: 32px;
   height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.topbar-logo-mark img, .login-brand-mark img { width: 100%; height: 100%; display: block; }
+.topbar-logo-mark img, .login-brand-mark img { width: auto; height: 100%; display: block; }
 
 .brand-word {
   font-family: var(--font-brand), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1602,7 +1602,6 @@ button.sidebar-project-menu:hover { color: var(--chrome-text); background: var(-
 }
 
 .login-brand-mark {
-  width: 40px;
   height: 40px;
 }
 
